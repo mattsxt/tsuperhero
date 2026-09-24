@@ -1,4 +1,3 @@
-import { useFonts } from "expo-font";
 import { router } from "expo-router";
 import ChevronLeft from "lucide-react-native/icons/chevron-left";
 import CircleCheck from "lucide-react-native/icons/circle-check";
@@ -9,31 +8,30 @@ import { useEffect, useRef, useState } from "react";
 import {
   Animated,
   Easing,
-  Image,
   Pressable,
-  SafeAreaView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+
+import {
+  codeLength,
+  completeSignUp,
+  getEmailProblem,
+  getPasswordProblem,
+  passwordRules,
+  requestSignUpCode,
+  verifySignUpCode,
+} from "@/api/v1/auth/controllers";
+import { BrandHeader } from "@/components/brand-header";
+import { Routes } from "@/constants/routes";
 
 const brandBlue = "#193caf";
 const inputWidth = 320;
 
-const passwordRules = [
-  { label: "8 characters minimum", test: (value: string) => value.length >= 8 },
-  { label: "1 lowercase letter", test: (value: string) => /[a-z]/.test(value) },
-  { label: "1 uppercase letter", test: (value: string) => /[A-Z]/.test(value) },
-  { label: "1 number", test: (value: string) => /\d/.test(value) },
-];
-
 export default function RegisterScreen() {
-  const [fontsLoaded] = useFonts({
-    Sora: require("../../assets/fonts/Sora.ttf"),
-    SoraBold: require("../../assets/fonts/Sora-Bold.ttf"),
-    WDXLLubrifontSC: require("../../assets/fonts/WDXLLubrifontSC.ttf"),
-  });
   const [step, setStep] = useState(1);
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -41,54 +39,64 @@ export default function RegisterScreen() {
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [emailError, setEmailError] = useState("");
   const [passwordError, setPasswordError] = useState("");
+  const [codeError, setCodeError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const codeInputs = useRef<(TextInput | null)[]>([]);
 
-  const continueToNextStep = () => {
+  const focusCodeInput = (index: number) => {
+    codeInputs.current[Math.max(0, Math.min(index, codeLength - 1))]?.focus();
+  };
+
+  const resendCode = async () => {
+    if (submitting) return;
+    setSubmitting(true);
+    setCode("");
+    const result = await requestSignUpCode(email);
+    setCodeError(result.ok ? "" : result.error);
+    setSubmitting(false);
+  };
+
+  const continueToNextStep = async () => {
+    if (submitting) return;
+
     if (step === 1) {
-      const normalizedEmail = email.trim();
-      if (!normalizedEmail) {
-        setEmailError("Email address is required.");
-        return;
-      }
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
-        setEmailError("Enter a valid email address.");
-        return;
-      }
-      setEmailError("");
+      const problem = getEmailProblem(email);
+      setEmailError(problem ?? "");
+      if (problem) return;
     }
-
     if (step === 3) {
-      const failedRules = passwordRules.filter((rule) => !rule.test(password));
-      if (failedRules.length > 0) {
-        setPasswordError(
-          `Password needs ${failedRules.map((rule) => rule.label.toLowerCase()).join(", ")}.`,
-        );
-        return;
-      }
-      setPasswordError("");
+      const problem = getPasswordProblem(password);
+      setPasswordError(problem ?? "");
+      if (problem) return;
     }
 
+    setSubmitting(true);
+    const result =
+      step === 1
+        ? await requestSignUpCode(email)
+        : step === 2
+          ? await verifySignUpCode(email, code)
+          : await completeSignUp(password);
+    setSubmitting(false);
+
+    if (!result.ok) {
+      if (step === 1) setEmailError(result.error);
+      if (step === 2) setCodeError(result.error);
+      if (step === 3) setPasswordError(result.error);
+      return;
+    }
+
+    if (step === 1) setCode("");
+    if (step === 2) setCodeError("");
     setStep((currentStep) => Math.min(currentStep + 1, 4));
   };
   const goToPreviousStep = () =>
     setStep((currentStep) => Math.max(currentStep - 1, 1));
 
-  if (!fontsLoaded) {
-    return <View style={styles.loadingScreen} />;
-  }
-
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        <View style={styles.brandArea}>
-          <View style={styles.logoBackground}>
-            <Image
-              source={require("../../assets/images/tsuperhero_icon.png")}
-              style={styles.logo}
-              resizeMode="contain"
-            />
-          </View>
-          <Text style={styles.wordmark}>TsuperHero</Text>
-        </View>
+        <BrandHeader variant="badge" />
 
         {step < 4 && <Text style={styles.heading}>SIGN UP</Text>}
 
@@ -123,32 +131,65 @@ export default function RegisterScreen() {
                 <Text style={styles.stepTitle}>Verify your email address</Text>
                 <StepNavigation step={step} onBack={goToPreviousStep} />
                 <Text style={styles.description}>
-                  We just sent a 5-digit code to{"\n"}
+                  We just sent a {codeLength}-digit code to{"\n"}
                   {email || "your email"}, enter it below
                 </Text>
                 <View style={styles.fieldHeading}>
                   <FieldLabel label="CODE" />
-                  <Pressable onPress={() => {}} style={styles.resendButton}>
+                  <Pressable onPress={resendCode} style={styles.resendButton}>
                     <RefreshCcw color="#171717" size={10} strokeWidth={2} />
                     <Text style={styles.resendText}>RESEND CODE</Text>
                   </Pressable>
                 </View>
                 <View style={styles.codeRow}>
-                  {Array.from({ length: 5 }, (_, index) => (
+                  {Array.from({ length: codeLength }, (_, index) => (
                     <TextInput
                       key={index}
-                      value={code[index] || ""}
-                      onChangeText={(value) => {
-                        const nextCode = code.split("");
-                        nextCode[index] = value.slice(-1);
-                        setCode(nextCode.join(""));
+                      ref={(input) => {
+                        codeInputs.current[index] = input;
                       }}
+                      value={(code[index] || "").trim()}
+                      onChangeText={(value) => {
+                        const digits = value.replace(/\D/g, "");
+                        const nextCode = code.padEnd(codeLength, " ").split("");
+                        if (digits.length > 1) {
+                          const pasted = digits.slice(0, codeLength - index);
+                          pasted.split("").forEach((digit, offset) => {
+                            nextCode[index + offset] = digit;
+                          });
+                          focusCodeInput(index + pasted.length);
+                        } else {
+                          nextCode[index] = digits || " ";
+                          if (digits) focusCodeInput(index + 1);
+                        }
+                        setCode(nextCode.join("").trimEnd());
+                        if (codeError) setCodeError("");
+                      }}
+                      onKeyPress={({ nativeEvent }) => {
+                        if (
+                          nativeEvent.key === "Backspace" &&
+                          !code[index]?.trim() &&
+                          index > 0
+                        ) {
+                          const nextCode = code.padEnd(codeLength, " ").split("");
+                          nextCode[index - 1] = " ";
+                          setCode(nextCode.join("").trimEnd());
+                          focusCodeInput(index - 1);
+                        }
+                      }}
+                      selectTextOnFocus
+                      autoFocus={index === 0}
                       keyboardType="number-pad"
-                      maxLength={1}
+                      autoComplete="one-time-code"
+                      textContentType="oneTimeCode"
+                      maxLength={codeLength}
                       style={styles.codeInput}
                     />
                   ))}
                 </View>
+                {!!codeError && (
+                  <Text style={styles.errorText}>{codeError}</Text>
+                )}
               </View>
             )}
 
@@ -165,10 +206,13 @@ export default function RegisterScreen() {
             )}
 
             <Pressable
-              style={styles.primaryButton}
+              style={[styles.primaryButton, submitting && styles.buttonDisabled]}
+              disabled={submitting}
               onPress={continueToNextStep}
             >
-              <Text style={styles.primaryButtonText}>CONTINUE</Text>
+              <Text style={styles.primaryButtonText}>
+                {submitting ? "PLEASE WAIT..." : "CONTINUE"}
+              </Text>
             </Pressable>
             <AccountLink />
           </>
@@ -337,7 +381,7 @@ function AccountLink() {
   return (
     <Text style={styles.accountText}>
       Already have an account?{" "}
-      <Text style={styles.accountLink} onPress={() => router.replace("/login")}>
+      <Text style={styles.accountLink} onPress={() => router.replace(Routes.login)}>
         Sign in here
       </Text>
       .
@@ -354,7 +398,7 @@ function CompletionState() {
       <Text style={styles.completionSubtitle}>One step left!</Text>
       <Pressable
         style={styles.primaryButton}
-        onPress={() => router.replace("/login")}
+        onPress={() => router.replace(Routes.login)}
       >
         <Text style={styles.primaryButtonText}>LOGIN</Text>
       </Pressable>
@@ -363,30 +407,12 @@ function CompletionState() {
 }
 
 const styles = StyleSheet.create({
-  loadingScreen: { flex: 1, backgroundColor: "#ffffff" },
   safeArea: { flex: 1, backgroundColor: "#ffffff" },
   container: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 10,
-  },
-  brandArea: { alignItems: "center" },
-  logoBackground: {
-    width: 104,
-    height: 104,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#1034A6",
-    borderRadius: 24,
-  },
-  logo: { width: 78, height: 78 },
-  wordmark: {
-    color: brandBlue,
-    fontFamily: "WDXLLubrifontSC",
-    fontSize: 43,
-    lineHeight: 49,
-    marginTop: 14,
   },
   heading: {
     color: "#050505",
@@ -469,9 +495,9 @@ const styles = StyleSheet.create({
     fontSize: 8,
     marginTop: 4,
   },
-  codeRow: { flexDirection: "row", justifyContent: "space-between" },
+  codeRow: { flexDirection: "row", gap: 8 },
   codeInput: {
-    width: 51,
+    flex: 1,
     height: 38,
     borderWidth: 1,
     borderColor: brandBlue,
@@ -528,6 +554,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginTop: 28,
   },
+  buttonDisabled: { opacity: 0.6 },
   primaryButtonText: {
     color: "#ffffff",
     fontFamily: "SoraBold",

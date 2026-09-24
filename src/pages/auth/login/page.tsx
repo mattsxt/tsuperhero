@@ -1,4 +1,3 @@
-import { useFonts } from "expo-font";
 import { router } from "expo-router";
 import Eye from "lucide-react-native/icons/eye";
 import EyeOff from "lucide-react-native/icons/eye-off";
@@ -6,14 +5,17 @@ import { useRef, useState } from "react";
 import {
   Animated,
   Easing,
-  Image,
   Pressable,
-  SafeAreaView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+
+import { login } from "@/api/v1/auth/controllers";
+import { BrandHeader } from "@/components/brand-header";
+import { Routes } from "@/constants/routes";
 
 const brandBlue = "#193caf";
 
@@ -22,16 +24,9 @@ export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [passwordVisible, setPasswordVisible] = useState(false);
+  const [loginError, setLoginError] = useState("");
+  const [loggingIn, setLoggingIn] = useState(false);
   const formProgress = useRef(new Animated.Value(0)).current;
-  const [fontsLoaded] = useFonts({
-    Sora: require("../../assets/fonts/Sora.ttf"),
-    SoraBold: require("../../assets/fonts/Sora-Bold.ttf"),
-    WDXLLubrifontSC: require("../../assets/fonts/WDXLLubrifontSC.ttf"),
-  });
-
-  if (!fontsLoaded) {
-    return <View style={styles.loadingScreen} />;
-  }
 
   const showEmailLogin = () => {
     setEmailLoginVisible(true);
@@ -41,6 +36,19 @@ export default function LoginScreen() {
       easing: Easing.out(Easing.cubic),
       useNativeDriver: false,
     }).start();
+  };
+
+  const signIn = async () => {
+    setLoggingIn(true);
+    setLoginError("");
+    const result = await login(email, password);
+    setLoggingIn(false);
+
+    if (!result.ok) {
+      setLoginError(result.error);
+      return;
+    }
+    router.replace(result.data);
   };
 
   const formHeight = formProgress.interpolate({
@@ -59,16 +67,7 @@ export default function LoginScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        <View style={styles.brandArea}>
-          <View style={styles.logoBackground}>
-            <Image
-              source={require("../../assets/images/tsuperhero_icon.png")}
-              style={styles.logo}
-              resizeMode="contain"
-            />
-          </View>
-          <Text style={styles.wordmark}>TsuperHero</Text>
-        </View>
+        <BrandHeader variant="badge" />
 
         <Text style={styles.title}>SIGN IN</Text>
 
@@ -122,6 +121,8 @@ export default function LoginScreen() {
           </View>
         </Animated.View>
 
+        {!!loginError && <Text style={styles.errorText}>{loginError}</Text>}
+
         {!emailLoginVisible ? (
           <Animated.View style={{ opacity: introOpacity }}>
             <Pressable style={styles.primaryButton} onPress={showEmailLogin}>
@@ -129,8 +130,14 @@ export default function LoginScreen() {
             </Pressable>
           </Animated.View>
         ) : (
-          <Pressable style={styles.primaryButton} onPress={() => {}}>
-            <Text style={styles.primaryButtonText}>LOGIN</Text>
+          <Pressable
+            style={[styles.primaryButton, loggingIn && styles.buttonDisabled]}
+            disabled={loggingIn}
+            onPress={signIn}
+          >
+            <Text style={styles.primaryButtonText}>
+              {loggingIn ? "LOGGING IN..." : "LOGIN"}
+            </Text>
           </Pressable>
         )}
 
@@ -138,7 +145,7 @@ export default function LoginScreen() {
 
         <Pressable
           style={styles.primaryButton}
-          onPress={() => router.push("/register")}
+          onPress={() => router.push(Routes.register)}
         >
           <Text style={styles.primaryButtonText}>SIGN UP NOW</Text>
         </Pressable>
@@ -163,10 +170,6 @@ function Divider({ label }: { label: string }) {
 }
 
 const styles = StyleSheet.create({
-  loadingScreen: {
-    flex: 1,
-    backgroundColor: "#ffffff",
-  },
   safeArea: {
     flex: 1,
     backgroundColor: "#ffffff",
@@ -176,28 +179,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 10,
-  },
-  brandArea: {
-    alignItems: "center",
-  },
-  logo: {
-    width: 78,
-    height: 78,
-  },
-  logoBackground: {
-    width: 104,
-    height: 104,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#1034A6",
-    borderRadius: 24,
-  },
-  wordmark: {
-    color: brandBlue,
-    fontFamily: "WDXLLubrifontSC",
-    fontSize: 43,
-    lineHeight: 49,
-    marginTop: 14,
   },
   title: {
     color: "#050505",
@@ -215,6 +196,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: brandBlue,
     borderRadius: 10,
+  },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
+  errorText: {
+    width: 320,
+    color: "#d93025",
+    fontFamily: "Sora",
+    fontSize: 8,
+    marginTop: -4,
+    marginBottom: 8,
   },
   primaryButtonText: {
     color: "#ffffff",
