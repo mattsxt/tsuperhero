@@ -1,4 +1,4 @@
-create table public.profiles (
+create table public.profile (
   id uuid primary key references auth.users (id) on delete cascade,
   user_type text not null check (user_type in ('commuter', 'transit_personnel')),
   first_name text not null,
@@ -10,20 +10,20 @@ create table public.profiles (
   updated_at timestamptz not null default now()
 );
 
-alter table public.profiles enable row level security;
+alter table public.profile enable row level security;
 
 create policy "Users can view their own profile"
-  on public.profiles for select
+  on public.profile for select
   to authenticated
   using ((select auth.uid()) = id);
 
 create policy "Users can create their own profile"
-  on public.profiles for insert
+  on public.profile for insert
   to authenticated
   with check ((select auth.uid()) = id);
 
 create policy "Users can update their own profile"
-  on public.profiles for update
+  on public.profile for update
   to authenticated
   using ((select auth.uid()) = id)
   with check ((select auth.uid()) = id);

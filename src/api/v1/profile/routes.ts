@@ -1,11 +1,20 @@
 import { getSupabaseClient } from "@/api/v1/client";
 import type { ProfileRow } from "@/api/v1/profile/types";
 
-const profiles = () => getSupabaseClient().from("profiles");
+const profileTable = () => getSupabaseClient().from("profile");
 
 export const profileRoutes = {
-  findProfileId: (userId: string) =>
-    profiles().select("id").eq("id", userId).maybeSingle(),
+  findProfile: (userId: string) =>
+    profileTable()
+      .select("user_type, first_name")
+      .eq("id", userId)
+      .maybeSingle(),
 
-  upsertProfile: (profile: ProfileRow) => profiles().upsert(profile),
+  findProfileDetails: (userId: string) =>
+    profileTable()
+      .select("user_type, first_name, last_name, contact_number")
+      .eq("id", userId)
+      .maybeSingle(),
+
+  upsertProfile: (profile: ProfileRow) => profileTable().upsert(profile),
 };

@@ -79,3 +79,10 @@ export async function completeSignUp(password: string): Promise<Result> {
     if (error) throw error;
   });
 }
+
+export async function logout(): Promise<Result> {
+  return attempt(async () => {
+    const { error } = await authRoutes.signOut();
+    if (error) throw error;
+  });
+}

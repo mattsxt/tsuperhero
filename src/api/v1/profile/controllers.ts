@@ -13,9 +13,32 @@ export const genderOptions: { value: Gender; label: string }[] = [
   { value: "prefer_not_to_say", label: "Prefer not to say" },
 ];
 
+export function getHomeRoute(userType: UserType) {
+  return userType === "commuter" ? Routes.commuterHome : Routes.transitHome;
+}
+
 export async function getSignedInRoute(userId: string) {
-  const profile = await unwrap(profileRoutes.findProfileId(userId));
-  return profile ? Routes.home : Routes.setup;
+  const profile = await unwrap(profileRoutes.findProfile(userId));
+  return profile ? getHomeRoute(profile.user_type) : Routes.setup;
+}
+
+export async function loadCommuterHome(): Promise<
+  { firstName: string } | { redirect: AppRoute }
+> {
+  try {
+    const { session } = await unwrap(authRoutes.getSession());
+    if (!session) return { redirect: Routes.login };
+
+    const profile = await unwrap(profileRoutes.findProfile(session.user.id));
+    if (!profile) return { redirect: Routes.setup };
+    if (profile.user_type !== "commuter") {
+      return { redirect: getHomeRoute(profile.user_type) };
+    }
+
+    return { firstName: profile.first_name };
+  } catch {
+    return { redirect: Routes.login };
+  }
 }
 
 export async function checkSetupAccess(): Promise<
@@ -29,6 +52,62 @@ export async function checkSetupAccess(): Promise<
     if (route !== Routes.setup) return { redirect: route };
 
     return { userId: session.user.id };
+  } catch {
+    return { redirect: Routes.login };
+  }
+}
+
+export type ProfileSummary = {
+  fullName: string;
+  initials: string;
+  email: string;
+  contactNumber: string;
+  userType: UserType;
+  userTypeLabel: string;
+  homeRoute: AppRoute;
+};
+
+const userTypeLabels: Record<UserType, string> = {
+  commuter: "COMMUTER",
+  transit_personnel: "TRANSIT PERSONNEL",
+};
+
+function getInitials(firstName: string, lastName: string) {
+  return `${firstName} ${lastName}`
+    .split(/[\s-]+/)
+    .filter(Boolean)
+    .map((word) => word[0].toUpperCase())
+    .slice(0, 3)
+    .join("");
+}
+
+function formatContactNumber(value: string) {
+  const match = /^\+63(\d{3})(\d{3})(\d{4})$/.exec(value);
+  return match ? `+63 ${match[1]} ${match[2]} ${match[3]}` : value;
+}
+
+export async function loadProfileSummary(): Promise<
+  ProfileSummary | { redirect: AppRoute }
+> {
+  try {
+    const { session } = await unwrap(authRoutes.getSession());
+    if (!session) return { redirect: Routes.login };
+
+    const profile: Pick<
+      ProfileRow,
+      "user_type" | "first_name" | "last_name" | "contact_number"
+    > | null = await unwrap(profileRoutes.findProfileDetails(session.user.id));
+    if (!profile) return { redirect: Routes.setup };
+
+    return {
+      fullName: `${profile.first_name} ${profile.last_name}`,
+      initials: getInitials(profile.first_name, profile.last_name),
+      email: session.user.email ?? "",
+      contactNumber: formatContactNumber(profile.contact_number),
+      userType: profile.user_type,
+      userTypeLabel: userTypeLabels[profile.user_type],
+      homeRoute: getHomeRoute(profile.user_type),
+    };
   } catch {
     return { redirect: Routes.login };
   }

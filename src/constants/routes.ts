@@ -3,7 +3,9 @@ export const Routes = {
   login: "/auth/login",
   register: "/auth/register",
   setup: "/auth/setup",
-  home: "/explore",
+  commuterHome: "/commuter/home",
+  transitHome: "/explore",
+  profile: "/profile",
 } as const;
 
 export type AppRoute = (typeof Routes)[keyof typeof Routes];

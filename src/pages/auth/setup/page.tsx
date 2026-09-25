@@ -29,6 +29,7 @@ import {
   contactLengthMessage,
   genderOptions,
   getContactProblem,
+  getHomeRoute,
   getNameProblem,
   submitProfile,
   toIsoDate,
@@ -39,7 +40,6 @@ import {
 } from "@/api/v1/profile/controllers";
 import { BrandHeader } from "@/components/brand-header";
 import { MiniToast, type MiniToastMessage } from "@/components/mini-toast";
-import { Routes } from "@/constants/routes";
 
 const backgroundBlue = "#1034A6";
 const accentBlue = "#29A9E1";
@@ -359,7 +359,9 @@ export default function SetupScreen() {
                 </Text>
                 <PrimaryButton
                   label="LET'S GO!"
-                  onPress={() => router.replace(Routes.home)}
+                  onPress={() =>
+                    router.replace(getHomeRoute(userType ?? "commuter"))
+                  }
                 />
               </>
             )}
