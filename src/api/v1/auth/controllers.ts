@@ -1,7 +1,7 @@
 import { authRoutes } from "@/api/v1/auth/routes";
 import { getSignedInRoute } from "@/api/v1/profile/controllers";
 import { attempt, failure, unwrap, type Result } from "@/api/v1/result";
-import type { AppRoute } from "@/constants/routes";
+import { Routes, type AppRoute } from "@/constants/routes";
 
 export const codeLength = 6;
 
@@ -11,6 +11,16 @@ export const passwordRules = [
   { label: "1 uppercase letter", test: (value: string) => /[A-Z]/.test(value) },
   { label: "1 number", test: (value: string) => /\d/.test(value) },
 ];
+
+export async function getStartupRoute(): Promise<AppRoute> {
+  try {
+    const { session } = await unwrap(authRoutes.getSession());
+    if (!session) return Routes.login;
+    return await getSignedInRoute(session.user.id);
+  } catch {
+    return Routes.login;
+  }
+}
 
 export function getEmailProblem(email: string) {
   const normalizedEmail = email.trim();

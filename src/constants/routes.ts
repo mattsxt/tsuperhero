@@ -4,6 +4,8 @@ export const Routes = {
   register: "/auth/register",
   setup: "/auth/setup",
   commuterHome: "/commuter/home",
+  commuterPickup: "/commuter/pickup",
+  commuterRental: "/commuter/rental",
   transitHome: "/explore",
   profile: "/profile",
 } as const;

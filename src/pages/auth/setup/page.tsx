@@ -71,7 +71,7 @@ export default function SetupScreen() {
     const checkAccess = async () => {
       const access = await checkSetupAccess();
       if ("redirect" in access) {
-        router.replace(access.redirect);
+        router.replace(access.redirect as Parameters<typeof router.replace>[0]);
         return;
       }
       if (active) {

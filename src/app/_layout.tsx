@@ -42,6 +42,8 @@ export default function RootLayout() {
         />
         <Stack.Screen name="commuter/home/index" options={tabScreenOptions} />
         <Stack.Screen name="profile/index" options={tabScreenOptions} />
+        <Stack.Screen name="commuter/pickup/index" />
+        <Stack.Screen name="commuter/rental/index" />
         <Stack.Screen name="explore" />
       </Stack>
     </ThemeProvider>

@@ -48,7 +48,7 @@ export default function LoginScreen() {
       setLoginError(result.error);
       return;
     }
-    router.replace(result.data);
+    router.replace(result.data as Parameters<typeof router.replace>[0]);
   };
 
   const formHeight = formProgress.interpolate({

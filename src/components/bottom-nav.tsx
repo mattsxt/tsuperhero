@@ -34,7 +34,9 @@ export function BottomNav({
     if (tab === active) return;
     const transition: TabTransition =
       tabOrder[tab] < tabOrder[active] ? "back" : "forward";
-    router.replace({ pathname: route, params: { transition } });
+    router.replace({ pathname: route, params: { transition } } as Parameters<
+      typeof router.replace
+    >[0]);
   };
 
   const tabs: {

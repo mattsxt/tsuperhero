@@ -153,11 +153,13 @@ export default function CommuterHomeScreen() {
                 title="Rental"
                 description="Rent a vehicle for your trip"
                 icon={<Bus color={brandBlue} size={40} strokeWidth={1.8} />}
+                onPress={() => router.push(Routes.commuterRental)}
               />
               <ActionCard
                 title="Pickup"
                 description="Schedule a pickup easily"
                 icon={<PickupIcon size={40} />}
+                onPress={() => router.push(Routes.commuterPickup)}
               />
             </View>
 
@@ -199,15 +201,18 @@ function ActionCard({
   title,
   description,
   icon,
+  onPress,
 }: {
   title: string;
   description: string;
   icon: ReactNode;
+  onPress?: () => void;
 }) {
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={title}
+      onPress={onPress}
       style={({ pressed }) => [
         styles.card,
         styles.actionCard,
