@@ -26,6 +26,12 @@
     "plugins": [
       "expo-router",
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "TsuperHero uses your photos so you can set a profile picture."
+        }
+      ],
+      [
         "expo-font",
         {
           "fonts": ["./assets/fonts/Sora.ttf"]

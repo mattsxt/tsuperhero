@@ -8,7 +8,8 @@ import UserRound from "lucide-react-native/icons/user-round";
 import Users from "lucide-react-native/icons/users";
 import UsersRound from "lucide-react-native/icons/users-round";
 import { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
@@ -21,6 +22,7 @@ import {
   VehiclePicker,
   type Vehicle,
 } from "@/components/module-ui";
+import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
 
 const { brandBlue, softBlue } = moduleColors;
@@ -30,6 +32,7 @@ const maxPassengers = 10;
 
 export default function PickupScreen() {
   const insets = useSafeAreaInsets();
+  const chrome = useScrollChrome();
   const [search, setSearch] = useState("");
   const [vehicle, setVehicle] = useState<Vehicle>("bus");
   const [shareQuery, setShareQuery] = useState("");
@@ -43,18 +46,16 @@ export default function PickupScreen() {
   return (
     <View style={styles.screen}>
       <StatusBar style="light" />
-      <ScrollView
-        contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
+      <Animated.ScrollView
+        onScroll={chrome.scrollHandler}
+        scrollEventThrottle={16}
+        contentContainerStyle={{
+          paddingTop: chrome.headerHeight,
+          paddingBottom: insets.bottom + 24,
+        }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <ModuleHeader
-          title="Pickup"
-          subtitle="Request a pickup from nearby vehicles and let drivers know you’re waiting."
-          icon={<MapPin color="#ffffff" size={44} strokeWidth={1.8} />}
-          onBack={goBack}
-        />
-
         <View style={styles.body}>
           <SoftField
             value={search}
@@ -112,7 +113,17 @@ export default function PickupScreen() {
 
           <ModuleButton label="CONFIRM" />
         </View>
-      </ScrollView>
+      </Animated.ScrollView>
+
+      <StickyHeader chrome={chrome}>
+        <ModuleHeader
+          title="Pickup"
+          subtitle="Request a pickup from nearby vehicles and let drivers know you’re waiting."
+          icon={<MapPin color="#ffffff" size={44} strokeWidth={1.8} />}
+          onBack={goBack}
+          collapsed={chrome.collapsed}
+        />
+      </StickyHeader>
     </View>
   );
 }

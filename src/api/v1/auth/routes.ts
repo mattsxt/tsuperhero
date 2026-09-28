@@ -14,6 +14,8 @@ export const authRoutes = {
 
   updatePassword: (password: string) => auth().updateUser({ password }),
 
+  updateEmail: (email: string) => auth().updateUser({ email }),
+
   signOut: () => auth().signOut(),
 
   getSession: () => auth().getSession(),

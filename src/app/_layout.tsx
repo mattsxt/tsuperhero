@@ -41,9 +41,13 @@ export default function RootLayout() {
           options={{ gestureEnabled: false }}
         />
         <Stack.Screen name="commuter/home/index" options={tabScreenOptions} />
+        <Stack.Screen name="notifications/index" options={tabScreenOptions} />
         <Stack.Screen name="profile/index" options={tabScreenOptions} />
+        <Stack.Screen name="profile/edit/index" />
+        <Stack.Screen name="profile/security/index" />
         <Stack.Screen name="commuter/pickup/index" />
         <Stack.Screen name="commuter/rental/index" />
+        <Stack.Screen name="commuter/routes/index" />
         <Stack.Screen name="explore" />
       </Stack>
     </ThemeProvider>

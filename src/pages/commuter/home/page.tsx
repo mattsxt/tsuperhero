@@ -13,17 +13,23 @@ import {
   ActivityIndicator,
   Image,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
+import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Svg, { Circle, Path } from "react-native-svg";
 
 import { loadCommuterHome } from "@/api/v1/profile/controllers";
 import { BottomNav, bottomNavHeight } from "@/components/bottom-nav";
+import { PickupIcon } from "@/components/module-icons";
+import {
+  ExpandedOnly,
+  headerLayoutTransition,
+  StickyHeader,
+  useScrollChrome,
+} from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
 
 const brandBlue = "#193caf";
@@ -65,6 +71,8 @@ const sampleTrips: Trip[] = [
 
 export default function CommuterHomeScreen() {
   const insets = useSafeAreaInsets();
+  const chrome = useScrollChrome();
+  const { collapsed } = chrome;
   const blurTarget = useRef<View | null>(null);
   const [firstName, setFirstName] = useState<string | null>(null);
 
@@ -98,28 +106,15 @@ export default function CommuterHomeScreen() {
     <View style={styles.screen}>
       <StatusBar style="light" />
       <BlurTargetView ref={blurTarget} style={styles.blurTarget}>
-        <ScrollView
+        <Animated.ScrollView
+          onScroll={chrome.scrollHandler}
+          scrollEventThrottle={16}
           contentContainerStyle={{
+            paddingTop: chrome.headerHeight,
             paddingBottom: insets.bottom + bottomNavHeight,
           }}
           showsVerticalScrollIndicator={false}
         >
-          <View style={[styles.header, { paddingTop: insets.top + 20 }]}>
-            <View style={styles.headerRow}>
-              <View style={styles.headerText}>
-                <Text style={styles.greeting}>Hello, {firstName}!</Text>
-                <Text style={styles.subGreeting}>
-                  Connect with Available Drivers Nearby!
-                </Text>
-              </View>
-              <Image
-                source={require("@/assets/images/tsuperhero_icon.png")}
-                style={styles.headerLogo}
-                resizeMode="contain"
-              />
-            </View>
-          </View>
-
           <View style={styles.body}>
             <View style={[styles.card, styles.searchCard]}>
               <MapPin color={brandBlue} size={28} strokeWidth={2} />
@@ -148,6 +143,7 @@ export default function CommuterHomeScreen() {
                 icon={
                   <MapPinSearch color={brandBlue} size={40} strokeWidth={1.8} />
                 }
+                onPress={() => router.push(Routes.commuterRoutes)}
               />
               <ActionCard
                 title="Rental"
@@ -158,7 +154,7 @@ export default function CommuterHomeScreen() {
               <ActionCard
                 title="Pickup"
                 description="Schedule a pickup easily"
-                icon={<PickupIcon size={40} />}
+                icon={<PickupIcon color={brandBlue} size={40} />}
                 onPress={() => router.push(Routes.commuterPickup)}
               />
             </View>
@@ -185,13 +181,51 @@ export default function CommuterHomeScreen() {
               ))}
             </View>
           </View>
-        </ScrollView>
+        </Animated.ScrollView>
+
+        <StickyHeader chrome={chrome}>
+          <Animated.View
+            layout={headerLayoutTransition}
+            style={[
+              styles.header,
+              collapsed && styles.headerCollapsed,
+              { paddingTop: insets.top + (collapsed ? 10 : 20) },
+            ]}
+          >
+            <View
+              style={[styles.headerRow, collapsed && styles.headerRowCollapsed]}
+            >
+              <View style={styles.headerText}>
+                <Text
+                  style={[styles.greeting, collapsed && styles.greetingCollapsed]}
+                  numberOfLines={collapsed ? 1 : undefined}
+                >
+                  Hello, {firstName}!
+                </Text>
+                <ExpandedOnly collapsed={collapsed}>
+                  <Text style={styles.subGreeting}>
+                    Connect with Available Drivers Nearby!
+                  </Text>
+                </ExpandedOnly>
+              </View>
+              <Image
+                source={require("@/assets/images/tsuperhero_icon.png")}
+                style={[
+                  styles.headerLogo,
+                  collapsed && styles.headerLogoCollapsed,
+                ]}
+                resizeMode="contain"
+              />
+            </View>
+          </Animated.View>
+        </StickyHeader>
       </BlurTargetView>
 
       <BottomNav
         active="home"
         homeRoute={Routes.commuterHome}
         blurTarget={blurTarget}
+        hidden={chrome.navHidden}
       />
     </View>
   );
@@ -272,26 +306,6 @@ function TripRow({ trip, last }: { trip: Trip; last: boolean }) {
   );
 }
 
-function PickupIcon({ size }: { size: number }) {
-  return (
-    <Svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke={brandBlue}
-      strokeWidth={1.8}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <Circle cx={10} cy={7.5} r={4.5} />
-      <Path d="M2.5 21a7.5 7.5 0 0 1 12-6" />
-      <Path d="M19 21.5v-7" />
-      <Path d="m16 17.5 3-3 3 3" />
-    </Svg>
-  );
-}
-
 const styles = StyleSheet.create({
   loadingScreen: {
     flex: 1,
@@ -328,7 +342,11 @@ const styles = StyleSheet.create({
     fontSize: 9,
     marginTop: 4,
   },
+  headerCollapsed: { minHeight: 0, paddingBottom: 14 },
+  headerRowCollapsed: { alignItems: "center" },
+  greetingCollapsed: { fontSize: 17, lineHeight: 24 },
   headerLogo: { width: 60, height: 60 },
+  headerLogoCollapsed: { width: 32, height: 32 },
   body: { paddingHorizontal: 12, paddingTop: 14 },
   card: {
     backgroundColor: "#ffffff",

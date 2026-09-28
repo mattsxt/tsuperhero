@@ -20,6 +20,11 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import {
+  ExpandedOnly,
+  headerLayoutTransition,
+} from "@/components/scroll-chrome";
+
 export const moduleColors = {
   brandBlue: "#193caf",
   headerBlue: "#1034A6",
@@ -52,7 +57,7 @@ export const vehicleOptions: {
   { value: "van", label: "VAN", icon: require("@/assets/images/van.svg") },
 ];
 
-const tileTransition: CSSTransitionProperties = {
+export const tileTransition: CSSTransitionProperties = {
   transitionProperty: ["backgroundColor", "transform"],
   transitionDuration: 250,
   transitionTimingFunction: "ease-in-out",
@@ -69,36 +74,52 @@ export function ModuleHeader({
   subtitle,
   icon,
   onBack,
+  collapsed = false,
   children,
 }: {
   title: string;
   subtitle: string;
   icon: ReactNode;
   onBack: () => void;
+  collapsed?: boolean;
   children?: ReactNode;
 }) {
   const insets = useSafeAreaInsets();
 
   return (
-    <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
-      <View style={styles.headerRow}>
+    <Animated.View
+      layout={headerLayoutTransition}
+      style={[
+        styles.header,
+        collapsed && styles.headerCollapsed,
+        { paddingTop: insets.top + (collapsed ? 10 : 16) },
+      ]}
+    >
+      <View style={[styles.headerRow, collapsed && styles.headerRowCollapsed]}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Go back"
           hitSlop={10}
           onPress={onBack}
-          style={styles.backButton}
+          style={[styles.backButton, collapsed && styles.backButtonCollapsed]}
         >
           <ChevronLeft color="#ffffff" size={22} strokeWidth={2.5} />
         </Pressable>
         <View style={styles.headerText}>
-          <Text style={styles.title}>{title}</Text>
-          <Text style={styles.subtitle}>{subtitle}</Text>
+          <Text
+            style={[styles.title, collapsed && styles.titleCollapsed]}
+            numberOfLines={collapsed ? 1 : undefined}
+          >
+            {title}
+          </Text>
+          <ExpandedOnly collapsed={collapsed}>
+            <Text style={styles.subtitle}>{subtitle}</Text>
+          </ExpandedOnly>
         </View>
-        {icon}
+        <ExpandedOnly collapsed={collapsed}>{icon}</ExpandedOnly>
       </View>
       {children}
-    </View>
+    </Animated.View>
   );
 }
 
@@ -309,7 +330,11 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
   },
+  headerCollapsed: { paddingBottom: 14 },
   headerRow: { flexDirection: "row", alignItems: "flex-start" },
+  headerRowCollapsed: { alignItems: "center" },
+  backButtonCollapsed: { marginTop: 0 },
+  titleCollapsed: { fontSize: 18, lineHeight: 24 },
   backButton: {
     width: 34,
     height: 34,

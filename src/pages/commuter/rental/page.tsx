@@ -2,6 +2,8 @@ import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import BusFront from "lucide-react-native/icons/bus-front";
 import CalendarDays from "lucide-react-native/icons/calendar-days";
+import ChevronLeft from "lucide-react-native/icons/chevron-left";
+import ChevronRight from "lucide-react-native/icons/chevron-right";
 import CircleCheckBig from "lucide-react-native/icons/circle-check-big";
 import ClipboardList from "lucide-react-native/icons/clipboard-list";
 import Flag from "lucide-react-native/icons/flag";
@@ -13,17 +15,17 @@ import Star from "lucide-react-native/icons/star";
 import TriangleAlert from "lucide-react-native/icons/triangle-alert";
 import UserRoundCheck from "lucide-react-native/icons/user-round-check";
 import Users from "lucide-react-native/icons/users";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   BackHandler,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
   type TextStyle,
 } from "react-native";
 import Animated, {
+  useAnimatedRef,
   type CSSTransitionProperties,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -45,6 +47,7 @@ import {
   vehicleOptions,
   type Vehicle,
 } from "@/components/module-ui";
+import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
 
 const { brandBlue, softBlue, mutedText, text, error } = moduleColors;
@@ -212,9 +215,18 @@ function sameOrAfter(a: Date, b: Date) {
   );
 }
 
+function sameDay(a: Date, b: Date) {
+  return a.toDateString() === b.toDateString();
+}
+
+function minutesOfDay(date: Date) {
+  return date.getHours() * 60 + date.getMinutes();
+}
+
 export default function RentalScreen() {
   const insets = useSafeAreaInsets();
-  const scrollRef = useRef<ScrollView>(null);
+  const chrome = useScrollChrome();
+  const scrollRef = useAnimatedRef<Animated.ScrollView>();
   const [step, setStep] = useState<Step>(1);
   const [problem, setProblem] = useState("");
 
@@ -224,6 +236,7 @@ export default function RentalScreen() {
   const [pickupTime, setPickupTime] = useState<Date | null>(null);
   const [tripType, setTripType] = useState<TripType>("one_way");
   const [returnDate, setReturnDate] = useState<Date | null>(null);
+  const [returnTime, setReturnTime] = useState<Date | null>(null);
   const [occasion, setOccasion] = useState("");
   const [passengers, setPassengers] = useState(1);
   const [notes, setNotes] = useState("");
@@ -249,13 +262,61 @@ export default function RentalScreen() {
     scrollRef.current?.scrollTo({ y: 0, animated: false });
   };
 
-  const goBack = () => {
-    if (step > 1 && step < 5) {
-      goToStep((step - 1) as Step);
-      return;
-    }
+  const goHome = () => {
     if (step === 5 || !router.canGoBack()) router.replace(Routes.commuterHome);
     else router.back();
+  };
+
+  const getTripProblem = () => {
+    if (!pickup.trim()) return "Enter your preferred pickup location.";
+    if (!destination.trim()) return "Enter your destination.";
+    if (!tripDate) return "Select the date of your trip.";
+    if (!pickupTime) return "Select your pickup time.";
+    if (tripType === "round_trip") {
+      if (!returnDate) return "Select your return date.";
+      if (!sameOrAfter(returnDate, tripDate)) {
+        return "The return date can't be before the trip date.";
+      }
+      if (!returnTime) return "Select your return pickup time.";
+      if (
+        sameDay(returnDate, tripDate) &&
+        minutesOfDay(returnTime) <= minutesOfDay(pickupTime)
+      ) {
+        return "The return pickup time must be after your pickup time.";
+      }
+    }
+    if (!occasion) return "Select the occasion of your trip.";
+    return null;
+  };
+
+  const getVehicleProblem = () =>
+    passengers > vehicleCapacity[vehicle]
+      ? `A ${vehicleNames[vehicle].toLowerCase()} fits up to ${vehicleCapacity[vehicle]} passengers. Choose a bigger vehicle.`
+      : null;
+
+  const getDriverProblem = () =>
+    driver && drivers.includes(driver) ? null : "Select a driver to continue.";
+
+  const stepProblems: Record<Step, () => string | null> = {
+    1: getTripProblem,
+    2: getVehicleProblem,
+    3: getDriverProblem,
+    4: () => "Confirm your booking to continue.",
+    5: () => "",
+  };
+
+  const canGoForward = step < 4 && !stepProblems[step]();
+  const canGoBackward = step > 1 && step < 5;
+
+  const advance = () => {
+    const problem = stepProblems[step]();
+    if (problem) return setProblem(problem);
+    if (step === 2 && driver && driver.vehicle !== vehicle) setDriverId(null);
+    goToStep((step + 1) as Step);
+  };
+
+  const retreat = () => {
+    if (canGoBackward) goToStep((step - 1) as Step);
   };
 
   useEffect(() => {
@@ -273,55 +334,20 @@ export default function RentalScreen() {
     return () => subscription.remove();
   }, [step]);
 
-  const continueFromTrip = () => {
-    if (!pickup.trim())
-      return setProblem("Enter your preferred pickup location.");
-    if (!destination.trim()) return setProblem("Enter your destination.");
-    if (!tripDate) return setProblem("Select the date of your trip.");
-    if (!pickupTime) return setProblem("Select your pickup time.");
-    if (tripType === "round_trip") {
-      if (!returnDate) return setProblem("Select your return date.");
-      if (!sameOrAfter(returnDate, tripDate)) {
-        return setProblem("The return date can't be before the trip date.");
-      }
-    }
-    if (!occasion) return setProblem("Select the occasion of your trip.");
-    goToStep(2);
-  };
-
-  const continueFromVehicle = () => {
-    if (passengers > vehicleCapacity[vehicle]) {
-      return setProblem(
-        `A ${vehicleNames[vehicle].toLowerCase()} fits up to ${vehicleCapacity[vehicle]} passengers. Choose a bigger vehicle.`,
-      );
-    }
-    if (driver && driver.vehicle !== vehicle) setDriverId(null);
-    goToStep(3);
-  };
-
-  const continueFromDriver = () => {
-    if (!driver) return setProblem("Select a driver to continue.");
-    goToStep(4);
-  };
-
   return (
     <View style={styles.screen}>
       <StatusBar style="light" />
-      <ScrollView
+      <Animated.ScrollView
         ref={scrollRef}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
+        onScroll={chrome.scrollHandler}
+        scrollEventThrottle={16}
+        contentContainerStyle={{
+          paddingTop: chrome.headerHeight,
+          paddingBottom: insets.bottom + 24,
+        }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <ModuleHeader
-          title="Rental"
-          subtitle="Charter a private vehicle for your trips, outings and special occasions."
-          icon={<BusFront color="#ffffff" size={44} strokeWidth={1.8} />}
-          onBack={goBack}
-        >
-          {step < 5 && <StepProgress step={step} />}
-        </ModuleHeader>
-
         <View style={styles.body}>
           {step === 1 && (
             <>
@@ -399,15 +425,26 @@ export default function RentalScreen() {
               </View>
 
               {tripType === "round_trip" && (
-                <View style={styles.gapTop}>
-                  <FieldLabel>RETURN DATE</FieldLabel>
-                  <DateTimeField
-                    mode="date"
-                    value={returnDate}
-                    onChange={setReturnDate}
-                    placeholder="Select return date"
-                    minimumDate={tripDate ?? startOfToday()}
-                  />
+                <View style={[styles.row, styles.gapTop]}>
+                  <View style={styles.flex}>
+                    <FieldLabel>RETURN DATE</FieldLabel>
+                    <DateTimeField
+                      mode="date"
+                      value={returnDate}
+                      onChange={setReturnDate}
+                      placeholder="Select date"
+                      minimumDate={tripDate ?? startOfToday()}
+                    />
+                  </View>
+                  <View style={styles.flex}>
+                    <FieldLabel>RETURN PICKUP TIME</FieldLabel>
+                    <DateTimeField
+                      mode="time"
+                      value={returnTime}
+                      onChange={setReturnTime}
+                      placeholder="Select time"
+                    />
+                  </View>
                 </View>
               )}
 
@@ -449,7 +486,7 @@ export default function RentalScreen() {
               </View>
 
               <Problem message={problem} />
-              <ModuleButton label="CHOOSE VEHICLE" onPress={continueFromTrip} />
+              <ModuleButton label="CHOOSE VEHICLE" onPress={advance} />
             </>
           )}
 
@@ -486,10 +523,7 @@ export default function RentalScreen() {
               )}
 
               <Problem message={problem} />
-              <ModuleButton
-                label="FIND DRIVERS"
-                onPress={continueFromVehicle}
-              />
+              <ModuleButton label="FIND DRIVERS" onPress={advance} />
             </>
           )}
 
@@ -525,7 +559,7 @@ export default function RentalScreen() {
               <Problem message={problem} />
               <ModuleButton
                 label="REVIEW BOOKING"
-                onPress={continueFromDriver}
+                onPress={advance}
                 disabled={drivers.length === 0}
               />
             </>
@@ -551,6 +585,12 @@ export default function RentalScreen() {
                   }
                 />
                 <ReviewRow label="Pickup time" value={formatTime(pickupTime)} />
+                {tripType === "round_trip" && returnTime && (
+                  <ReviewRow
+                    label="Return pickup"
+                    value={formatTime(returnTime)}
+                  />
+                )}
                 <ReviewRow label="Occasion" value={occasion} />
                 <ReviewRow
                   label="Passengers"
@@ -611,17 +651,66 @@ export default function RentalScreen() {
             </View>
           )}
         </View>
-      </ScrollView>
+      </Animated.ScrollView>
+
+      <StickyHeader chrome={chrome}>
+        <ModuleHeader
+          title="Rental"
+          subtitle="Charter a private vehicle for your trips, outings and special occasions."
+          icon={<BusFront color="#ffffff" size={44} strokeWidth={1.8} />}
+          onBack={goHome}
+          collapsed={chrome.collapsed}
+        >
+          {step < 5 && (
+            <StepProgress
+              step={step}
+              collapsed={chrome.collapsed}
+              canGoBack={canGoBackward}
+              canGoForward={canGoForward}
+              onBack={retreat}
+              onForward={advance}
+            />
+          )}
+        </ModuleHeader>
+      </StickyHeader>
     </View>
   );
 }
 
-function StepProgress({ step }: { step: Step }) {
+function StepProgress({
+  step,
+  collapsed,
+  canGoBack,
+  canGoForward,
+  onBack,
+  onForward,
+}: {
+  step: Step;
+  collapsed: boolean;
+  canGoBack: boolean;
+  canGoForward: boolean;
+  onBack: () => void;
+  onForward: () => void;
+}) {
   return (
-    <View style={styles.progress}>
-      <Text style={styles.progressText}>
-        Step {step} of {stepTitles.length} · {stepTitles[step - 1]}
-      </Text>
+    <View style={[styles.progress, collapsed && styles.progressCollapsed]}>
+      <View style={styles.progressRow}>
+        <StepArrow
+          direction="back"
+          label="Previous step"
+          disabled={!canGoBack}
+          onPress={onBack}
+        />
+        <Text style={styles.progressText} numberOfLines={1}>
+          Step {step} of {stepTitles.length} · {stepTitles[step - 1]}
+        </Text>
+        <StepArrow
+          direction="forward"
+          label="Next step"
+          disabled={!canGoForward}
+          onPress={onForward}
+        />
+      </View>
       <View style={styles.progressBars}>
         {stepTitles.map((title, index) => (
           <View
@@ -631,6 +720,37 @@ function StepProgress({ step }: { step: Step }) {
         ))}
       </View>
     </View>
+  );
+}
+
+function StepArrow({
+  direction,
+  label,
+  disabled,
+  onPress,
+}: {
+  direction: "back" | "forward";
+  label: string;
+  disabled: boolean;
+  onPress: () => void;
+}) {
+  const Icon = direction === "back" ? ChevronLeft : ChevronRight;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      hitSlop={8}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.stepArrow,
+        disabled && styles.stepArrowDisabled,
+        pressed && styles.stepArrowPressed,
+      ]}
+    >
+      <Icon color="#ffffff" size={16} strokeWidth={2.5} />
+    </Pressable>
   );
 }
 
@@ -757,12 +877,31 @@ const styles = StyleSheet.create({
   fullWidth: { alignSelf: "stretch" },
   bold: { fontFamily: "SoraBold" },
   progress: { marginTop: 18 },
+  progressCollapsed: { marginTop: 10 },
+  progressRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 8,
+  },
   progressText: {
+    flex: 1,
     color: "#ffffff",
     fontFamily: "SoraBold",
     fontSize: 10,
-    marginBottom: 8,
+    textAlign: "center",
   },
+  stepArrow: {
+    width: 28,
+    height: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: "rgba(255, 255, 255, 0.7)",
+  },
+  stepArrowDisabled: { opacity: 0.35 },
+  stepArrowPressed: { backgroundColor: "rgba(255, 255, 255, 0.15)" },
   progressBars: { flexDirection: "row", gap: 6 },
   progressBar: {
     flex: 1,

@@ -1,6 +1,5 @@
 import { router } from "expo-router";
 import ChevronLeft from "lucide-react-native/icons/chevron-left";
-import CircleCheck from "lucide-react-native/icons/circle-check";
 import Eye from "lucide-react-native/icons/eye";
 import EyeOff from "lucide-react-native/icons/eye-off";
 import RefreshCcw from "lucide-react-native/icons/refresh-ccw";
@@ -21,11 +20,11 @@ import {
   completeSignUp,
   getEmailProblem,
   getPasswordProblem,
-  passwordRules,
   requestSignUpCode,
   verifySignUpCode,
 } from "@/api/v1/auth/controllers";
 import { BrandHeader } from "@/components/brand-header";
+import { PasswordStrength } from "@/components/password-strength";
 import { Routes } from "@/constants/routes";
 
 const brandBlue = "#193caf";
@@ -299,18 +298,6 @@ function PasswordStep({
   setPasswordVisible: (value: boolean) => void;
   onBack: () => void;
 }) {
-  const passedRules = passwordRules.filter((rule) =>
-    rule.test(password),
-  ).length;
-  const strength =
-    password.length === 0
-      ? { label: "", barColor: "#dedede", textColor: "#dedede" }
-      : passedRules === passwordRules.length
-        ? { label: "STRONG", barColor: "#9be89a", textColor: "#0E870E" }
-        : passedRules >= 2
-          ? { label: "MODERATE", barColor: "#fff0a6", textColor: "#FFC300" }
-          : { label: "WEAK", barColor: "#ffc2c2", textColor: "#A61010" };
-
   return (
     <View style={styles.stepContent}>
       <Text style={styles.stepTitle}>Create your password</Text>
@@ -348,27 +335,7 @@ function PasswordStep({
         </Pressable>
       </View>
       {!!passwordError && <Text style={styles.errorText}>{passwordError}</Text>}
-      <View
-        style={[styles.strengthBar, { backgroundColor: strength.barColor }]}
-      />
-      <Text style={[styles.strengthText, { color: strength.textColor }]}>
-        {strength.label}
-      </Text>
-      <View style={styles.rules}>
-        {passwordRules.map((rule) => {
-          const passed = rule.test(password);
-          return (
-            <View key={rule.label} style={styles.ruleRow}>
-              <CircleCheck
-                color={passed ? "#ffffff" : "#b7b7b7"}
-                size={12}
-                fill={passed ? brandBlue : "transparent"}
-              />
-              <Text style={styles.ruleText}>{rule.label}</Text>
-            </View>
-          );
-        })}
-      </View>
+      <PasswordStrength password={password} />
     </View>
   );
 }
@@ -526,25 +493,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
   eyeButton: { paddingHorizontal: 12 },
-  strengthBar: {
-    width: inputWidth,
-    height: 8,
-    alignItems: "flex-end",
-    justifyContent: "center",
-    paddingHorizontal: 4,
-    marginTop: 10,
-    borderRadius: 2,
-  },
-  strengthText: {
-    fontFamily: "Sora",
-    fontSize: 7,
-    fontWeight: "700",
-    alignSelf: "flex-end",
-    marginTop: 3,
-  },
-  rules: { gap: 4, marginTop: 10 },
-  ruleRow: { flexDirection: "row", alignItems: "center", gap: 4 },
-  ruleText: { color: "#111111", fontFamily: "Sora", fontSize: 9 },
   primaryButton: {
     width: inputWidth,
     height: 35,

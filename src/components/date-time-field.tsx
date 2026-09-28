@@ -50,6 +50,7 @@ export function DateTimeField({
   onChange,
   placeholder,
   minimumDate,
+  maximumDate,
   style,
 }: {
   mode: Mode;
@@ -57,6 +58,7 @@ export function DateTimeField({
   onChange: (date: Date) => void;
   placeholder: string;
   minimumDate?: Date;
+  maximumDate?: Date;
   style?: StyleProp<ViewStyle>;
 }) {
   const [iosPickerOpen, setIosPickerOpen] = useState(false);
@@ -72,6 +74,8 @@ export function DateTimeField({
           "aria-label": placeholder,
           min:
             mode === "date" && minimumDate ? toIsoDate(minimumDate) : undefined,
+          max:
+            mode === "date" && maximumDate ? toIsoDate(maximumDate) : undefined,
           value: value
             ? mode === "date"
               ? toIsoDate(value)
@@ -103,6 +107,7 @@ export function DateTimeField({
         mode,
         value: initial,
         minimumDate: mode === "date" ? minimumDate : undefined,
+        maximumDate: mode === "date" ? maximumDate : undefined,
         onValueChange: (_event, date) => onChange(date),
       });
       return;
@@ -164,6 +169,7 @@ export function DateTimeField({
               display="spinner"
               value={iosDraft}
               minimumDate={mode === "date" ? minimumDate : undefined}
+              maximumDate={mode === "date" ? maximumDate : undefined}
               themeVariant="light"
               textColor={moduleColors.text}
               onValueChange={(_event, date) => setIosDraft(date)}

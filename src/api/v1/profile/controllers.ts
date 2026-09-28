@@ -1,6 +1,7 @@
 import { authRoutes } from "@/api/v1/auth/routes";
+import { getEmailProblem } from "@/api/v1/auth/validation";
 import { profileRoutes } from "@/api/v1/profile/routes";
-import type { ProfileRow } from "@/api/v1/profile/types";
+import type { ProfileChanges, ProfileRow } from "@/api/v1/profile/types";
 import { attempt, failure, unwrap, type Result } from "@/api/v1/result";
 import { Routes, type AppRoute } from "@/constants/routes";
 
@@ -57,11 +58,28 @@ export async function checkSetupAccess(): Promise<
   }
 }
 
+export async function loadHomeRoute(): Promise<
+  { homeRoute: AppRoute } | { redirect: AppRoute }
+> {
+  try {
+    const { session } = await unwrap(authRoutes.getSession());
+    if (!session) return { redirect: Routes.login };
+
+    const route = await getSignedInRoute(session.user.id);
+    if (route === Routes.setup) return { redirect: route };
+
+    return { homeRoute: route };
+  } catch {
+    return { redirect: Routes.login };
+  }
+}
+
 export type ProfileSummary = {
   fullName: string;
   initials: string;
   email: string;
   contactNumber: string;
+  pictureUrl: string | null;
   userType: UserType;
   userTypeLabel: string;
   homeRoute: AppRoute;
@@ -86,24 +104,46 @@ function formatContactNumber(value: string) {
   return match ? `+63 ${match[1]} ${match[2]} ${match[3]}` : value;
 }
 
+function getPictureUrl(path: string | null) {
+  return path ? profileRoutes.getPictureUrl(path) : null;
+}
+
+type ProfileDetails = Omit<ProfileRow, "id" | "gender">;
+
+async function loadSignedInProfile(): Promise<
+  | {
+      user: NonNullable<
+        Awaited<ReturnType<typeof authRoutes.getSession>>["data"]["session"]
+      >["user"];
+      profile: ProfileDetails;
+    }
+  | { redirect: AppRoute }
+> {
+  const { session } = await unwrap(authRoutes.getSession());
+  if (!session) return { redirect: Routes.login };
+
+  const profile: ProfileDetails | null = await unwrap(
+    profileRoutes.findProfileDetails(session.user.id),
+  );
+  if (!profile) return { redirect: Routes.setup };
+
+  return { user: session.user, profile };
+}
+
 export async function loadProfileSummary(): Promise<
   ProfileSummary | { redirect: AppRoute }
 > {
   try {
-    const { session } = await unwrap(authRoutes.getSession());
-    if (!session) return { redirect: Routes.login };
-
-    const profile: Pick<
-      ProfileRow,
-      "user_type" | "first_name" | "last_name" | "contact_number"
-    > | null = await unwrap(profileRoutes.findProfileDetails(session.user.id));
-    if (!profile) return { redirect: Routes.setup };
+    const result = await loadSignedInProfile();
+    if ("redirect" in result) return result;
+    const { user, profile } = result;
 
     return {
       fullName: `${profile.first_name} ${profile.last_name}`,
       initials: getInitials(profile.first_name, profile.last_name),
-      email: session.user.email ?? "",
+      email: user.email ?? "",
       contactNumber: formatContactNumber(profile.contact_number),
+      pictureUrl: getPictureUrl(profile.profile_picture),
       userType: profile.user_type,
       userTypeLabel: userTypeLabels[profile.user_type],
       homeRoute: getHomeRoute(profile.user_type),
@@ -196,10 +236,132 @@ export async function submitProfile(
         user_type: userType,
         first_name: firstName,
         last_name: lastName,
-        birthdate: toIsoDate(birthdate),
+        birth_date: toIsoDate(birthdate),
         gender,
         contact_number: `+63${contact}`,
       }),
     );
+  });
+}
+
+function fromIsoDate(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+export type EditableProfile = {
+  userId: string;
+  firstName: string;
+  lastName: string;
+  initials: string;
+  email: string;
+  pendingEmail: string | null;
+  contact: string;
+  birthDate: Date;
+  picturePath: string | null;
+  pictureUrl: string | null;
+};
+
+export async function loadEditableProfile(): Promise<
+  EditableProfile | { redirect: AppRoute }
+> {
+  try {
+    const result = await loadSignedInProfile();
+    if ("redirect" in result) return result;
+    const { user, profile } = result;
+
+    return {
+      userId: user.id,
+      firstName: profile.first_name,
+      lastName: profile.last_name,
+      initials: getInitials(profile.first_name, profile.last_name),
+      email: user.email ?? "",
+      pendingEmail: user.new_email ?? null,
+      contact: profile.contact_number.replace(/^\+63/, ""),
+      birthDate: fromIsoDate(profile.birth_date),
+      picturePath: profile.profile_picture,
+      pictureUrl: getPictureUrl(profile.profile_picture),
+    };
+  } catch {
+    return { redirect: Routes.login };
+  }
+}
+
+export type PictureUpload = { uri: string; mimeType?: string };
+
+export type ProfileEditForm = {
+  email: string;
+  contact: string;
+  birthDate: Date | null;
+  picture: PictureUpload | null;
+};
+
+export type ProfileEditField = "email" | "contact" | "birthDate";
+
+export type ProfileEditErrors = Partial<Record<ProfileEditField, string>>;
+
+async function uploadPicture(userId: string, picture: PictureUpload) {
+  const contentType = picture.mimeType ?? "image/jpeg";
+  const extension = contentType.split("/")[1] ?? "jpg";
+  const path = `${userId}/${Date.now()}.${extension}`;
+  const body = await fetch(picture.uri).then((response) =>
+    response.arrayBuffer(),
+  );
+  await unwrap(profileRoutes.uploadPicture(path, body, contentType));
+  return path;
+}
+
+export async function saveProfileChanges(
+  profile: EditableProfile,
+  form: ProfileEditForm,
+): Promise<
+  Result<{ emailPending: boolean }> & { fieldErrors?: ProfileEditErrors }
+> {
+  const email = form.email.trim();
+
+  const fieldErrors: ProfileEditErrors = {};
+  const emailProblem = getEmailProblem(email);
+  if (emailProblem) fieldErrors.email = emailProblem;
+  if (form.contact.length !== contactLength) {
+    fieldErrors.contact = `Enter ${contactLength} digits.`;
+  }
+  if (!form.birthDate) fieldErrors.birthDate = "Select your birth date.";
+  else if (form.birthDate > new Date()) {
+    fieldErrors.birthDate = "Birth date can't be in the future.";
+  }
+
+  if (Object.keys(fieldErrors).length > 0 || !form.birthDate) {
+    return { ...failure("Please check the form."), fieldErrors };
+  }
+
+  const { birthDate, contact, picture } = form;
+  return attempt(async () => {
+    const emailPending = email.toLowerCase() !== profile.email.toLowerCase();
+    if (emailPending) await unwrap(authRoutes.updateEmail(email));
+
+    const changes: ProfileChanges = {};
+    if (contact !== profile.contact) changes.contact_number = `+63${contact}`;
+    if (toIsoDate(birthDate) !== toIsoDate(profile.birthDate)) {
+      changes.birth_date = toIsoDate(birthDate);
+    }
+    if (picture) {
+      changes.profile_picture = await uploadPicture(profile.userId, picture);
+    }
+
+    if (Object.keys(changes).length > 0) {
+      try {
+        await unwrap(profileRoutes.updateProfile(profile.userId, changes));
+      } catch (error) {
+        if (changes.profile_picture) {
+          await profileRoutes.removePicture(changes.profile_picture);
+        }
+        throw error;
+      }
+      if (changes.profile_picture && profile.picturePath) {
+        await profileRoutes.removePicture(profile.picturePath);
+      }
+    }
+
+    return { emailPending };
   });
 }

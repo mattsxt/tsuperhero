@@ -1,20 +1,21 @@
 import { BlurTargetView } from "expo-blur";
-import { router } from "expo-router";
+import { Image } from "expo-image";
+import { router, useFocusEffect } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
 import LogOut from "lucide-react-native/icons/log-out";
 import ShieldCog from "lucide-react-native/icons/shield-cog";
 import ShieldQuestionMark from "lucide-react-native/icons/shield-question-mark";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useRef, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
   Alert,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { logout } from "@/api/v1/auth/controllers";
@@ -23,6 +24,12 @@ import {
   type ProfileSummary,
 } from "@/api/v1/profile/controllers";
 import { BottomNav, bottomNavHeight } from "@/components/bottom-nav";
+import {
+  ExpandedOnly,
+  headerLayoutTransition,
+  StickyHeader,
+  useScrollChrome,
+} from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
 
 const brandBlue = "#193caf";
@@ -33,27 +40,30 @@ const dangerRed = "#a31818";
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
+  const chrome = useScrollChrome();
   const blurTarget = useRef<View | null>(null);
   const [summary, setSummary] = useState<ProfileSummary | null>(null);
   const [signingOut, setSigningOut] = useState(false);
 
-  useEffect(() => {
-    let active = true;
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
 
-    const load = async () => {
-      const result = await loadProfileSummary();
-      if ("redirect" in result) {
-        router.replace(result.redirect);
-        return;
-      }
-      if (active) setSummary(result);
-    };
+      const load = async () => {
+        const result = await loadProfileSummary();
+        if ("redirect" in result) {
+          router.replace(result.redirect);
+          return;
+        }
+        if (active) setSummary(result);
+      };
 
-    load();
-    return () => {
-      active = false;
-    };
-  }, []);
+      load();
+      return () => {
+        active = false;
+      };
+    }, []),
+  );
 
   const signOut = async () => {
     if (signingOut) return;
@@ -80,24 +90,21 @@ export default function ProfileScreen() {
     <View style={styles.screen}>
       <StatusBar style="light" />
       <BlurTargetView ref={blurTarget} style={styles.blurTarget}>
-        <ScrollView
+        <Animated.ScrollView
+          onScroll={chrome.scrollHandler}
+          scrollEventThrottle={16}
           contentContainerStyle={{
+            paddingTop: chrome.headerHeight,
             paddingBottom: insets.bottom + bottomNavHeight,
           }}
           showsVerticalScrollIndicator={false}
         >
-          <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
-            <Text style={styles.title}>User Profile and Actions</Text>
-            <Text style={styles.subtitle}>
-              Manage your own profile and settings
-            </Text>
-          </View>
-
           <View style={styles.body}>
             <Text style={styles.sectionLabel}>Configure your profile</Text>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={`Edit profile of ${summary.fullName}`}
+              onPress={() => router.push(Routes.profileEdit)}
               style={({ pressed }) => [
                 styles.card,
                 styles.profileCard,
@@ -105,7 +112,15 @@ export default function ProfileScreen() {
               ]}
             >
               <View style={styles.avatar}>
-                <Text style={styles.avatarText}>{summary.initials}</Text>
+                {summary.pictureUrl ? (
+                  <Image
+                    source={{ uri: summary.pictureUrl }}
+                    style={styles.avatarImage}
+                    contentFit="cover"
+                  />
+                ) : (
+                  <Text style={styles.avatarText}>{summary.initials}</Text>
+                )}
               </View>
               <View style={styles.profileText}>
                 <Text style={styles.profileName} numberOfLines={1}>
@@ -128,6 +143,7 @@ export default function ProfileScreen() {
             <View style={styles.actions}>
               <ActionRow
                 label="Security"
+                onPress={() => router.push(Routes.profileSecurity)}
                 icon={
                   <ShieldCog color={brandBlue} size={18} strokeWidth={1.8} />
                 }
@@ -152,13 +168,36 @@ export default function ProfileScreen() {
               />
             </View>
           </View>
-        </ScrollView>
+        </Animated.ScrollView>
+
+        <StickyHeader chrome={chrome}>
+          <Animated.View
+            layout={headerLayoutTransition}
+            style={[
+              styles.header,
+              chrome.collapsed && styles.headerCollapsed,
+              { paddingTop: insets.top + (chrome.collapsed ? 10 : 16) },
+            ]}
+          >
+            <Text
+              style={[styles.title, chrome.collapsed && styles.titleCollapsed]}
+            >
+              User Profile and Actions
+            </Text>
+            <ExpandedOnly collapsed={chrome.collapsed}>
+              <Text style={styles.subtitle}>
+                Manage your own profile and settings
+              </Text>
+            </ExpandedOnly>
+          </Animated.View>
+        </StickyHeader>
       </BlurTargetView>
 
       <BottomNav
         active="profile"
         homeRoute={summary.homeRoute}
         blurTarget={blurTarget}
+        hidden={chrome.navHidden}
       />
     </View>
   );
@@ -223,12 +262,14 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
   },
+  headerCollapsed: { paddingBottom: 14 },
   title: {
     color: "#ffffff",
     fontFamily: "SoraBold",
     fontSize: 21,
     lineHeight: 28,
   },
+  titleCollapsed: { fontSize: 17, lineHeight: 24 },
   subtitle: {
     color: "#ffffff",
     fontFamily: "Sora",
@@ -265,9 +306,11 @@ const styles = StyleSheet.create({
     height: 46,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
     borderRadius: 23,
     backgroundColor: iconBackground,
   },
+  avatarImage: { width: "100%", height: "100%" },
   avatarText: { color: "#111111", fontFamily: "SoraBold", fontSize: 15 },
   profileText: { flex: 1, marginLeft: 12, marginRight: 8 },
   profileName: { color: brandBlue, fontFamily: "SoraBold", fontSize: 16 },

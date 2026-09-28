@@ -4,14 +4,22 @@ import Bell from "lucide-react-native/icons/bell";
 import House from "lucide-react-native/icons/house";
 import UserRound from "lucide-react-native/icons/user-round";
 import type { RefObject } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import Animated, {
+  useAnimatedStyle,
+  type SharedValue,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Routes, type AppRoute } from "@/constants/routes";
+import { useUnreadNotificationCount } from "@/hooks/use-notifications";
 
 const navBlue = "#1034A6";
 
 export const bottomNavHeight = 110;
+
+const navBarHeight = 70;
+const navGap = 12;
 
 type Tab = "home" | "notifications" | "profile";
 
@@ -23,12 +31,19 @@ export function BottomNav({
   active,
   homeRoute,
   blurTarget,
+  hidden,
 }: {
   active: Tab;
   homeRoute: AppRoute;
   blurTarget: RefObject<View | null>;
+  hidden?: SharedValue<number>;
 }) {
   const insets = useSafeAreaInsets();
+  const unreadCount = useUnreadNotificationCount();
+  const offscreen = navBarHeight + insets.bottom + navGap + 16;
+  const slideStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: (hidden?.value ?? 0) * offscreen }],
+  }));
 
   const goTo = (tab: Tab, route: AppRoute) => {
     if (tab === active) return;
@@ -45,7 +60,12 @@ export function BottomNav({
     Icon: typeof House;
     route?: AppRoute;
   }[] = [
-    { tab: "notifications", label: "Notifications", Icon: Bell },
+    {
+      tab: "notifications",
+      label: "Notifications",
+      Icon: Bell,
+      route: Routes.notifications,
+    },
     { tab: "home", label: "Home", Icon: House, route: homeRoute },
     {
       tab: "profile",
@@ -56,7 +76,9 @@ export function BottomNav({
   ];
 
   return (
-    <View style={[styles.nav, { bottom: insets.bottom + 12 }]}>
+    <Animated.View
+      style={[styles.nav, { bottom: insets.bottom + navGap }, slideStyle]}
+    >
       <BlurView
         blurTarget={blurTarget}
         blurMethod="dimezisBlurViewSdk31Plus"
@@ -71,7 +93,11 @@ export function BottomNav({
           <Pressable
             key={tab}
             accessibilityRole="button"
-            accessibilityLabel={label}
+            accessibilityLabel={
+              tab === "notifications" && unreadCount > 0
+                ? `${label}, ${unreadCount} unread`
+                : label
+            }
             accessibilityState={{ selected }}
             onPress={route ? () => goTo(tab, route) : undefined}
             style={({ pressed }) => [
@@ -85,10 +111,17 @@ export function BottomNav({
               size={34}
               strokeWidth={2}
             />
+            {tab === "notifications" && unreadCount > 0 && (
+              <View style={styles.badge} pointerEvents="none">
+                <Text style={styles.badgeText}>
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </Text>
+              </View>
+            )}
           </Pressable>
         );
       })}
-    </View>
+    </Animated.View>
   );
 }
 
@@ -97,7 +130,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 16,
     right: 16,
-    height: 70,
+    height: navBarHeight,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -123,4 +156,24 @@ const styles = StyleSheet.create({
   },
   tabSelected: { backgroundColor: "#ffffff" },
   tabPressed: { backgroundColor: "rgba(255, 255, 255, 0.15)" },
+  badge: {
+    position: "absolute",
+    top: 3,
+    right: 3,
+    minWidth: 18,
+    height: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+    borderRadius: 9,
+    borderWidth: 1.5,
+    borderColor: "#ffffff",
+    backgroundColor: "#d93025",
+  },
+  badgeText: {
+    color: "#ffffff",
+    fontFamily: "SoraBold",
+    fontSize: 9,
+    lineHeight: 12,
+  },
 });
