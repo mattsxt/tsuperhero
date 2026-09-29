@@ -7,7 +7,7 @@ export const Routes = {
   commuterPickup: "/commuter/pickup",
   commuterRental: "/commuter/rental",
   commuterRoutes: "/commuter/routes",
-  transitHome: "/explore",
+  transitHome: "/transit/home",
   notifications: "/notifications",
   profile: "/profile",
   profileEdit: "/profile/edit",

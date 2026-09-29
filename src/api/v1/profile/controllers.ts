@@ -23,16 +23,16 @@ export async function getSignedInRoute(userId: string) {
   return profile ? getHomeRoute(profile.user_type) : Routes.setup;
 }
 
-export async function loadCommuterHome(): Promise<
-  { firstName: string } | { redirect: AppRoute }
-> {
+export async function loadHome(
+  userType: UserType,
+): Promise<{ firstName: string } | { redirect: AppRoute }> {
   try {
     const { session } = await unwrap(authRoutes.getSession());
     if (!session) return { redirect: Routes.login };
 
     const profile = await unwrap(profileRoutes.findProfile(session.user.id));
     if (!profile) return { redirect: Routes.setup };
-    if (profile.user_type !== "commuter") {
+    if (profile.user_type !== userType) {
       return { redirect: getHomeRoute(profile.user_type) };
     }
 
@@ -186,7 +186,6 @@ export function toIsoDate(date: Date) {
 }
 
 export type ProfileForm = {
-  userType: UserType | null;
   firstName: string;
   lastName: string;
   birthdate: Date | null;
@@ -221,19 +220,18 @@ export async function submitProfile(
 
   if (
     Object.keys(fieldErrors).length > 0 ||
-    !form.userType ||
     !form.birthdate ||
     !form.gender
   ) {
     return { ...failure("Please complete the form."), fieldErrors };
   }
 
-  const { userType, birthdate, gender, contact } = form;
+  const { birthdate, gender, contact } = form;
   return attempt(async () => {
     await unwrap(
       profileRoutes.upsertProfile({
         id: userId,
-        user_type: userType,
+        user_type: "commuter",
         first_name: firstName,
         last_name: lastName,
         birth_date: toIsoDate(birthdate),

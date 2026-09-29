@@ -41,6 +41,7 @@ export default function RootLayout() {
           options={{ gestureEnabled: false }}
         />
         <Stack.Screen name="commuter/home/index" options={tabScreenOptions} />
+        <Stack.Screen name="transit/home/index" options={tabScreenOptions} />
         <Stack.Screen name="notifications/index" options={tabScreenOptions} />
         <Stack.Screen name="profile/index" options={tabScreenOptions} />
         <Stack.Screen name="profile/edit/index" />

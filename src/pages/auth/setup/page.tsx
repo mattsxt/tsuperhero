@@ -5,7 +5,6 @@ import { router } from "expo-router";
 import Calendar1 from "lucide-react-native/icons/calendar-1";
 import ChevronDown from "lucide-react-native/icons/chevron-down";
 import ChevronLeft from "lucide-react-native/icons/chevron-left";
-import PersonStanding from "lucide-react-native/icons/person-standing";
 import { createElement, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -21,7 +20,6 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import Svg, { Circle, Path } from "react-native-svg";
 
 import {
   checkSetupAccess,
@@ -29,17 +27,16 @@ import {
   contactLengthMessage,
   genderOptions,
   getContactProblem,
-  getHomeRoute,
   getNameProblem,
   submitProfile,
   toIsoDate,
   type Gender,
   type ProfileFormErrors,
   type ProfileFormField,
-  type UserType,
 } from "@/api/v1/profile/controllers";
 import { BrandHeader } from "@/components/brand-header";
 import { MiniToast, type MiniToastMessage } from "@/components/mini-toast";
+import { Routes } from "@/constants/routes";
 
 const backgroundBlue = "#1034A6";
 const accentBlue = "#29A9E1";
@@ -50,7 +47,6 @@ export default function SetupScreen() {
   const [checking, setChecking] = useState(true);
   const [userId, setUserId] = useState("");
   const [step, setStep] = useState(1);
-  const [userType, setUserType] = useState<UserType | null>(null);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [birthdate, setBirthdate] = useState<Date | null>(null);
@@ -86,7 +82,7 @@ export default function SetupScreen() {
     };
   }, []);
 
-  const canGoBack = step >= 2 && step <= 4;
+  const canGoBack = step >= 2 && step <= 3;
   const goBack = () => {
     setGenderOpen(false);
     setStep((currentStep) => Math.max(currentStep - 1, 1));
@@ -118,7 +114,6 @@ export default function SetupScreen() {
     setSaving(true);
     setSaveError("");
     const result = await submitProfile(userId, {
-      userType,
       firstName,
       lastName,
       birthdate,
@@ -132,7 +127,7 @@ export default function SetupScreen() {
       if (!result.fieldErrors) setSaveError(result.error);
       return;
     }
-    setStep(5);
+    setStep(4);
   };
 
   if (checking) {
@@ -179,46 +174,14 @@ export default function SetupScreen() {
 
             {step === 2 && (
               <>
-                <Text style={styles.heading}>What best describes you?</Text>
-                <View style={styles.userTypeRow}>
-                  <UserTypeCard
-                    label="Commuter"
-                    selected={userType === "commuter"}
-                    icon={
-                      <PersonStanding
-                        color="#ffffff"
-                        size={96}
-                        strokeWidth={2.4}
-                      />
-                    }
-                    onPress={() => {
-                      setUserType("commuter");
-                      setStep(3);
-                    }}
-                  />
-                  <UserTypeCard
-                    label={"Transit\nPersonnel"}
-                    selected={userType === "transit_personnel"}
-                    icon={<SteeringWheel size={68} />}
-                    onPress={() => {
-                      setUserType("transit_personnel");
-                      setStep(3);
-                    }}
-                  />
-                </View>
+                <Text style={styles.message}>
+                  Perfect, now is the time to set up your profile!
+                </Text>
+                <PrimaryButton label="CONTINUE" onPress={() => setStep(3)} />
               </>
             )}
 
             {step === 3 && (
-              <>
-                <Text style={styles.message}>
-                  Perfect, now is the time to set up your profile!
-                </Text>
-                <PrimaryButton label="CONTINUE" onPress={() => setStep(4)} />
-              </>
-            )}
-
-            {step === 4 && (
               <View style={styles.form}>
                 <Text style={styles.formHeading}>Set up your profile</Text>
 
@@ -351,7 +314,7 @@ export default function SetupScreen() {
               </View>
             )}
 
-            {step === 5 && (
+            {step === 4 && (
               <>
                 <Text style={styles.message}>
                   Alright!{"\n"}Everything is now set up.{"\n"}Let’s get
@@ -359,9 +322,7 @@ export default function SetupScreen() {
                 </Text>
                 <PrimaryButton
                   label="LET'S GO!"
-                  onPress={() =>
-                    router.replace(getHomeRoute(userType ?? "commuter"))
-                  }
+                  onPress={() => router.replace(Routes.commuterHome)}
                 />
               </>
             )}
@@ -510,35 +471,6 @@ function PrimaryButton({
   );
 }
 
-function UserTypeCard({
-  label,
-  icon,
-  selected,
-  onPress,
-}: {
-  label: string;
-  icon: React.ReactNode;
-  selected: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label.replace("\n", " ")}
-      accessibilityState={{ selected }}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.userTypeCard,
-        selected && styles.userTypeCardSelected,
-        pressed && styles.pressed,
-      ]}
-    >
-      <View style={styles.userTypeIcon}>{icon}</View>
-      <Text style={styles.userTypeLabel}>{label}</Text>
-    </Pressable>
-  );
-}
-
 function FormField({
   label,
   error,
@@ -554,21 +486,6 @@ function FormField({
       {children}
       {!!error && <Text style={styles.fieldError}>{error}</Text>}
     </View>
-  );
-}
-
-function SteeringWheel({ size }: { size: number }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Circle cx={12} cy={12} r={10} stroke="#ffffff" strokeWidth={2.6} />
-      <Path
-        d="M2.5 11.5c3-1.6 6.1-2.4 9.5-2.4s6.5.8 9.5 2.4"
-        stroke="#ffffff"
-        strokeWidth={2.6}
-      />
-      <Path d="M12 14.5v7" stroke="#ffffff" strokeWidth={2.6} />
-      <Circle cx={12} cy={13} r={2.6} fill="#ffffff" />
-    </Svg>
   );
 }
 
@@ -593,12 +510,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 64,
   },
-  heading: {
-    color: "#ffffff",
-    fontFamily: "SoraBold",
-    fontSize: 18,
-    textAlign: "center",
-  },
   message: {
     color: "#ffffff",
     fontFamily: "SoraBold",
@@ -622,35 +533,7 @@ const styles = StyleSheet.create({
     fontSize: 9,
   },
   buttonDisabled: { opacity: 0.6 },
-  userTypeRow: {
-    flexDirection: "row",
-    gap: 24,
-    marginTop: 68,
-  },
-  userTypeCard: {
-    width: 141,
-    height: 158,
-    alignItems: "center",
-    justifyContent: "flex-end",
-    backgroundColor: accentBlue,
-    borderRadius: 10,
-    paddingBottom: 12,
-  },
-  userTypeCardSelected: { borderWidth: 3, borderColor: "#ffffff" },
-  pressed: { opacity: 0.8 },
   backButton: { position: "absolute", top: 8, left: 16, zIndex: 1 },
-  userTypeIcon: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  userTypeLabel: {
-    color: "#ffffff",
-    fontFamily: "SoraBold",
-    fontSize: 18,
-    lineHeight: 24,
-    textAlign: "center",
-  },
   form: { width: contentWidth, gap: 12 },
   formHeading: {
     color: "#ffffff",
