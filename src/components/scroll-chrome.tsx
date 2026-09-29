@@ -11,9 +11,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 
-// Scroll distance before the header shortens; it only expands again at the top.
 const collapseOffset = 8;
-// Ignore tiny finger jitter before toggling the bottom nav.
 const directionThreshold = 6;
 
 export const chromeDuration = 250;
@@ -26,25 +24,34 @@ export type ScrollChrome = {
   navHidden: SharedValue<number>;
   scrollHandler: ReturnType<typeof useAnimatedScrollHandler>;
   headerHeight: number;
+  collapsedHeaderHeight: number | null;
   onHeaderLayout: (event: LayoutChangeEvent) => void;
+  setLocked: (locked: boolean) => void;
 };
 
 export function useScrollChrome(): ScrollChrome {
-  const [collapsed, setCollapsed] = useState(false);
+  const [scrolledPast, setScrolledPast] = useState(false);
+  const [locked, setLockedState] = useState(false);
   const [headerHeight, setHeaderHeight] = useState(0);
+  const [collapsedHeaderHeight, setCollapsedHeaderHeight] = useState<
+    number | null
+  >(null);
   const collapsedValue = useSharedValue(false);
+  const lockedValue = useSharedValue(false);
   const navHidden = useSharedValue(0);
   const lastY = useSharedValue(0);
+  const collapsed = scrolledPast || locked;
 
   const scrollHandler = useAnimatedScrollHandler((event) => {
     const y = event.contentOffset.y;
     const dy = y - lastY.value;
     lastY.value = y;
+    if (lockedValue.value) return;
 
     const shouldCollapse = y > collapseOffset;
     if (shouldCollapse !== collapsedValue.value) {
       collapsedValue.value = shouldCollapse;
-      scheduleOnRN(setCollapsed, shouldCollapse);
+      scheduleOnRN(setScrolledPast, shouldCollapse);
     }
 
     if (y <= 0) {
@@ -57,11 +64,28 @@ export function useScrollChrome(): ScrollChrome {
   });
 
   const onHeaderLayout = (event: LayoutChangeEvent) => {
-    // Content is padded by the full-size header so it never jumps.
-    if (!collapsed) setHeaderHeight(event.nativeEvent.layout.height);
+    const { height } = event.nativeEvent.layout;
+    if (collapsed) setCollapsedHeaderHeight(height);
+    else setHeaderHeight(height);
   };
 
-  return { collapsed, navHidden, scrollHandler, headerHeight, onHeaderLayout };
+  const setLocked = (next: boolean) => {
+    lockedValue.set(next);
+    navHidden.set(withTiming(next ? 1 : 0, { duration: chromeDuration }));
+    collapsedValue.set(false);
+    setScrolledPast(false);
+    setLockedState(next);
+  };
+
+  return {
+    collapsed,
+    navHidden,
+    scrollHandler,
+    headerHeight,
+    collapsedHeaderHeight,
+    onHeaderLayout,
+    setLocked,
+  };
 }
 
 export function StickyHeader({
@@ -82,7 +106,6 @@ export function StickyHeader({
   );
 }
 
-// Content that only shows in the full-size header.
 export function ExpandedOnly({
   collapsed,
   children,

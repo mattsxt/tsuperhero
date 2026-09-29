@@ -31,7 +31,6 @@ const day = 24 * hour;
 
 const ago = (milliseconds: number) => new Date(Date.now() - milliseconds);
 
-// Hardcoded examples until notifications are stored in Supabase.
 export function getSampleNotifications(): AppNotification[] {
   return [
     {

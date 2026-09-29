@@ -32,6 +32,12 @@
         }
       ],
       [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "TsuperHero uses your location to fill in your pickup point."
+        }
+      ],
+      [
         "expo-font",
         {
           "fonts": ["./assets/fonts/Sora.ttf"]

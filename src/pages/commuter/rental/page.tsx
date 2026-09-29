@@ -7,7 +7,6 @@ import ChevronRight from "lucide-react-native/icons/chevron-right";
 import CircleCheckBig from "lucide-react-native/icons/circle-check-big";
 import ClipboardList from "lucide-react-native/icons/clipboard-list";
 import Flag from "lucide-react-native/icons/flag";
-import LocateFixed from "lucide-react-native/icons/locate-fixed";
 import MapPin from "lucide-react-native/icons/map-pin";
 import NotebookPen from "lucide-react-native/icons/notebook-pen";
 import PartyPopper from "lucide-react-native/icons/party-popper";
@@ -30,6 +29,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import type { Place } from "@/api/v1/places/controllers";
 import {
   DateTimeField,
   formatDate,
@@ -47,6 +47,7 @@ import {
   vehicleOptions,
   type Vehicle,
 } from "@/components/module-ui";
+import { PlaceSearchField } from "@/components/place-search-field";
 import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
 
@@ -215,6 +216,10 @@ function sameOrAfter(a: Date, b: Date) {
   );
 }
 
+function describePlace(place: Place) {
+  return place.address ? `${place.name}, ${place.address}` : place.name;
+}
+
 function sameDay(a: Date, b: Date) {
   return a.toDateString() === b.toDateString();
 }
@@ -230,8 +235,8 @@ export default function RentalScreen() {
   const [step, setStep] = useState<Step>(1);
   const [problem, setProblem] = useState("");
 
-  const [pickup, setPickup] = useState("");
-  const [destination, setDestination] = useState("");
+  const [pickup, setPickup] = useState<Place | null>(null);
+  const [destination, setDestination] = useState<Place | null>(null);
   const [tripDate, setTripDate] = useState<Date | null>(null);
   const [pickupTime, setPickupTime] = useState<Date | null>(null);
   const [tripType, setTripType] = useState<TripType>("one_way");
@@ -268,8 +273,11 @@ export default function RentalScreen() {
   };
 
   const getTripProblem = () => {
-    if (!pickup.trim()) return "Enter your preferred pickup location.";
-    if (!destination.trim()) return "Enter your destination.";
+    if (!pickup) return "Choose your pickup location from the suggestions.";
+    if (!destination) return "Choose your destination from the suggestions.";
+    if (pickup.id === destination.id) {
+      return "Your pickup location and destination can't be the same.";
+    }
     if (!tripDate) return "Select the date of your trip.";
     if (!pickupTime) return "Select your pickup time.";
     if (tripType === "round_trip") {
@@ -356,26 +364,26 @@ export default function RentalScreen() {
                 title="Where are we going?"
               />
               <FieldLabel>PREFERRED PICKUP LOCATION</FieldLabel>
-              <SoftField
+              <PlaceSearchField
                 value={pickup}
-                onChangeText={setPickup}
+                onChange={(place) => {
+                  setProblem("");
+                  setPickup(place);
+                }}
+                onProblem={setProblem}
                 placeholder="Search pickup location..."
                 icon={<MapPin color={brandBlue} size={18} strokeWidth={2} />}
-                trailing={
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Use my current location"
-                    hitSlop={8}
-                  >
-                    <LocateFixed color={brandBlue} size={20} strokeWidth={2} />
-                  </Pressable>
-                }
+                allowCurrentLocation
               />
               <View style={styles.gap} />
               <FieldLabel>DESTINATION</FieldLabel>
-              <SoftField
+              <PlaceSearchField
                 value={destination}
-                onChangeText={setDestination}
+                onChange={(place) => {
+                  setProblem("");
+                  setDestination(place);
+                }}
+                onProblem={setProblem}
                 placeholder="Search destination..."
                 icon={<Flag color={brandBlue} size={18} strokeWidth={2} />}
               />
@@ -565,7 +573,12 @@ export default function RentalScreen() {
             </>
           )}
 
-          {step === 4 && driver && tripDate && pickupTime && (
+          {step === 4 &&
+            driver &&
+            tripDate &&
+            pickupTime &&
+            pickup &&
+            destination && (
             <>
               <SectionTitle
                 icon={
@@ -574,8 +587,11 @@ export default function RentalScreen() {
                 title="Review your charter"
               />
               <View style={styles.reviewCard}>
-                <ReviewRow label="Pickup" value={pickup.trim()} />
-                <ReviewRow label="Destination" value={destination.trim()} />
+                <ReviewRow label="Pickup" value={describePlace(pickup)} />
+                <ReviewRow
+                  label="Destination"
+                  value={describePlace(destination)}
+                />
                 <ReviewRow
                   label="Trip"
                   value={

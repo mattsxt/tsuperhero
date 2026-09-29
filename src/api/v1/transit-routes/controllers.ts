@@ -17,8 +17,25 @@ export type RouteVehicle = {
   maxCapacity: number;
   currentCapacity: number;
   status: string;
+  towards: string;
   lat: number;
   lng: number;
+};
+
+export type Terminal = {
+  id: string;
+  name: string;
+  city: string;
+  lat: number;
+  lng: number;
+  routeIds: string[];
+};
+
+export type MapBounds = {
+  north: number;
+  south: number;
+  east: number;
+  west: number;
 };
 
 export const vehicleTypeLabels: Record<VehicleType, string> = {
@@ -55,7 +72,127 @@ export const transitRoutes: TransitRoute[] = [
       [13.6203, 123.1633],
     ],
   },
+  {
+    id: "naga-san-felipe",
+    name: "Naga Centro – San Felipe",
+    waypoints: [
+      [13.624, 123.185],
+      [13.6398, 123.2028],
+    ],
+  },
 ];
+
+export const terminals: Terminal[] = [
+  {
+    id: "naga-central",
+    name: "Naga City Central Terminal",
+    city: "Naga City",
+    lat: 13.624,
+    lng: 123.185,
+    routeIds: [
+      "naga-pili",
+      "naga-canaman",
+      "naga-camaligan",
+      "naga-san-felipe",
+    ],
+  },
+  {
+    id: "sm-naga",
+    name: "SM City Naga Terminal",
+    city: "Naga City",
+    lat: 13.619,
+    lng: 123.2,
+    routeIds: ["naga-pili"],
+  },
+  {
+    id: "diversion-road",
+    name: "Diversion Road Stop",
+    city: "Naga City",
+    lat: 13.598,
+    lng: 123.24,
+    routeIds: ["naga-pili"],
+  },
+  {
+    id: "pili",
+    name: "Pili Terminal",
+    city: "Pili",
+    lat: 13.556,
+    lng: 123.275,
+    routeIds: ["naga-pili"],
+  },
+  {
+    id: "canaman",
+    name: "Canaman Terminal",
+    city: "Canaman",
+    lat: 13.6435,
+    lng: 123.1715,
+    routeIds: ["naga-canaman"],
+  },
+  {
+    id: "camaligan",
+    name: "Camaligan Terminal",
+    city: "Camaligan",
+    lat: 13.6203,
+    lng: 123.1633,
+    routeIds: ["naga-camaligan"],
+  },
+  {
+    id: "san-felipe",
+    name: "San Felipe Terminal",
+    city: "Naga City",
+    lat: 13.6398,
+    lng: 123.2028,
+    routeIds: ["naga-san-felipe"],
+  },
+];
+
+export function findRoute(id: string | null | undefined) {
+  return transitRoutes.find((route) => route.id === id) ?? null;
+}
+
+export function findTerminal(id: string | null | undefined) {
+  return terminals.find((terminal) => terminal.id === id) ?? null;
+}
+
+export function getRouteTerminals(routeId: string) {
+  return terminals.filter((terminal) => terminal.routeIds.includes(routeId));
+}
+
+export type DestinationResults = {
+  terminals: (Terminal & { routes: TransitRoute[] })[];
+  routes: TransitRoute[];
+};
+
+export function searchDestinations(query: string): DestinationResults {
+  const needle = query.trim().toLowerCase();
+  const matches = (value: string) => value.toLowerCase().includes(needle);
+
+  const matchingTerminals = terminals
+    .filter((terminal) => !needle || matches(terminal.name) || matches(terminal.city))
+    .map((terminal) => ({
+      ...terminal,
+      routes: transitRoutes.filter((route) =>
+        terminal.routeIds.includes(route.id),
+      ),
+    }));
+
+  return {
+    terminals: matchingTerminals,
+    routes: needle ? transitRoutes.filter((route) => matches(route.name)) : [],
+  };
+}
+
+export function isInBounds(
+  { lat, lng }: { lat: number; lng: number },
+  bounds: MapBounds | null,
+) {
+  if (!bounds) return true;
+  const withinLng =
+    bounds.west <= bounds.east
+      ? lng >= bounds.west && lng <= bounds.east
+      : lng >= bounds.west || lng <= bounds.east;
+  return lat >= bounds.south && lat <= bounds.north && withinLng;
+}
 
 const maxCapacity: Record<VehicleType, number> = {
   bus: 50,
@@ -141,7 +278,20 @@ function pointAlong(path: LatLng[], fraction: number): LatLng {
   return path[0];
 }
 
-export function getRouteVehicles(route: TransitRoute, path: LatLng[]) {
+const tripSeconds: Record<VehicleType, number> = {
+  bus: 420,
+  jeep: 480,
+  tricy: 600,
+  van: 380,
+};
+
+export const vehicleTickMs = 3000;
+
+export function getRouteVehicles(
+  route: TransitRoute,
+  path: LatLng[],
+  nowMs: number,
+) {
   if (path.length < 2) return [];
   const counters: Record<VehicleType, number> = {
     bus: 0,
@@ -150,10 +300,16 @@ export function getRouteVehicles(route: TransitRoute, path: LatLng[]) {
     van: 0,
   };
   const routeNumber = transitRoutes.indexOf(route) + 1;
+  const [origin, destination = origin] = route.name.split(" – ");
 
   return fleetTemplate.map(([type, fraction], index): RouteVehicle => {
     counters[type] += 1;
-    const [lat, lng] = pointAlong(path, fraction);
+    const status = statuses[(index + routeNumber) % statuses.length];
+    const startPhase = index % 2 === 0 ? fraction : 2 - fraction;
+    const travelled =
+      status === "In Transit" ? (nowMs / 1000 / tripSeconds[type]) * 2 : 0;
+    const phase = (startPhase + travelled) % 2;
+    const [lat, lng] = pointAlong(path, phase <= 1 ? phase : 2 - phase);
     const max = maxCapacity[type];
     return {
       id: `${route.id}-${index}`,
@@ -163,7 +319,8 @@ export function getRouteVehicles(route: TransitRoute, path: LatLng[]) {
       currentCapacity: Math.round(
         (max * ((index * 37 + routeNumber * 11) % 100)) / 100,
       ),
-      status: statuses[(index + routeNumber) % statuses.length],
+      status,
+      towards: phase < 1 ? destination : origin,
       lat,
       lng,
     };

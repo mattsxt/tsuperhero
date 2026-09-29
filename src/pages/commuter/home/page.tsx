@@ -4,9 +4,7 @@ import { StatusBar } from "expo-status-bar";
 import ArrowRight from "lucide-react-native/icons/arrow-right";
 import Bus from "lucide-react-native/icons/bus";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
-import MapPin from "lucide-react-native/icons/map-pin";
 import MapPinSearch from "lucide-react-native/icons/map-pin-search";
-import Search from "lucide-react-native/icons/search";
 import Star from "lucide-react-native/icons/star";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
@@ -15,10 +13,13 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
-import Animated from "react-native-reanimated";
+import Animated, {
+  FadeIn,
+  FadeOut,
+  useAnimatedRef,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { loadCommuterHome } from "@/api/v1/profile/controllers";
@@ -31,11 +32,16 @@ import {
   useScrollChrome,
 } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
+import {
+  DestinationSearchPanel,
+  DestinationSearchTrigger,
+} from "@/pages/commuter/home/destination-search";
 
 const brandBlue = "#193caf";
 const mutedText = "#6b6b6b";
 const cardBorder = "#e6e6e6";
 const cardEdgeBlue = "#1a2f8f";
+const searchLayerGap = 14;
 
 type Trip = {
   id: string;
@@ -75,6 +81,17 @@ export default function CommuterHomeScreen() {
   const { collapsed } = chrome;
   const blurTarget = useRef<View | null>(null);
   const [firstName, setFirstName] = useState<string | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const scrollRef = useAnimatedRef<Animated.ScrollView>();
+  const minimizedHeaderHeight =
+    chrome.collapsedHeaderHeight ?? insets.top + 56;
+
+  const changeSearchOpen = (open: boolean) => {
+    if (open) scrollRef.current?.scrollTo({ y: 0, animated: false });
+    chrome.setLocked(open);
+    setSearchOpen(open);
+  };
+  const closeSearch = () => changeSearchOpen(false);
 
   useEffect(() => {
     let active = true;
@@ -107,81 +124,97 @@ export default function CommuterHomeScreen() {
       <StatusBar style="light" />
       <BlurTargetView ref={blurTarget} style={styles.blurTarget}>
         <Animated.ScrollView
+          ref={scrollRef}
           onScroll={chrome.scrollHandler}
           scrollEventThrottle={16}
+          scrollEnabled={!searchOpen}
           contentContainerStyle={{
             paddingTop: chrome.headerHeight,
             paddingBottom: insets.bottom + bottomNavHeight,
           }}
+          keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.body}>
-            <View style={[styles.card, styles.searchCard]}>
-              <MapPin color={brandBlue} size={28} strokeWidth={2} />
-              <View style={styles.searchText}>
-                <Text style={styles.searchTitle}>Where to?</Text>
-                <TextInput
-                  placeholder="Enter your Destination"
-                  placeholderTextColor={mutedText}
-                  style={styles.searchInput}
-                />
-              </View>
-              <View style={styles.searchDivider} />
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Search destination"
-                style={styles.searchButton}
+            <DestinationSearchTrigger onOpen={() => changeSearchOpen(true)} />
+
+            {!searchOpen && (
+              <Animated.View
+                entering={FadeIn.duration(200)}
+                exiting={FadeOut.duration(120)}
               >
-                <Search color="#ffffff" size={20} strokeWidth={2.5} />
-              </Pressable>
-            </View>
+                <View style={styles.actionRow}>
+                  <ActionCard
+                    title="Routes"
+                    description="Find the best routes for you"
+                    icon={
+                      <MapPinSearch
+                        color={brandBlue}
+                        size={40}
+                        strokeWidth={1.8}
+                      />
+                    }
+                    onPress={() => router.push(Routes.commuterRoutes)}
+                  />
+                  <ActionCard
+                    title="Rental"
+                    description="Rent a vehicle for your trip"
+                    icon={<Bus color={brandBlue} size={40} strokeWidth={1.8} />}
+                    onPress={() => router.push(Routes.commuterRental)}
+                  />
+                  <ActionCard
+                    title="Pickup"
+                    description="Schedule a pickup easily"
+                    icon={<PickupIcon color={brandBlue} size={40} />}
+                    onPress={() => router.push(Routes.commuterPickup)}
+                  />
+                </View>
 
-            <View style={styles.actionRow}>
-              <ActionCard
-                title="Routes"
-                description="Find the best routes for you"
-                icon={
-                  <MapPinSearch color={brandBlue} size={40} strokeWidth={1.8} />
-                }
-                onPress={() => router.push(Routes.commuterRoutes)}
-              />
-              <ActionCard
-                title="Rental"
-                description="Rent a vehicle for your trip"
-                icon={<Bus color={brandBlue} size={40} strokeWidth={1.8} />}
-                onPress={() => router.push(Routes.commuterRental)}
-              />
-              <ActionCard
-                title="Pickup"
-                description="Schedule a pickup easily"
-                icon={<PickupIcon color={brandBlue} size={40} />}
-                onPress={() => router.push(Routes.commuterPickup)}
-              />
-            </View>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>Trip History</Text>
+                  <Pressable
+                    accessibilityRole="button"
+                    hitSlop={8}
+                    style={styles.viewAll}
+                  >
+                    <Text style={styles.viewAllText}>View All</Text>
+                    <ChevronRight
+                      color={brandBlue}
+                      size={16}
+                      strokeWidth={2.5}
+                    />
+                  </Pressable>
+                </View>
 
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Trip History</Text>
-              <Pressable
-                accessibilityRole="button"
-                hitSlop={8}
-                style={styles.viewAll}
-              >
-                <Text style={styles.viewAllText}>View All</Text>
-                <ChevronRight color={brandBlue} size={16} strokeWidth={2.5} />
-              </Pressable>
-            </View>
-
-            <View style={[styles.card, styles.tripList]}>
-              {sampleTrips.map((trip, index) => (
-                <TripRow
-                  key={trip.id}
-                  trip={trip}
-                  last={index === sampleTrips.length - 1}
-                />
-              ))}
-            </View>
+                <View style={[styles.card, styles.tripList]}>
+                  {sampleTrips.map((trip, index) => (
+                    <TripRow
+                      key={trip.id}
+                      trip={trip}
+                      last={index === sampleTrips.length - 1}
+                    />
+                  ))}
+                </View>
+              </Animated.View>
+            )}
           </View>
         </Animated.ScrollView>
+
+        {searchOpen && (
+          <Animated.View
+            entering={FadeIn.duration(150)}
+            exiting={FadeOut.duration(120)}
+            style={[
+              styles.searchLayer,
+              { paddingTop: minimizedHeaderHeight + searchLayerGap },
+            ]}
+          >
+            <DestinationSearchPanel
+              onClose={closeSearch}
+              topOffset={minimizedHeaderHeight}
+            />
+          </Animated.View>
+        )}
 
         <StickyHeader chrome={chrome}>
           <Animated.View
@@ -347,7 +380,13 @@ const styles = StyleSheet.create({
   greetingCollapsed: { fontSize: 17, lineHeight: 24 },
   headerLogo: { width: 60, height: 60 },
   headerLogoCollapsed: { width: 32, height: 32 },
-  body: { paddingHorizontal: 12, paddingTop: 14 },
+  body: { paddingHorizontal: 12, paddingTop: searchLayerGap },
+  searchLayer: {
+    ...StyleSheet.absoluteFill,
+    zIndex: 5,
+    paddingHorizontal: 12,
+    backgroundColor: "#ffffff",
+  },
   card: {
     backgroundColor: "#ffffff",
     borderWidth: 1.5,
@@ -355,35 +394,6 @@ const styles = StyleSheet.create({
     borderRightWidth: 5,
     borderRightColor: cardEdgeBlue,
     borderRadius: 10,
-  },
-  searchCard: {
-    height: 60,
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 14,
-  },
-  searchText: { flex: 1, marginLeft: 10 },
-  searchTitle: { color: brandBlue, fontFamily: "SoraBold", fontSize: 13 },
-  searchInput: {
-    padding: 0,
-    marginTop: 1,
-    color: "#111111",
-    fontFamily: "Sora",
-    fontSize: 9,
-  },
-  searchDivider: {
-    width: 1,
-    height: 38,
-    backgroundColor: "#d9d9d9",
-    marginHorizontal: 12,
-  },
-  searchButton: {
-    width: 36,
-    height: 36,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 18,
-    backgroundColor: brandBlue,
   },
   actionRow: {
     flexDirection: "row",

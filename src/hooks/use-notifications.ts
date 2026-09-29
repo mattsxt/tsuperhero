@@ -5,8 +5,6 @@ import {
   type AppNotification,
 } from "@/api/v1/notifications/controllers";
 
-// Shared across screens so the bottom nav badge and the notifications page
-// stay in sync. Replace the sample data once notifications live in Supabase.
 let notifications: AppNotification[] = getSampleNotifications();
 const listeners = new Set<() => void>();
 

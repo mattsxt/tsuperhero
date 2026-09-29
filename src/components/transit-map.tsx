@@ -9,9 +9,19 @@ export type TransitMapState = {
   routeId: string | null;
   route: [number, number][] | null;
   vehicles: { id: string; lat: number; lng: number; type: string }[];
+  terminals: { id: string; name: string; lat: number; lng: number }[];
+  highlightedTerminalId: string | null;
   selectedId: string | null;
+  focus: { key: number; lat: number; lng: number } | null;
   padTop: number;
   padBottom: number;
+};
+
+export type TransitMapBounds = {
+  north: number;
+  south: number;
+  east: number;
+  west: number;
 };
 
 type FrameRef = {
@@ -55,6 +65,21 @@ const mapHtml = `<!DOCTYPE html>
   }
   .pin img { width: 14px; height: 14px; transform: rotate(45deg); filter: brightness(0); }
   .pin.selected { border-color: #1e9e45; border-width: 3px; transform: rotate(-45deg) scale(1.2); }
+  .terminal { display: flex; flex-direction: column; align-items: center; }
+  .terminal-icon {
+    width: 22px; height: 22px; box-sizing: border-box; border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    background: #193caf; border: 2px solid #ffffff;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35);
+  }
+  .terminal-label {
+    margin-top: 3px; padding: 2px 6px; border-radius: 6px;
+    background: rgba(255, 255, 255, 0.92); color: #193caf;
+    font: bold 10px sans-serif; white-space: nowrap;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  }
+  .terminal.highlighted .terminal-icon { width: 30px; height: 30px; background: #1e9e45; }
+  .terminal.highlighted .terminal-label { background: #1e9e45; color: #ffffff; font-size: 11px; }
 </style>
 </head>
 <body>
@@ -62,10 +87,13 @@ const mapHtml = `<!DOCTYPE html>
 <script>
   var ICONS = ${JSON.stringify(vehicleIconUris)};
   var API_KEY = ${JSON.stringify(googleMapsApiKey ?? "")};
+  var TERMINAL_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22V4a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v18"/><path d="M4 22h16"/><path d="M9 7h6M9 11h6M9 15h6"/></svg>';
   var map = null;
   var routeLine = null;
-  var markers = [];
+  var vehicleMarkers = {};
+  var terminalMarkers = [];
   var lastRouteId = null;
+  var lastFocusKey = null;
 
   function send(message) {
     var text = JSON.stringify(message);
@@ -83,35 +111,103 @@ const mapHtml = `<!DOCTYPE html>
 
   function applyState(state) {
     if (!map) return;
-    if (routeLine) { routeLine.setMap(null); routeLine = null; }
-    if (state.route && state.route.length) {
-      var path = state.route.map(function (point) { return { lat: point[0], lng: point[1] }; });
-      routeLine = new google.maps.Polyline({
-        path: path, map: map, strokeColor: "#f6c945", strokeWeight: 7, strokeOpacity: 0.95
-      });
-      if (state.routeId !== lastRouteId) {
+    var routeKey = state.route && state.route.length ? state.routeId + ":" + state.route.length : null;
+    if (routeKey !== lastRouteId) {
+      if (routeLine) { routeLine.setMap(null); routeLine = null; }
+      if (routeKey) {
+        var path = state.route.map(function (point) { return { lat: point[0], lng: point[1] }; });
+        routeLine = new google.maps.Polyline({
+          path: path, map: map, strokeColor: "#f6c945", strokeWeight: 7, strokeOpacity: 0.95
+        });
         var bounds = new google.maps.LatLngBounds();
         path.forEach(function (point) { bounds.extend(point); });
         map.fitBounds(bounds, { top: state.padTop, bottom: state.padBottom, left: 30, right: 30 });
       }
     }
-    lastRouteId = state.routeId;
+    lastRouteId = routeKey;
 
-    markers.forEach(function (marker) { marker.map = null; });
-    markers = [];
-    state.vehicles.forEach(function (vehicle) {
-      var selected = vehicle.id === state.selectedId;
+    applyTerminals(state);
+    applyVehicles(state);
+
+    if (state.focus && state.focus.key !== lastFocusKey) {
+      map.panTo({ lat: state.focus.lat, lng: state.focus.lng });
+    }
+    lastFocusKey = state.focus ? state.focus.key : null;
+  }
+
+  function applyTerminals(state) {
+    terminalMarkers.forEach(function (marker) { marker.map = null; });
+    terminalMarkers = [];
+    state.terminals.forEach(function (terminal) {
+      var highlighted = terminal.id === state.highlightedTerminalId;
       var content = document.createElement("div");
-      content.className = "pin-wrap";
-      content.innerHTML = '<div class="pin' + (selected ? " selected" : "") + '"><img src="' + ICONS[vehicle.type] + '" /></div>';
-      var marker = new google.maps.marker.AdvancedMarkerElement({
+      content.className = "terminal" + (highlighted ? " highlighted" : "");
+      content.innerHTML = '<div class="terminal-icon">' + TERMINAL_SVG + '</div><div class="terminal-label"></div>';
+      content.lastChild.textContent = terminal.name;
+      terminalMarkers.push(new google.maps.marker.AdvancedMarkerElement({
         map: map,
-        position: { lat: vehicle.lat, lng: vehicle.lng },
+        position: { lat: terminal.lat, lng: terminal.lng },
         content: content,
-        zIndex: selected ? 1000 : 0
-      });
-      marker.addListener("click", function () { send({ type: "select", id: vehicle.id }); });
-      markers.push(marker);
+        zIndex: highlighted ? 900 : 500
+      }));
+    });
+  }
+
+  function animateTo(entry, lat, lng) {
+    var from = entry.position;
+    var start = null;
+    if (entry.frame) cancelAnimationFrame(entry.frame);
+    function step(time) {
+      if (start === null) start = time;
+      var t = Math.min((time - start) / 900, 1);
+      var eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+      entry.position = { lat: from.lat + (lat - from.lat) * eased, lng: from.lng + (lng - from.lng) * eased };
+      entry.marker.position = entry.position;
+      entry.frame = t < 1 ? requestAnimationFrame(step) : null;
+    }
+    entry.frame = requestAnimationFrame(step);
+  }
+
+  function applyVehicles(state) {
+    var seen = {};
+    state.vehicles.forEach(function (vehicle) {
+      seen[vehicle.id] = true;
+      var selected = vehicle.id === state.selectedId;
+      var entry = vehicleMarkers[vehicle.id];
+      if (!entry) {
+        var content = document.createElement("div");
+        content.className = "pin-wrap";
+        content.innerHTML = '<div class="pin"><img src="' + ICONS[vehicle.type] + '" /></div>';
+        var position = { lat: vehicle.lat, lng: vehicle.lng };
+        var marker = new google.maps.marker.AdvancedMarkerElement({
+          map: map, position: position, content: content
+        });
+        marker.addListener("click", function () { send({ type: "select", id: vehicle.id }); });
+        entry = { marker: marker, pin: content.firstChild, position: position, frame: null };
+        vehicleMarkers[vehicle.id] = entry;
+      } else if (entry.position.lat !== vehicle.lat || entry.position.lng !== vehicle.lng) {
+        animateTo(entry, vehicle.lat, vehicle.lng);
+      }
+      entry.pin.className = "pin" + (selected ? " selected" : "");
+      entry.marker.zIndex = selected ? 1000 : 0;
+    });
+    Object.keys(vehicleMarkers).forEach(function (id) {
+      if (seen[id]) return;
+      var entry = vehicleMarkers[id];
+      if (entry.frame) cancelAnimationFrame(entry.frame);
+      entry.marker.map = null;
+      delete vehicleMarkers[id];
+    });
+  }
+
+  function sendBounds() {
+    var bounds = map.getBounds();
+    if (!bounds) return;
+    var northEast = bounds.getNorthEast();
+    var southWest = bounds.getSouthWest();
+    send({
+      type: "bounds",
+      bounds: { north: northEast.lat(), east: northEast.lng(), south: southWest.lat(), west: southWest.lng() }
     });
   }
 
@@ -125,6 +221,7 @@ const mapHtml = `<!DOCTYPE html>
       gestureHandling: "greedy"
     });
     map.addListener("click", function () { send({ type: "select", id: null }); });
+    map.addListener("idle", sendBounds);
     send({ type: "ready" });
   };
 
@@ -144,7 +241,7 @@ const mapHtml = `<!DOCTYPE html>
     script.onerror = function () { showError("Google Maps could not load. Check your connection."); };
     document.head.appendChild(script);
   } else {
-    showError("Missing Google Maps API key. Set GOOGLE_MAPS_API_KEY in .env and restart Expo.");
+    showError("Missing Google Maps API key. Set VITE_GOOGLE_MAPS_API_KEY in .env and restart Expo.");
   }
 </script>
 </body>
@@ -153,18 +250,22 @@ const mapHtml = `<!DOCTYPE html>
 export function TransitMap({
   state,
   onSelect,
+  onBoundsChange,
 }: {
   state: TransitMapState;
   onSelect: (id: string | null) => void;
+  onBoundsChange?: (bounds: TransitMapBounds) => void;
 }) {
   const [ready, setReady] = useState(false);
   const webViewRef = useRef<WebView>(null);
   const frameRef = useRef<FrameRef | null>(null);
   const onSelectRef = useRef(onSelect);
+  const onBoundsRef = useRef(onBoundsChange);
 
   useEffect(() => {
     onSelectRef.current = onSelect;
-  }, [onSelect]);
+    onBoundsRef.current = onBoundsChange;
+  }, [onSelect, onBoundsChange]);
 
   useEffect(() => {
     if (!ready) return;
@@ -183,9 +284,16 @@ export function TransitMap({
   const handleMessage = (raw: unknown) => {
     if (typeof raw !== "string") return;
     try {
-      const message = JSON.parse(raw) as { type: string; id?: string | null };
+      const message = JSON.parse(raw) as {
+        type: string;
+        id?: string | null;
+        bounds?: TransitMapBounds;
+      };
       if (message.type === "ready") setReady(true);
       if (message.type === "select") onSelectRef.current(message.id ?? null);
+      if (message.type === "bounds" && message.bounds) {
+        onBoundsRef.current?.(message.bounds);
+      }
     } catch {}
   };
 

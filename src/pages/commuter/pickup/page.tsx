@@ -1,17 +1,17 @@
 import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
-import LocateFixed from "lucide-react-native/icons/locate-fixed";
 import MapPin from "lucide-react-native/icons/map-pin";
 import Search from "lucide-react-native/icons/search";
 import UserRound from "lucide-react-native/icons/user-round";
 import Users from "lucide-react-native/icons/users";
 import UsersRound from "lucide-react-native/icons/users-round";
 import { useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import type { Place } from "@/api/v1/places/controllers";
 import {
   ModuleButton,
   ModuleHeader,
@@ -22,6 +22,7 @@ import {
   VehiclePicker,
   type Vehicle,
 } from "@/components/module-ui";
+import { PlaceSearchField } from "@/components/place-search-field";
 import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
 
@@ -33,7 +34,8 @@ const maxPassengers = 10;
 export default function PickupScreen() {
   const insets = useSafeAreaInsets();
   const chrome = useScrollChrome();
-  const [search, setSearch] = useState("");
+  const [place, setPlace] = useState<Place | null>(null);
+  const [placeProblem, setPlaceProblem] = useState("");
   const [vehicle, setVehicle] = useState<Vehicle>("bus");
   const [shareQuery, setShareQuery] = useState("");
   const [passengers, setPassengers] = useState(1);
@@ -57,22 +59,20 @@ export default function PickupScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.body}>
-          <SoftField
-            value={search}
-            onChangeText={setSearch}
+          <PlaceSearchField
+            value={place}
+            onChange={(next) => {
+              setPlaceProblem("");
+              setPlace(next);
+            }}
+            onProblem={setPlaceProblem}
             placeholder="Search places..."
             icon={<Search color={brandBlue} size={20} strokeWidth={2} />}
-            style={styles.searchField}
-            trailing={
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Use my current location"
-                hitSlop={8}
-              >
-                <LocateFixed color={brandBlue} size={22} strokeWidth={2} />
-              </Pressable>
-            }
+            allowCurrentLocation
           />
+          {!!placeProblem && (
+            <Text style={styles.placeProblem}>{placeProblem}</Text>
+          )}
 
           <SectionTitle
             icon={<UsersRound color="#ffffff" size={18} strokeWidth={2} />}
@@ -131,7 +131,13 @@ export default function PickupScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#ffffff" },
   body: { paddingHorizontal: 12, paddingTop: 18 },
-  searchField: { gap: 10 },
+  placeProblem: {
+    color: moduleColors.error,
+    fontFamily: "Sora",
+    fontSize: 9,
+    marginTop: 6,
+    marginLeft: 4,
+  },
   shareField: { gap: 14, paddingHorizontal: 16 },
   passengerSection: {
     flexDirection: "row",
