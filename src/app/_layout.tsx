@@ -46,9 +46,16 @@ export default function RootLayout() {
         <Stack.Screen name="profile/index" options={tabScreenOptions} />
         <Stack.Screen name="profile/edit/index" />
         <Stack.Screen name="profile/security/index" />
+        <Stack.Screen name="profile/vehicles/index" />
         <Stack.Screen name="commuter/pickup/index" />
         <Stack.Screen name="commuter/rental/index" />
         <Stack.Screen name="commuter/routes/index" />
+        <Stack.Screen
+          name="transit/start-trip/index"
+          options={{ gestureEnabled: false }}
+        />
+        <Stack.Screen name="transit/rental-requests/index" />
+        <Stack.Screen name="transit/trip-history/index" />
         <Stack.Screen name="explore" />
       </Stack>
     </ThemeProvider>

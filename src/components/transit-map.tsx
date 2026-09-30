@@ -15,6 +15,9 @@ export type TransitMapState = {
   focus: { key: number; lat: number; lng: number } | null;
   padTop: number;
   padBottom: number;
+  pickups?: { id: string; lat: number; lng: number }[];
+  pickupLine?: [number, number][] | null;
+  area?: { id: string; lat: number; lng: number; radius: number } | null;
 };
 
 export type TransitMapBounds = {
@@ -80,6 +83,12 @@ const mapHtml = `<!DOCTYPE html>
   }
   .terminal.highlighted .terminal-icon { width: 30px; height: 30px; background: #1e9e45; }
   .terminal.highlighted .terminal-label { background: #1e9e45; color: #ffffff; font-size: 11px; }
+  .pickup {
+    width: 22px; height: 22px; box-sizing: border-box; margin-bottom: 4px;
+    border-radius: 50% 50% 50% 0; transform: rotate(-45deg);
+    background: #ffffff; border: 4px solid #c81e1e;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35);
+  }
 </style>
 </head>
 <body>
@@ -94,6 +103,10 @@ const mapHtml = `<!DOCTYPE html>
   var terminalMarkers = [];
   var lastRouteId = null;
   var lastFocusKey = null;
+  var pickupMarkers = [];
+  var pickupLine = null;
+  var areaCircle = null;
+  var lastAreaId = null;
 
   function send(message) {
     var text = JSON.stringify(message);
@@ -126,13 +139,49 @@ const mapHtml = `<!DOCTYPE html>
     }
     lastRouteId = routeKey;
 
+    applyArea(state);
     applyTerminals(state);
     applyVehicles(state);
+    applyPickups(state);
 
     if (state.focus && state.focus.key !== lastFocusKey) {
       map.panTo({ lat: state.focus.lat, lng: state.focus.lng });
     }
     lastFocusKey = state.focus ? state.focus.key : null;
+  }
+
+  function applyArea(state) {
+    var area = state.area || null;
+    var areaId = area ? area.id : null;
+    if (areaId === lastAreaId) return;
+    lastAreaId = areaId;
+    if (areaCircle) { areaCircle.setMap(null); areaCircle = null; }
+    if (!area) return;
+    areaCircle = new google.maps.Circle({
+      map: map, center: { lat: area.lat, lng: area.lng }, radius: area.radius,
+      strokeColor: "#193caf", strokeOpacity: 0.8, strokeWeight: 2,
+      fillColor: "#193caf", fillOpacity: 0.08, clickable: false
+    });
+    map.fitBounds(areaCircle.getBounds(), { top: state.padTop, bottom: state.padBottom, left: 20, right: 20 });
+  }
+
+  function applyPickups(state) {
+    pickupMarkers.forEach(function (marker) { marker.map = null; });
+    pickupMarkers = [];
+    (state.pickups || []).forEach(function (pickup) {
+      var content = document.createElement("div");
+      content.className = "pickup";
+      pickupMarkers.push(new google.maps.marker.AdvancedMarkerElement({
+        map: map, position: { lat: pickup.lat, lng: pickup.lng }, content: content, zIndex: 800
+      }));
+    });
+    if (pickupLine) { pickupLine.setMap(null); pickupLine = null; }
+    if (state.pickupLine && state.pickupLine.length > 1) {
+      pickupLine = new google.maps.Polyline({
+        map: map, strokeColor: "#1f2937", strokeWeight: 3, strokeOpacity: 0.9,
+        path: state.pickupLine.map(function (point) { return { lat: point[0], lng: point[1] }; })
+      });
+    }
   }
 
   function applyTerminals(state) {

@@ -74,10 +74,13 @@ export const transitRoutes: TransitRoute[] = [
   },
   {
     id: "naga-san-felipe",
-    name: "Naga Centro – San Felipe",
+    name: "Naga City Centro – San Felipe",
     waypoints: [
-      [13.624, 123.185],
+      [13.623556, 123.184694],
+      [13.6296, 123.192],
       [13.6398, 123.2028],
+      [13.6445, 123.2135],
+      [13.649, 123.225],
     ],
   },
 ];
@@ -93,7 +96,6 @@ export const terminals: Terminal[] = [
       "naga-pili",
       "naga-canaman",
       "naga-camaligan",
-      "naga-san-felipe",
     ],
   },
   {
@@ -136,12 +138,46 @@ export const terminals: Terminal[] = [
     lng: 123.1633,
     routeIds: ["naga-camaligan"],
   },
+  // Stops on the Naga City Centro – San Felipe route, in travel order.
+  // San Felipe Terminal: 13°37'24.8"N 123°11'04.9"E.
+  {
+    id: "san-felipe-terminal",
+    name: "San Felipe Terminal",
+    city: "Naga City",
+    lat: 13.623556,
+    lng: 123.184694,
+    routeIds: ["naga-san-felipe"],
+  },
+  {
+    id: "penafrancia-avenue",
+    name: "Peñafrancia Avenue",
+    city: "Naga City",
+    lat: 13.6296,
+    lng: 123.192,
+    routeIds: ["naga-san-felipe"],
+  },
   {
     id: "san-felipe",
-    name: "San Felipe Terminal",
+    name: "San Felipe",
     city: "Naga City",
     lat: 13.6398,
     lng: 123.2028,
+    routeIds: ["naga-san-felipe"],
+  },
+  {
+    id: "lomeda",
+    name: "Lomeda",
+    city: "Naga City",
+    lat: 13.6445,
+    lng: 123.2135,
+    routeIds: ["naga-san-felipe"],
+  },
+  {
+    id: "san-felipe-pacol-boundary",
+    name: "San Felipe–Pacol Boundary",
+    city: "Naga City",
+    lat: 13.649,
+    lng: 123.225,
     routeIds: ["naga-san-felipe"],
   },
 ];
@@ -194,7 +230,7 @@ export function isInBounds(
   return lat >= bounds.south && lat <= bounds.north && withinLng;
 }
 
-const maxCapacity: Record<VehicleType, number> = {
+export const vehicleMaxCapacity: Record<VehicleType, number> = {
   bus: 50,
   jeep: 24,
   tricy: 6,
@@ -255,7 +291,7 @@ export async function loadRouteGeometry(
   }
 }
 
-function pointAlong(path: LatLng[], fraction: number): LatLng {
+export function pointAlong(path: LatLng[], fraction: number): LatLng {
   const lengths = path.slice(1).map(([lat, lng], index) => {
     const [prevLat, prevLng] = path[index];
     const x = (lng - prevLng) * Math.cos((lat * Math.PI) / 180);
@@ -310,7 +346,7 @@ export function getRouteVehicles(
       status === "In Transit" ? (nowMs / 1000 / tripSeconds[type]) * 2 : 0;
     const phase = (startPhase + travelled) % 2;
     const [lat, lng] = pointAlong(path, phase <= 1 ? phase : 2 - phase);
-    const max = maxCapacity[type];
+    const max = vehicleMaxCapacity[type];
     return {
       id: `${route.id}-${index}`,
       plate: `${platePrefix[type]}-${routeNumber}${String(counters[type]).padStart(2, "0")}`,

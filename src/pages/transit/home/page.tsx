@@ -4,7 +4,6 @@ import { StatusBar } from "expo-status-bar";
 import Clock from "lucide-react-native/icons/clock";
 import Inbox from "lucide-react-native/icons/inbox";
 import Route from "lucide-react-native/icons/route";
-import Users from "lucide-react-native/icons/users";
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import Animated from "react-native-reanimated";
@@ -18,42 +17,13 @@ import {
   HomeHeader,
   homeColors,
   SectionHeader,
-  TripList,
-  type TripSummary,
 } from "@/components/home-ui";
 import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
+import { RatingsCard } from "@/pages/transit/home/ratings";
+import { sampleRatings } from "@/pages/transit/sample-data";
 
 const { brandBlue } = homeColors;
-
-const passengerIcon = <Users color="#ffffff" size={13} strokeWidth={2} />;
-
-const sampleTrips: TripSummary[] = [
-  {
-    id: "1",
-    from: { city: "Naga City", place: "Bus Station" },
-    to: { city: "Pili", place: "Diversion Bus Stop" },
-    date: "Jul 1, 2026",
-    badge: "18",
-    badgeIcon: passengerIcon,
-  },
-  {
-    id: "2",
-    from: { city: "Naga City", place: "Bus Station" },
-    to: { city: "Iriga City", place: "Iriga Bus Stop" },
-    date: "Jun 27, 2026",
-    badge: "24",
-    badgeIcon: passengerIcon,
-  },
-  {
-    id: "3",
-    from: { city: "Naga City", place: "Bus Station" },
-    to: { city: "Legazpi City", place: "SM Bus Stop" },
-    date: "Jun 23, 2026",
-    badge: "31",
-    badgeIcon: passengerIcon,
-  },
-];
 
 export default function TransitHomeScreen() {
   const insets = useSafeAreaInsets();
@@ -106,21 +76,24 @@ export default function TransitHomeScreen() {
                 title="Start Trip"
                 description="Begin your route and pick up passengers"
                 icon={<Route color={brandBlue} size={40} strokeWidth={1.8} />}
+                onPress={() => router.push(Routes.transitStartTrip)}
               />
               <ActionCard
                 title="Rental Requests"
                 description="Review charter requests from commuters"
                 icon={<Inbox color={brandBlue} size={40} strokeWidth={1.8} />}
+                onPress={() => router.push(Routes.transitRentalRequests)}
               />
               <ActionCard
                 title="Trip History"
                 description="See the trips you've completed"
                 icon={<Clock color={brandBlue} size={40} strokeWidth={1.8} />}
+                onPress={() => router.push(Routes.transitTripHistory)}
               />
             </ActionRow>
 
-            <SectionHeader title="Recent Trips" />
-            <TripList trips={sampleTrips} />
+            <SectionHeader title="Ratings" />
+            <RatingsCard ratings={sampleRatings} />
           </View>
         </Animated.ScrollView>
 

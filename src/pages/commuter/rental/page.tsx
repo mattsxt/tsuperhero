@@ -15,14 +15,7 @@ import TriangleAlert from "lucide-react-native/icons/triangle-alert";
 import UserRoundCheck from "lucide-react-native/icons/user-round-check";
 import Users from "lucide-react-native/icons/users";
 import { useEffect, useState } from "react";
-import {
-  BackHandler,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-  type TextStyle,
-} from "react-native";
+import { BackHandler, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, {
   useAnimatedRef,
   type CSSTransitionProperties,
@@ -36,6 +29,7 @@ import {
   formatTime,
 } from "@/components/date-time-field";
 import {
+  Chip,
   FieldLabel,
   ModuleButton,
   ModuleHeader,
@@ -93,7 +87,6 @@ type Driver = {
   model: string;
   plate: string;
   seats: number;
-  ratePerDay: number;
 };
 
 const sampleDrivers: Driver[] = [
@@ -106,7 +99,6 @@ const sampleDrivers: Driver[] = [
     model: "Toyota Hiace Commuter",
     plate: "NAB 4821",
     seats: 14,
-    ratePerDay: 4500,
   },
   {
     id: "v2",
@@ -117,7 +109,6 @@ const sampleDrivers: Driver[] = [
     model: "Nissan NV350 Urvan",
     plate: "NCD 1934",
     seats: 12,
-    ratePerDay: 4200,
   },
   {
     id: "v3",
@@ -128,7 +119,6 @@ const sampleDrivers: Driver[] = [
     model: "Toyota Hiace GL Grandia",
     plate: "NEF 7702",
     seats: 10,
-    ratePerDay: 5000,
   },
   {
     id: "j1",
@@ -139,7 +129,6 @@ const sampleDrivers: Driver[] = [
     model: "Modern PUJ (Class 2)",
     plate: "NGH 3310",
     seats: 20,
-    ratePerDay: 5500,
   },
   {
     id: "j2",
@@ -150,7 +139,6 @@ const sampleDrivers: Driver[] = [
     model: "Sarao Jeepney",
     plate: "NIJ 8845",
     seats: 18,
-    ratePerDay: 4800,
   },
   {
     id: "b1",
@@ -161,7 +149,6 @@ const sampleDrivers: Driver[] = [
     model: "Hino RK1J Tourist Bus",
     plate: "NKL 5567",
     seats: 49,
-    ratePerDay: 16000,
   },
   {
     id: "b2",
@@ -172,7 +159,6 @@ const sampleDrivers: Driver[] = [
     model: "Daewoo BV115 Coach",
     plate: "NMN 2098",
     seats: 45,
-    ratePerDay: 14500,
   },
   {
     id: "b3",
@@ -183,7 +169,6 @@ const sampleDrivers: Driver[] = [
     model: "King Long XMQ6127",
     plate: "NOP 6651",
     seats: 50,
-    ratePerDay: 15000,
   },
 ];
 
@@ -193,15 +178,8 @@ const cardTransition: CSSTransitionProperties = {
   transitionTimingFunction: "ease-in-out",
 };
 
-const cardTextTransition: CSSTransitionProperties<TextStyle> = {
-  transitionProperty: "color",
-  transitionDuration: 250,
-  transitionTimingFunction: "ease-in-out",
-};
-
 const maxPassengers = 50;
 
-const peso = (amount: number) => `₱${amount.toLocaleString("en-US")}`;
 
 function startOfToday() {
   const today = new Date();
@@ -252,14 +230,6 @@ export default function RentalScreen() {
     (driver) => driver.vehicle === vehicle && driver.seats >= passengers,
   );
   const driver = sampleDrivers.find((option) => option.id === driverId);
-  const days =
-    tripType === "round_trip" && tripDate && returnDate
-      ? Math.round(
-          (new Date(returnDate).setHours(0, 0, 0, 0) -
-            new Date(tripDate).setHours(0, 0, 0, 0)) /
-            86_400_000,
-        ) + 1
-      : 1;
 
   const goToStep = (next: Step) => {
     setProblem("");
@@ -554,7 +524,6 @@ export default function RentalScreen() {
                   <DriverCard
                     key={option.id}
                     driver={option}
-                    days={days}
                     selected={option.id === driverId}
                     onPress={() => {
                       setProblem("");
@@ -620,18 +589,10 @@ export default function RentalScreen() {
                 {!!notes.trim() && (
                   <ReviewRow label="Notes" value={notes.trim()} />
                 )}
-                <View style={styles.totalRow}>
-                  <Text style={styles.totalLabel}>
-                    Estimated total{days > 1 ? ` (${days} days)` : ""}
-                  </Text>
-                  <Text style={styles.totalValue}>
-                    {peso(driver.ratePerDay * days)}
-                  </Text>
-                </View>
               </View>
               <Text style={styles.helperText}>
-                The driver will confirm your request and the final price before
-                your trip.
+                The driver will review and confirm your request before your
+                trip.
               </Text>
 
               <ModuleButton
@@ -770,49 +731,12 @@ function StepArrow({
   );
 }
 
-function Chip({
-  label,
-  selected,
-  onPress,
-  grow,
-}: {
-  label: string;
-  selected: boolean;
-  onPress: () => void;
-  grow?: boolean;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      onPress={onPress}
-      style={grow && styles.flex}
-    >
-      <Animated.View
-        style={[styles.chip, selected && styles.chipSelected, cardTransition]}
-      >
-        <Animated.Text
-          style={[
-            styles.chipText,
-            selected && styles.chipTextSelected,
-            cardTextTransition,
-          ]}
-        >
-          {label}
-        </Animated.Text>
-      </Animated.View>
-    </Pressable>
-  );
-}
-
 function DriverCard({
   driver,
-  days,
   selected,
   onPress,
 }: {
   driver: Driver;
-  days: number;
   selected: boolean;
   onPress: () => void;
 }) {
@@ -852,17 +776,8 @@ function DriverCard({
           </Text>
           <Text style={styles.driverMeta}>Seats up to {driver.seats}</Text>
         </View>
-        <View style={styles.driverPrice}>
-          <Text style={styles.priceValue}>{peso(driver.ratePerDay)}</Text>
-          <Text style={styles.driverMeta}>per day</Text>
-          {days > 1 && (
-            <Text style={styles.driverMeta}>
-              {peso(driver.ratePerDay * days)} total
-            </Text>
-          )}
-          <View style={[styles.radio, selected && styles.radioSelected]}>
-            {selected && <View style={styles.radioDot} />}
-          </View>
+        <View style={[styles.radio, selected && styles.radioSelected]}>
+          {selected && <View style={styles.radioDot} />}
         </View>
       </Animated.View>
     </Pressable>
@@ -928,19 +843,6 @@ const styles = StyleSheet.create({
   progressBarDone: { backgroundColor: "#ffffff" },
   chipRow: { flexDirection: "row", gap: 8 },
   chipWrap: { flexWrap: "wrap" },
-  chip: {
-    height: 36,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 14,
-    borderWidth: 1.5,
-    borderColor: softBlue,
-    borderRadius: 18,
-    backgroundColor: softBlue,
-  },
-  chipSelected: { borderColor: brandBlue, backgroundColor: brandBlue },
-  chipText: { color: brandBlue, fontFamily: "SoraBold", fontSize: 11 },
-  chipTextSelected: { color: "#ffffff" },
   infoCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -1000,14 +902,11 @@ const styles = StyleSheet.create({
     fontSize: 9,
     marginTop: 2,
   },
-  driverPrice: { alignItems: "flex-end" },
-  priceValue: { color: brandBlue, fontFamily: "SoraBold", fontSize: 13 },
   radio: {
     width: 20,
     height: 20,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 8,
     borderWidth: 2,
     borderColor: "#c4c4c4",
     borderRadius: 10,
@@ -1046,14 +945,6 @@ const styles = StyleSheet.create({
     fontFamily: "SoraBold",
     fontSize: 11,
   },
-  totalRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingTop: 12,
-  },
-  totalLabel: { color: brandBlue, fontFamily: "SoraBold", fontSize: 12 },
-  totalValue: { color: brandBlue, fontFamily: "SoraBold", fontSize: 17 },
   problem: {
     color: error,
     fontFamily: "Sora",

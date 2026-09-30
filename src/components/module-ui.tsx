@@ -289,6 +289,47 @@ function StepperButton({
   );
 }
 
+const chipTransition: CSSTransitionProperties = {
+  transitionProperty: ["backgroundColor", "borderColor"],
+  transitionDuration: 250,
+  transitionTimingFunction: "ease-in-out",
+};
+
+export function Chip({
+  label,
+  selected,
+  onPress,
+  grow,
+}: {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+  grow?: boolean;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      onPress={onPress}
+      style={grow && styles.grow}
+    >
+      <Animated.View
+        style={[styles.chip, selected && styles.chipSelected, chipTransition]}
+      >
+        <Animated.Text
+          style={[
+            styles.chipText,
+            selected && styles.chipTextSelected,
+            labelTransition,
+          ]}
+        >
+          {label}
+        </Animated.Text>
+      </Animated.View>
+    </Pressable>
+  );
+}
+
 export function ModuleButton({
   label,
   onPress,
@@ -445,6 +486,20 @@ const styles = StyleSheet.create({
   },
   stepperButtonDisabled: { opacity: 0.4 },
   stepperCount: { color: moduleColors.text, fontFamily: "Sora", fontSize: 15 },
+  grow: { flex: 1 },
+  chip: {
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 14,
+    borderWidth: 1.5,
+    borderColor: softBlue,
+    borderRadius: 18,
+    backgroundColor: softBlue,
+  },
+  chipSelected: { borderColor: brandBlue, backgroundColor: brandBlue },
+  chipText: { color: brandBlue, fontFamily: "SoraBold", fontSize: 11 },
+  chipTextSelected: { color: "#ffffff" },
   button: {
     height: 52,
     alignItems: "center",

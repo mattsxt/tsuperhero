@@ -3,6 +3,7 @@ import { Image } from "expo-image";
 import { router, useFocusEffect } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
+import FileText from "lucide-react-native/icons/file-text";
 import LogOut from "lucide-react-native/icons/log-out";
 import ShieldCog from "lucide-react-native/icons/shield-cog";
 import ShieldQuestionMark from "lucide-react-native/icons/shield-question-mark";
@@ -148,16 +149,26 @@ export default function ProfileScreen() {
                   <ShieldCog color={brandBlue} size={18} strokeWidth={1.8} />
                 }
               />
-              <ActionRow
-                label="Help & Support"
-                icon={
-                  <ShieldQuestionMark
-                    color={brandBlue}
-                    size={18}
-                    strokeWidth={1.8}
-                  />
-                }
-              />
+              {summary.userType === "transit_personnel" ? (
+                <ActionRow
+                  label="Vehicles & Documents"
+                  onPress={() => router.push(Routes.profileVehicles)}
+                  icon={
+                    <FileText color={brandBlue} size={18} strokeWidth={1.8} />
+                  }
+                />
+              ) : (
+                <ActionRow
+                  label="Help & Support"
+                  icon={
+                    <ShieldQuestionMark
+                      color={brandBlue}
+                      size={18}
+                      strokeWidth={1.8}
+                    />
+                  }
+                />
+              )}
               <ActionRow
                 label={signingOut ? "Signing out..." : "Sign out"}
                 danger
