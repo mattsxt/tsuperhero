@@ -121,6 +121,21 @@ function describeAddress(address: Location.LocationGeocodedAddress) {
   return { name: name || area || "Current location", area };
 }
 
+const positionTimeoutMs = 10_000;
+
+async function getPosition() {
+  const timeout = new Promise<null>((resolve) =>
+    setTimeout(() => resolve(null), positionTimeoutMs),
+  );
+  const current = await Promise.race([
+    Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.Balanced,
+    }).catch(() => null),
+    timeout,
+  ]);
+  return current ?? (await Location.getLastKnownPositionAsync());
+}
+
 export async function getCurrentPlace(): Promise<Result<Place>> {
   try {
     const permission = await Location.requestForegroundPermissionsAsync();
@@ -128,9 +143,16 @@ export async function getCurrentPlace(): Promise<Result<Place>> {
       return failure("Allow location access to use your current location.");
     }
 
-    const position = await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.Balanced,
-    });
+    if (!(await Location.hasServicesEnabledAsync())) {
+      return failure("Turn on Location in your device settings, then try again.");
+    }
+
+    const position = await getPosition();
+    if (!position) {
+      return failure(
+        "Couldn't get your location. Move somewhere with a clearer signal and try again.",
+      );
+    }
     const { latitude: lat, longitude: lng } = position.coords;
 
     let name = "Current location";

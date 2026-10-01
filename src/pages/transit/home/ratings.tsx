@@ -5,7 +5,7 @@ import { homeColors } from "@/components/home-ui";
 import {
   getInitials,
   type CommuterRating,
-} from "@/pages/transit/sample-data";
+} from "@/pages/transit/types";
 
 const { brandBlue, mutedText, cardBorder, cardEdgeBlue } = homeColors;
 const starColor = "#f5b301";

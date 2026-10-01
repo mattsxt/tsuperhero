@@ -93,25 +93,33 @@ export function ActionCard({
   );
 }
 
+export function SectionDivider() {
+  return <View style={styles.sectionDivider} />;
+}
+
 export function SectionHeader({
   title,
   onViewAll,
+  showViewAll = true,
 }: {
   title: string;
   onViewAll?: () => void;
+  showViewAll?: boolean;
 }) {
   return (
     <View style={styles.sectionHeader}>
       <Text style={styles.sectionTitle}>{title}</Text>
-      <Pressable
-        accessibilityRole="button"
-        hitSlop={8}
-        onPress={onViewAll}
-        style={styles.viewAll}
-      >
-        <Text style={styles.viewAllText}>View All</Text>
-        <ChevronRight color={brandBlue} size={16} strokeWidth={2.5} />
-      </Pressable>
+      {showViewAll && (
+        <Pressable
+          accessibilityRole="button"
+          hitSlop={8}
+          onPress={onViewAll}
+          style={styles.viewAll}
+        >
+          <Text style={styles.viewAllText}>View All</Text>
+          <ChevronRight color={brandBlue} size={16} strokeWidth={2.5} />
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -256,11 +264,17 @@ const styles = StyleSheet.create({
     backgroundColor: brandBlue,
     marginTop: 10,
   },
+  sectionDivider: {
+    height: 1,
+    marginTop: 22,
+    marginHorizontal: 8,
+    backgroundColor: cardBorder,
+  },
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: 22,
+    marginTop: 18,
     marginBottom: 10,
     paddingHorizontal: 8,
   },

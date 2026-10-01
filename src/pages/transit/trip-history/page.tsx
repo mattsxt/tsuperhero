@@ -14,14 +14,14 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { vehicleTypeLabels } from "@/api/v1/transit-routes/controllers";
+import { EmptyState } from "@/components/empty-state";
 import { Chip, ModuleHeader, moduleColors } from "@/components/module-ui";
 import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
 import {
   formatDuration,
-  sampleTransitTrips,
   type TransitTrip,
-} from "@/pages/transit/sample-data";
+} from "@/pages/transit/types";
 
 const { brandBlue, softBlue, mutedText, text } = moduleColors;
 
@@ -32,6 +32,8 @@ const filters: { value: Filter; label: string }[] = [
   { value: "regular", label: "Regular" },
   { value: "rental", label: "Rental" },
 ];
+
+const completedTrips: TransitTrip[] = [];
 
 const layoutTransition = LinearTransition.duration(200);
 
@@ -51,7 +53,7 @@ export default function TripHistoryScreen() {
   const [filter, setFilter] = useState<Filter>("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const trips = sampleTransitTrips.filter(
+  const trips = completedTrips.filter(
     (trip) => filter === "all" || trip.kind === filter,
   );
   const totalPassengers = trips.reduce((sum, trip) => sum + trip.passengers, 0);
@@ -112,7 +114,10 @@ export default function TripHistoryScreen() {
           </View>
 
           {trips.length === 0 ? (
-            <Text style={styles.empty}>No trips to show yet.</Text>
+            <EmptyState
+              icon={<Route color={brandBlue} size={32} strokeWidth={1.8} />}
+              message="Trips you complete will show up here."
+            />
           ) : (
             groupByDate(trips).map((group) => (
               <Animated.View key={group.date} layout={layoutTransition}>
@@ -281,13 +286,6 @@ const styles = StyleSheet.create({
   },
   statLabel: { color: mutedText, fontFamily: "Sora", fontSize: 9 },
   filterRow: { flexDirection: "row", gap: 8, marginTop: 16 },
-  empty: {
-    color: mutedText,
-    fontFamily: "Sora",
-    fontSize: 11,
-    textAlign: "center",
-    marginTop: 40,
-  },
   dateHeading: {
     color: brandBlue,
     fontFamily: "SoraBold",

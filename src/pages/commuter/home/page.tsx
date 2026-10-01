@@ -3,7 +3,7 @@ import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import Bus from "lucide-react-native/icons/bus";
 import MapPinSearch from "lucide-react-native/icons/map-pin-search";
-import Star from "lucide-react-native/icons/star";
+import Route from "lucide-react-native/icons/route";
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import Animated, {
@@ -15,11 +15,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { loadHome } from "@/api/v1/profile/controllers";
 import { BottomNav, bottomNavHeight } from "@/components/bottom-nav";
+import { EmptyState } from "@/components/empty-state";
 import {
   ActionCard,
   ActionRow,
-  HomeHeader,
   homeColors,
+  HomeHeader,
+  SectionDivider,
   SectionHeader,
   TripList,
   type TripSummary,
@@ -35,34 +37,7 @@ import {
 const { brandBlue } = homeColors;
 const searchLayerGap = 14;
 
-const ratingIcon = <Star color="#ffffff" size={13} strokeWidth={2} />;
-
-const sampleTrips: TripSummary[] = [
-  {
-    id: "1",
-    from: { city: "Naga City", place: "Bus Station" },
-    to: { city: "Pili", place: "Diversion Bus Stop" },
-    date: "Jul 1, 2026",
-    badge: "Rated",
-    badgeIcon: ratingIcon,
-  },
-  {
-    id: "2",
-    from: { city: "Naga City", place: "Bus Station" },
-    to: { city: "Iriga City", place: "Iriga Bus Stop" },
-    date: "Jun 27, 2026",
-    badge: "Rated",
-    badgeIcon: ratingIcon,
-  },
-  {
-    id: "3",
-    from: { city: "Naga City", place: "Bus Station" },
-    to: { city: "Legazpi City", place: "SM Bus Stop" },
-    date: "Jun 23, 2026",
-    badge: "Not Rated",
-    badgeIcon: ratingIcon,
-  },
-];
+const trips: TripSummary[] = [];
 
 export default function CommuterHomeScreen() {
   const insets = useSafeAreaInsets();
@@ -71,8 +46,7 @@ export default function CommuterHomeScreen() {
   const [firstName, setFirstName] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const scrollRef = useAnimatedRef<Animated.ScrollView>();
-  const minimizedHeaderHeight =
-    chrome.collapsedHeaderHeight ?? insets.top + 56;
+  const minimizedHeaderHeight = chrome.collapsedHeaderHeight ?? insets.top + 56;
 
   const changeSearchOpen = (open: boolean) => {
     if (open) scrollRef.current?.scrollTo({ y: 0, animated: false });
@@ -87,7 +61,7 @@ export default function CommuterHomeScreen() {
     const load = async () => {
       const home = await loadHome("commuter");
       if ("redirect" in home) {
-        router.replace(home.redirect);
+        router.replace(home.redirect as never);
         return;
       }
       if (active) setFirstName(home.firstName);
@@ -158,8 +132,21 @@ export default function CommuterHomeScreen() {
                   />
                 </ActionRow>
 
-                <SectionHeader title="Trip History" />
-                <TripList trips={sampleTrips} />
+                <SectionDivider />
+                <SectionHeader
+                  title="Trip History"
+                  showViewAll={trips.length > 0}
+                />
+                {trips.length === 0 ? (
+                  <EmptyState
+                    icon={
+                      <Route color={brandBlue} size={32} strokeWidth={1.8} />
+                    }
+                    message="Your completed trips will appear here."
+                  />
+                ) : (
+                  <TripList trips={trips} />
+                )}
               </Animated.View>
             )}
           </View>

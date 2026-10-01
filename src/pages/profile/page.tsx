@@ -3,10 +3,10 @@ import { Image } from "expo-image";
 import { router, useFocusEffect } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
+import ClipboardList from "lucide-react-native/icons/clipboard-list";
 import FileText from "lucide-react-native/icons/file-text";
 import LogOut from "lucide-react-native/icons/log-out";
 import ShieldCog from "lucide-react-native/icons/shield-cog";
-import ShieldQuestionMark from "lucide-react-native/icons/shield-question-mark";
 import { useCallback, useRef, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
@@ -159,9 +159,10 @@ export default function ProfileScreen() {
                 />
               ) : (
                 <ActionRow
-                  label="Help & Support"
+                  label="My Bookings"
+                  onPress={() => router.push(Routes.profileBookings)}
                   icon={
-                    <ShieldQuestionMark
+                    <ClipboardList
                       color={brandBlue}
                       size={18}
                       strokeWidth={1.8}

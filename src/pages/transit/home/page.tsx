@@ -4,6 +4,7 @@ import { StatusBar } from "expo-status-bar";
 import Clock from "lucide-react-native/icons/clock";
 import Inbox from "lucide-react-native/icons/inbox";
 import Route from "lucide-react-native/icons/route";
+import Star from "lucide-react-native/icons/star";
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import Animated from "react-native-reanimated";
@@ -11,19 +12,23 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { loadHome } from "@/api/v1/profile/controllers";
 import { BottomNav, bottomNavHeight } from "@/components/bottom-nav";
+import { EmptyState } from "@/components/empty-state";
 import {
   ActionCard,
   ActionRow,
   HomeHeader,
   homeColors,
+  SectionDivider,
   SectionHeader,
 } from "@/components/home-ui";
 import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
 import { RatingsCard } from "@/pages/transit/home/ratings";
-import { sampleRatings } from "@/pages/transit/sample-data";
+import type { CommuterRating } from "@/pages/transit/types";
 
 const { brandBlue } = homeColors;
+
+const ratings: CommuterRating[] = [];
 
 export default function TransitHomeScreen() {
   const insets = useSafeAreaInsets();
@@ -92,8 +97,16 @@ export default function TransitHomeScreen() {
               />
             </ActionRow>
 
-            <SectionHeader title="Ratings" />
-            <RatingsCard ratings={sampleRatings} />
+            <SectionDivider />
+            <SectionHeader title="Ratings" showViewAll={ratings.length > 0} />
+            {ratings.length === 0 ? (
+              <EmptyState
+                icon={<Star color={brandBlue} size={32} strokeWidth={1.8} />}
+                message="Ratings from commuters will show up here after your trips."
+              />
+            ) : (
+              <RatingsCard ratings={ratings} />
+            )}
           </View>
         </Animated.ScrollView>
 

@@ -28,6 +28,7 @@ import {
   formatDate,
   formatTime,
 } from "@/components/date-time-field";
+import { EmptyState } from "@/components/empty-state";
 import {
   Chip,
   FieldLabel,
@@ -89,88 +90,7 @@ type Driver = {
   seats: number;
 };
 
-const sampleDrivers: Driver[] = [
-  {
-    id: "v1",
-    name: "Ramon Dela Paz",
-    rating: 4.9,
-    trips: 214,
-    vehicle: "van",
-    model: "Toyota Hiace Commuter",
-    plate: "NAB 4821",
-    seats: 14,
-  },
-  {
-    id: "v2",
-    name: "Liza Manalo",
-    rating: 4.8,
-    trips: 167,
-    vehicle: "van",
-    model: "Nissan NV350 Urvan",
-    plate: "NCD 1934",
-    seats: 12,
-  },
-  {
-    id: "v3",
-    name: "Arnel Villanueva",
-    rating: 4.6,
-    trips: 98,
-    vehicle: "van",
-    model: "Toyota Hiace GL Grandia",
-    plate: "NEF 7702",
-    seats: 10,
-  },
-  {
-    id: "j1",
-    name: "Jojo Bautista",
-    rating: 4.7,
-    trips: 305,
-    vehicle: "jeep",
-    model: "Modern PUJ (Class 2)",
-    plate: "NGH 3310",
-    seats: 20,
-  },
-  {
-    id: "j2",
-    name: "Carmela Reyes",
-    rating: 4.5,
-    trips: 142,
-    vehicle: "jeep",
-    model: "Sarao Jeepney",
-    plate: "NIJ 8845",
-    seats: 18,
-  },
-  {
-    id: "b1",
-    name: "Nestor Aquino",
-    rating: 4.9,
-    trips: 421,
-    vehicle: "bus",
-    model: "Hino RK1J Tourist Bus",
-    plate: "NKL 5567",
-    seats: 49,
-  },
-  {
-    id: "b2",
-    name: "Rowena Santos",
-    rating: 4.8,
-    trips: 256,
-    vehicle: "bus",
-    model: "Daewoo BV115 Coach",
-    plate: "NMN 2098",
-    seats: 45,
-  },
-  {
-    id: "b3",
-    name: "Dante Morales",
-    rating: 4.6,
-    trips: 133,
-    vehicle: "bus",
-    model: "King Long XMQ6127",
-    plate: "NOP 6651",
-    seats: 50,
-  },
-];
+const availableDrivers: Driver[] = [];
 
 const cardTransition: CSSTransitionProperties = {
   transitionProperty: ["backgroundColor", "borderColor"],
@@ -226,10 +146,10 @@ export default function RentalScreen() {
   const [vehicle, setVehicle] = useState<CharterVehicle>("van");
   const [driverId, setDriverId] = useState<string | null>(null);
 
-  const drivers = sampleDrivers.filter(
+  const drivers = availableDrivers.filter(
     (driver) => driver.vehicle === vehicle && driver.seats >= passengers,
   );
-  const driver = sampleDrivers.find((option) => option.id === driverId);
+  const driver = availableDrivers.find((option) => option.id === driverId);
 
   const goToStep = (next: Step) => {
     setProblem("");
@@ -513,11 +433,22 @@ export default function RentalScreen() {
                 }
                 title="Available drivers"
               />
-              <Text style={styles.helperText}>
-                {drivers.length > 0
-                  ? `${drivers.length} ${vehicleNames[vehicle].toLowerCase()} driver${drivers.length === 1 ? "" : "s"} available on ${tripDate ? formatDate(tripDate) : "your date"}. Select one to continue.`
-                  : "No drivers are available for this vehicle and group size."}
-              </Text>
+              {drivers.length > 0 ? (
+                <Text style={styles.helperText}>
+                  {`${drivers.length} ${vehicleNames[vehicle].toLowerCase()} driver${drivers.length === 1 ? "" : "s"} available on ${tripDate ? formatDate(tripDate) : "your date"}. Select one to continue.`}
+                </Text>
+              ) : (
+                <EmptyState
+                  icon={
+                    <UserRoundCheck
+                      color={brandBlue}
+                      size={32}
+                      strokeWidth={1.8}
+                    />
+                  }
+                  message="Drivers available for this vehicle and group size will show up here."
+                />
+              )}
 
               <View style={styles.driverList}>
                 {drivers.map((option) => (

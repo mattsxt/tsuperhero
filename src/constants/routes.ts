@@ -16,6 +16,7 @@ export const Routes = {
   profileEdit: "/profile/edit",
   profileSecurity: "/profile/security",
   profileVehicles: "/profile/vehicles",
+  profileBookings: "/profile/bookings",
 } as const;
 
 export type AppRoute = (typeof Routes)[keyof typeof Routes];

@@ -18,6 +18,7 @@ import {
   type AssignmentDetails,
 } from "@/api/v1/operator/controllers";
 import { getRouteTerminals } from "@/api/v1/transit-routes/controllers";
+import { EmptyState } from "@/components/empty-state";
 import {
   ModuleHeader,
   moduleColors,
@@ -33,11 +34,14 @@ export default function VehiclesScreen() {
   const insets = useSafeAreaInsets();
   const chrome = useScrollChrome();
   const [details, setDetails] = useState<AssignmentDetails | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
     loadOperatorAssignment().then((assignment) => {
-      if (active) setDetails(describeAssignment(assignment));
+      if (!active) return;
+      setDetails(assignment ? describeAssignment(assignment) : null);
+      setLoading(false);
     });
     return () => {
       active = false;
@@ -61,10 +65,16 @@ export default function VehiclesScreen() {
         }}
         showsVerticalScrollIndicator={false}
       >
-        {details ? (
+        {loading ? (
+          <ActivityIndicator color={brandBlue} style={styles.loading} />
+        ) : details ? (
           <AssignmentView details={details} />
         ) : (
-          <ActivityIndicator color={brandBlue} style={styles.loading} />
+          <EmptyState
+            icon={<BusFront color={brandBlue} size={32} strokeWidth={1.8} />}
+            message="Your cooperative, route and vehicle will show up here once your transport cooperative assigns them."
+            style={styles.empty}
+          />
         )}
       </Animated.ScrollView>
 
@@ -216,6 +226,7 @@ function InfoRow({
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#ffffff" },
   loading: { marginTop: 48 },
+  empty: { marginTop: 24 },
   body: { paddingHorizontal: 12, paddingTop: 18 },
   notice: {
     flexDirection: "row",

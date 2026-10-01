@@ -109,7 +109,7 @@ export default function NotificationsScreen() {
                 <View style={styles.emptyIcon}>
                   <BellOff color={brandBlue} size={32} strokeWidth={1.8} />
                 </View>
-                <Text style={styles.emptyTitle}>You&apos;re all caught up</Text>
+                <Text style={styles.emptyTitle}>Nothing to see here yet</Text>
                 <Text style={styles.emptyText}>
                   New updates about your trips will show up here.
                 </Text>

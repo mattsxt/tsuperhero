@@ -47,6 +47,7 @@ export default function RootLayout() {
         <Stack.Screen name="profile/edit/index" />
         <Stack.Screen name="profile/security/index" />
         <Stack.Screen name="profile/vehicles/index" />
+        <Stack.Screen name="profile/bookings/index" />
         <Stack.Screen name="commuter/pickup/index" />
         <Stack.Screen name="commuter/rental/index" />
         <Stack.Screen name="commuter/routes/index" />
