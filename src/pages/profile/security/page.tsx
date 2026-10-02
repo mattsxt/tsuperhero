@@ -1,4 +1,3 @@
-import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import Eye from "lucide-react-native/icons/eye";
 import EyeOff from "lucide-react-native/icons/eye-off";
@@ -33,6 +32,7 @@ import {
 import { PasswordStrength } from "@/components/password-strength";
 import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
+import { goBackOr } from "@/utils/navigation";
 
 const { brandBlue, error: errorRed } = moduleColors;
 
@@ -46,10 +46,7 @@ export default function SecurityScreen() {
   const [saveError, setSaveError] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const goBack = () => {
-    if (router.canGoBack()) router.back();
-    else router.replace(Routes.profile);
-  };
+  const goBack = () => goBackOr(Routes.profile);
 
   const clearError = (field: PasswordFormField) => {
     if (errors[field]) {

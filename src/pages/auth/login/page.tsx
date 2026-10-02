@@ -149,11 +149,6 @@ export default function LoginScreen() {
         >
           <Text style={styles.primaryButtonText}>SIGN UP NOW</Text>
         </Pressable>
-
-        <Text style={styles.partnerText}>
-          Want to become a TsuperHero partner?{" "}
-          <Text style={styles.partnerLink}>Apply now</Text>!
-        </Text>
       </View>
     </SafeAreaView>
   );
@@ -284,18 +279,5 @@ const styles = StyleSheet.create({
     height: "100%",
     justifyContent: "center",
     paddingHorizontal: 12,
-  },
-  partnerText: {
-    color: "#111111",
-    fontFamily: "Sora",
-    fontSize: 7,
-    marginTop: 10,
-    textAlign: "center",
-    width: 320,
-  },
-  partnerLink: {
-    color: brandBlue,
-    fontFamily: "SoraBold",
-    textDecorationLine: "underline",
   },
 });

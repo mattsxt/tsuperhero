@@ -28,6 +28,7 @@ import { moduleIcons } from "@/components/module-icons";
 import {
   ExpandedOnly,
   headerLayoutTransition,
+  headerTitleTransition,
   StickyHeader,
   useScrollChrome,
 } from "@/components/scroll-chrome";
@@ -109,7 +110,7 @@ export default function NotificationsScreen() {
                 <View style={styles.emptyIcon}>
                   <BellOff color={brandBlue} size={32} strokeWidth={1.8} />
                 </View>
-                <Text style={styles.emptyTitle}>You&apos;re all caught up</Text>
+                <Text style={styles.emptyTitle}>Nothing to see here yet</Text>
                 <Text style={styles.emptyText}>
                   New updates about your trips will show up here.
                 </Text>
@@ -141,9 +142,15 @@ export default function NotificationsScreen() {
             ]}
           >
             <View style={collapsed && styles.headerRowCollapsed}>
-              <Text style={[styles.title, collapsed && styles.titleCollapsed]}>
+              <Animated.Text
+                style={[
+                  styles.title,
+                  collapsed && styles.titleCollapsed,
+                  headerTitleTransition,
+                ]}
+              >
                 Notifications
-              </Text>
+              </Animated.Text>
               <ExpandedOnly collapsed={collapsed}>
                 <Text style={styles.subtitle}>
                   Updates on your trips, rentals and pickups
@@ -197,7 +204,11 @@ function NotificationSection({
       <Text style={styles.sectionLabel}>{title}</Text>
       <View style={styles.list}>
         {items.map((item) => (
-          <NotificationCard key={item.id} notification={item} onPress={onPress} />
+          <NotificationCard
+            key={item.id}
+            notification={item}
+            onPress={onPress}
+          />
         ))}
       </View>
     </>

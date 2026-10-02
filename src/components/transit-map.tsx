@@ -8,13 +8,25 @@ import { vehicleIconUris } from "@/constants/vehicle-icon-uris";
 export type TransitMapState = {
   routeId: string | null;
   route: [number, number][] | null;
+  alternativeRoutes?: [number, number][][];
+  waitingAreas?: {
+    id: string;
+    name: string;
+    lat: number;
+    lng: number;
+    tag?: string | null;
+    kind?: "stop" | "terminal";
+  }[];
   vehicles: { id: string; lat: number; lng: number; type: string }[];
   terminals: { id: string; name: string; lat: number; lng: number }[];
   highlightedTerminalId: string | null;
   selectedId: string | null;
-  focus: { key: number; lat: number; lng: number } | null;
+  focus: { key: number; lat: number; lng: number; zoom?: number } | null;
   padTop: number;
   padBottom: number;
+  pickups?: { id: string; lat: number; lng: number }[];
+  pickupLine?: [number, number][] | null;
+  area?: { id: string; lat: number; lng: number; radius: number } | null;
 };
 
 export type TransitMapBounds = {
@@ -80,6 +92,38 @@ const mapHtml = `<!DOCTYPE html>
   }
   .terminal.highlighted .terminal-icon { width: 30px; height: 30px; background: #1e9e45; }
   .terminal.highlighted .terminal-label { background: #1e9e45; color: #ffffff; font-size: 11px; }
+  .pin-wrap, .terminal, .waiting { transition: opacity 220ms ease-in-out; }
+  body.pin-focused .pin-wrap:not(.focused),
+  body.pin-focused .terminal,
+  body.pin-focused .waiting:not(.open) { opacity: 0.3; }
+  .waiting { position: relative; cursor: pointer; }
+  .waiting-icon {
+    width: 22px; height: 22px; box-sizing: border-box; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: #1e9e45; border: 2px solid #ffffff;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35);
+    transition: transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .waiting-label {
+    position: absolute; top: 100%; left: 50%; margin-top: 6px;
+    padding: 3px 8px; border-radius: 6px;
+    background: #ffffff; color: #15803d;
+    font: bold 11px sans-serif; white-space: nowrap;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+    opacity: 0; pointer-events: none; transform-origin: top center;
+    transform: translateX(-50%) scale(0.4);
+    transition: transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 150ms ease-out;
+  }
+  .waiting.open .waiting-icon { transform: scale(1.3); }
+  .waiting.open .waiting-label { opacity: 1; transform: translateX(-50%) scale(1); }
+  .waiting-label { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .waiting-tag {
+    padding: 2px 7px; border-radius: 999px;
+    background: #e3ecfb; color: #193caf; font: bold 9px sans-serif;
+  }
+  .waiting.hub .waiting-icon { border-radius: 6px; background: #193caf; }
+  .waiting.hub .waiting-label { color: #193caf; }
+  .pickup { line-height: 0; filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.35)); }
 </style>
 </head>
 <body>
@@ -87,13 +131,22 @@ const mapHtml = `<!DOCTYPE html>
 <script>
   var ICONS = ${JSON.stringify(vehicleIconUris)};
   var API_KEY = ${JSON.stringify(googleMapsApiKey ?? "")};
-  var TERMINAL_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22V4a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v18"/><path d="M4 22h16"/><path d="M9 7h6M9 11h6M9 15h6"/></svg>';
+  var TERMINAL_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6v6M15 6v6M2 12h19.6M18 18h3s.5-1.7.8-2.8c.1-.4.2-.8.2-1.2 0-.4-.1-.8-.2-1.2l-1.4-5C20.1 6.8 19.1 6 18 6H4a2 2 0 0 0-2 2v10h3"/><circle cx="7" cy="18" r="2"/><path d="M9 18h5"/><circle cx="16" cy="18" r="2"/></svg>';
   var map = null;
   var routeLine = null;
+  var alternativeLines = [];
   var vehicleMarkers = {};
   var terminalMarkers = [];
+  var waitingMarkers = [];
+  var lastWaitingKey = "";
+  var WAITING_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2"/><path d="M12 8v7M9 22l3-7 3 7M8 12h8"/></svg>';
+  var MAP_PIN_SVG = '<svg width="32" height="32" viewBox="0 0 24 24" fill="#c81e1e" stroke="#c81e1e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3" fill="#ffffff" stroke="none"/></svg>';
   var lastRouteId = null;
   var lastFocusKey = null;
+  var pickupMarkers = [];
+  var pickupLine = null;
+  var areaCircle = null;
+  var lastAreaId = null;
 
   function send(message) {
     var text = JSON.stringify(message);
@@ -114,25 +167,126 @@ const mapHtml = `<!DOCTYPE html>
     var routeKey = state.route && state.route.length ? state.routeId + ":" + state.route.length : null;
     if (routeKey !== lastRouteId) {
       if (routeLine) { routeLine.setMap(null); routeLine = null; }
+      alternativeLines.forEach(function (line) { line.setMap(null); });
+      alternativeLines = [];
       if (routeKey) {
         var path = state.route.map(function (point) { return { lat: point[0], lng: point[1] }; });
-        routeLine = new google.maps.Polyline({
-          path: path, map: map, strokeColor: "#f6c945", strokeWeight: 7, strokeOpacity: 0.95
-        });
         var bounds = new google.maps.LatLngBounds();
+        (state.alternativeRoutes || []).forEach(function (points) {
+          var alternativePath = points.map(function (point) { return { lat: point[0], lng: point[1] }; });
+          alternativePath.forEach(function (point) { bounds.extend(point); });
+          alternativeLines.push(new google.maps.Polyline({
+            path: alternativePath, map: map, strokeOpacity: 0,
+            icons: [{
+              icon: { path: "M 0,-1 0,1", strokeColor: "#f6c945", strokeOpacity: 0.95, strokeWeight: 4, scale: 4 },
+              offset: "0", repeat: "18px"
+            }]
+          }));
+        });
+        routeLine = new google.maps.Polyline({
+          path: path, map: map, strokeColor: "#f6c945", strokeWeight: 4, strokeOpacity: 0.95
+        });
         path.forEach(function (point) { bounds.extend(point); });
         map.fitBounds(bounds, { top: state.padTop, bottom: state.padBottom, left: 30, right: 30 });
       }
     }
     lastRouteId = routeKey;
 
+    applyArea(state);
     applyTerminals(state);
+    applyWaitingAreas(state);
     applyVehicles(state);
+    applyPickups(state);
 
     if (state.focus && state.focus.key !== lastFocusKey) {
       map.panTo({ lat: state.focus.lat, lng: state.focus.lng });
+      if (state.focus.zoom) map.setZoom(state.focus.zoom);
     }
     lastFocusKey = state.focus ? state.focus.key : null;
+  }
+
+  function applyArea(state) {
+    var area = state.area || null;
+    var areaId = area ? area.id : null;
+    if (areaId === lastAreaId) return;
+    lastAreaId = areaId;
+    if (areaCircle) { areaCircle.setMap(null); areaCircle = null; }
+    if (!area) return;
+    areaCircle = new google.maps.Circle({
+      map: map, center: { lat: area.lat, lng: area.lng }, radius: area.radius,
+      strokeColor: "#193caf", strokeOpacity: 0.8, strokeWeight: 2,
+      fillColor: "#193caf", fillOpacity: 0.08, clickable: false
+    });
+    map.fitBounds(areaCircle.getBounds(), { top: state.padTop, bottom: state.padBottom, left: 20, right: 20 });
+  }
+
+  function applyPickups(state) {
+    pickupMarkers.forEach(function (marker) { marker.map = null; });
+    pickupMarkers = [];
+    (state.pickups || []).forEach(function (pickup) {
+      var content = document.createElement("div");
+      content.className = "pickup";
+      content.innerHTML = MAP_PIN_SVG;
+      pickupMarkers.push(new google.maps.marker.AdvancedMarkerElement({
+        map: map, position: { lat: pickup.lat, lng: pickup.lng }, content: content, zIndex: 800
+      }));
+    });
+    if (pickupLine) { pickupLine.setMap(null); pickupLine = null; }
+    if (state.pickupLine && state.pickupLine.length > 1) {
+      pickupLine = new google.maps.Polyline({
+        map: map, strokeColor: "#1f2937", strokeWeight: 3, strokeOpacity: 0.9,
+        path: state.pickupLine.map(function (point) { return { lat: point[0], lng: point[1] }; })
+      });
+    }
+  }
+
+  function applyWaitingAreas(state) {
+    var areas = state.waitingAreas || [];
+    var key = areas.map(function (area) { return area.id + ":" + (area.tag || "") + ":" + (area.kind || ""); }).join(",");
+    if (key === lastWaitingKey) return;
+    lastWaitingKey = key;
+    waitingMarkers.forEach(function (entry) { entry.marker.map = null; });
+    waitingMarkers = areas.map(function (area) {
+      var content = document.createElement("div");
+      var terminal = area.kind === "terminal";
+      content.className = "waiting" + (terminal ? " hub" : "");
+      content.innerHTML = '<div class="waiting-icon">' + (terminal ? TERMINAL_SVG : WAITING_SVG) + '</div><div class="waiting-label"><span></span></div>';
+      content.lastChild.firstChild.textContent = area.name;
+      if (area.tag) {
+        var tag = document.createElement("span");
+        tag.className = "waiting-tag";
+        tag.textContent = area.tag;
+        content.lastChild.appendChild(tag);
+      }
+      var marker = new google.maps.marker.AdvancedMarkerElement({
+        map: map, position: { lat: area.lat, lng: area.lng }, content: content, zIndex: terminal ? 650 : 600
+      });
+      var entry = { marker: marker, content: content, zIndex: terminal ? 650 : 600 };
+      marker.addListener("click", function () {
+        var open = !content.classList.contains("open");
+        closeWaitingAreas();
+        if (open) {
+          content.classList.add("open");
+          marker.zIndex = 950;
+        }
+        updatePinFocus();
+      });
+      return entry;
+    });
+    updatePinFocus();
+  }
+
+  function closeWaitingAreas() {
+    waitingMarkers.forEach(function (entry) {
+      entry.content.classList.remove("open");
+      entry.marker.zIndex = entry.zIndex;
+    });
+    updatePinFocus();
+  }
+
+  function updatePinFocus() {
+    var focused = !!document.querySelector(".waiting.open, .pin-wrap.focused");
+    document.body.classList.toggle("pin-focused", focused);
   }
 
   function applyTerminals(state) {
@@ -189,8 +343,10 @@ const mapHtml = `<!DOCTYPE html>
         animateTo(entry, vehicle.lat, vehicle.lng);
       }
       entry.pin.className = "pin" + (selected ? " selected" : "");
+      entry.pin.parentNode.className = "pin-wrap" + (selected ? " focused" : "");
       entry.marker.zIndex = selected ? 1000 : 0;
     });
+    updatePinFocus();
     Object.keys(vehicleMarkers).forEach(function (id) {
       if (seen[id]) return;
       var entry = vehicleMarkers[id];
@@ -220,7 +376,10 @@ const mapHtml = `<!DOCTYPE html>
       clickableIcons: false,
       gestureHandling: "greedy"
     });
-    map.addListener("click", function () { send({ type: "select", id: null }); });
+    map.addListener("click", function () {
+      closeWaitingAreas();
+      send({ type: "select", id: null });
+    });
     map.addListener("idle", sendBounds);
     send({ type: "ready" });
   };

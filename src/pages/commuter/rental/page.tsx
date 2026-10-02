@@ -15,14 +15,7 @@ import TriangleAlert from "lucide-react-native/icons/triangle-alert";
 import UserRoundCheck from "lucide-react-native/icons/user-round-check";
 import Users from "lucide-react-native/icons/users";
 import { useEffect, useState } from "react";
-import {
-  BackHandler,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-  type TextStyle,
-} from "react-native";
+import { BackHandler, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, {
   useAnimatedRef,
   type CSSTransitionProperties,
@@ -35,7 +28,9 @@ import {
   formatDate,
   formatTime,
 } from "@/components/date-time-field";
+import { EmptyState } from "@/components/empty-state";
 import {
+  Chip,
   FieldLabel,
   ModuleButton,
   ModuleHeader,
@@ -44,24 +39,30 @@ import {
   SectionTitle,
   SoftField,
   VehiclePicker,
-  vehicleOptions,
-  type Vehicle,
+  type VehicleOption,
 } from "@/components/module-ui";
 import { PlaceSearchField } from "@/components/place-search-field";
 import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
+import { getInitials } from "@/utils/format";
 
 const { brandBlue, softBlue, mutedText, text, error } = moduleColors;
 
 type Step = 1 | 2 | 3 | 4 | 5;
 type TripType = "one_way" | "round_trip";
-type CharterVehicle = Exclude<Vehicle, "tricy">;
+type CharterVehicle = "van" | "jeep" | "bus";
 
 const stepTitles = ["Trip details", "Vehicle", "Driver", "Review"];
 
-const charterVehicles = vehicleOptions.filter(
-  (option) => option.value !== "tricy",
-);
+const charterVehicles: VehicleOption<CharterVehicle>[] = [
+  { value: "van", label: "VAN", icon: require("@/assets/images/van.svg") },
+  {
+    value: "jeep",
+    label: "JEEP",
+    icon: require("@/assets/images/jeepney.svg"),
+  },
+  { value: "bus", label: "BUS", icon: require("@/assets/images/bus.svg") },
+];
 
 const vehicleCapacity: Record<CharterVehicle, number> = {
   van: 14,
@@ -93,99 +94,9 @@ type Driver = {
   model: string;
   plate: string;
   seats: number;
-  ratePerDay: number;
 };
 
-const sampleDrivers: Driver[] = [
-  {
-    id: "v1",
-    name: "Ramon Dela Paz",
-    rating: 4.9,
-    trips: 214,
-    vehicle: "van",
-    model: "Toyota Hiace Commuter",
-    plate: "NAB 4821",
-    seats: 14,
-    ratePerDay: 4500,
-  },
-  {
-    id: "v2",
-    name: "Liza Manalo",
-    rating: 4.8,
-    trips: 167,
-    vehicle: "van",
-    model: "Nissan NV350 Urvan",
-    plate: "NCD 1934",
-    seats: 12,
-    ratePerDay: 4200,
-  },
-  {
-    id: "v3",
-    name: "Arnel Villanueva",
-    rating: 4.6,
-    trips: 98,
-    vehicle: "van",
-    model: "Toyota Hiace GL Grandia",
-    plate: "NEF 7702",
-    seats: 10,
-    ratePerDay: 5000,
-  },
-  {
-    id: "j1",
-    name: "Jojo Bautista",
-    rating: 4.7,
-    trips: 305,
-    vehicle: "jeep",
-    model: "Modern PUJ (Class 2)",
-    plate: "NGH 3310",
-    seats: 20,
-    ratePerDay: 5500,
-  },
-  {
-    id: "j2",
-    name: "Carmela Reyes",
-    rating: 4.5,
-    trips: 142,
-    vehicle: "jeep",
-    model: "Sarao Jeepney",
-    plate: "NIJ 8845",
-    seats: 18,
-    ratePerDay: 4800,
-  },
-  {
-    id: "b1",
-    name: "Nestor Aquino",
-    rating: 4.9,
-    trips: 421,
-    vehicle: "bus",
-    model: "Hino RK1J Tourist Bus",
-    plate: "NKL 5567",
-    seats: 49,
-    ratePerDay: 16000,
-  },
-  {
-    id: "b2",
-    name: "Rowena Santos",
-    rating: 4.8,
-    trips: 256,
-    vehicle: "bus",
-    model: "Daewoo BV115 Coach",
-    plate: "NMN 2098",
-    seats: 45,
-    ratePerDay: 14500,
-  },
-  {
-    id: "b3",
-    name: "Dante Morales",
-    rating: 4.6,
-    trips: 133,
-    vehicle: "bus",
-    model: "King Long XMQ6127",
-    plate: "NOP 6651",
-    seats: 50,
-    ratePerDay: 15000,
-  },
-];
+const availableDrivers: Driver[] = [];
 
 const cardTransition: CSSTransitionProperties = {
   transitionProperty: ["backgroundColor", "borderColor"],
@@ -193,15 +104,7 @@ const cardTransition: CSSTransitionProperties = {
   transitionTimingFunction: "ease-in-out",
 };
 
-const cardTextTransition: CSSTransitionProperties<TextStyle> = {
-  transitionProperty: "color",
-  transitionDuration: 250,
-  transitionTimingFunction: "ease-in-out",
-};
-
 const maxPassengers = 50;
-
-const peso = (amount: number) => `₱${amount.toLocaleString("en-US")}`;
 
 function startOfToday() {
   const today = new Date();
@@ -248,18 +151,10 @@ export default function RentalScreen() {
   const [vehicle, setVehicle] = useState<CharterVehicle>("van");
   const [driverId, setDriverId] = useState<string | null>(null);
 
-  const drivers = sampleDrivers.filter(
+  const drivers = availableDrivers.filter(
     (driver) => driver.vehicle === vehicle && driver.seats >= passengers,
   );
-  const driver = sampleDrivers.find((option) => option.id === driverId);
-  const days =
-    tripType === "round_trip" && tripDate && returnDate
-      ? Math.round(
-          (new Date(returnDate).setHours(0, 0, 0, 0) -
-            new Date(tripDate).setHours(0, 0, 0, 0)) /
-            86_400_000,
-        ) + 1
-      : 1;
+  const driver = availableDrivers.find((option) => option.id === driverId);
 
   const goToStep = (next: Step) => {
     setProblem("");
@@ -465,6 +360,7 @@ export default function RentalScreen() {
                       label={option}
                       selected={occasion === option}
                       onPress={() => setOccasion(option)}
+                      style={styles.occasionChip}
                     />
                   ))}
                 </View>
@@ -508,7 +404,7 @@ export default function RentalScreen() {
                 value={vehicle}
                 onChange={(next) => {
                   setProblem("");
-                  setVehicle(next as CharterVehicle);
+                  setVehicle(next);
                 }}
                 options={charterVehicles}
               />
@@ -543,18 +439,28 @@ export default function RentalScreen() {
                 }
                 title="Available drivers"
               />
-              <Text style={styles.helperText}>
-                {drivers.length > 0
-                  ? `${drivers.length} ${vehicleNames[vehicle].toLowerCase()} driver${drivers.length === 1 ? "" : "s"} available on ${tripDate ? formatDate(tripDate) : "your date"}. Select one to continue.`
-                  : "No drivers are available for this vehicle and group size."}
-              </Text>
+              {drivers.length > 0 ? (
+                <Text style={styles.helperText}>
+                  {`${drivers.length} ${vehicleNames[vehicle].toLowerCase()} driver${drivers.length === 1 ? "" : "s"} available on ${tripDate ? formatDate(tripDate) : "your date"}. Select one to continue.`}
+                </Text>
+              ) : (
+                <EmptyState
+                  icon={
+                    <UserRoundCheck
+                      color={brandBlue}
+                      size={32}
+                      strokeWidth={1.8}
+                    />
+                  }
+                  message="Drivers available for this vehicle and group size will show up here."
+                />
+              )}
 
               <View style={styles.driverList}>
                 {drivers.map((option) => (
                   <DriverCard
                     key={option.id}
                     driver={option}
-                    days={days}
                     selected={option.id === driverId}
                     onPress={() => {
                       setProblem("");
@@ -579,67 +485,62 @@ export default function RentalScreen() {
             pickupTime &&
             pickup &&
             destination && (
-            <>
-              <SectionTitle
-                icon={
-                  <ClipboardList color="#ffffff" size={18} strokeWidth={2} />
-                }
-                title="Review your charter"
-              />
-              <View style={styles.reviewCard}>
-                <ReviewRow label="Pickup" value={describePlace(pickup)} />
-                <ReviewRow
-                  label="Destination"
-                  value={describePlace(destination)}
-                />
-                <ReviewRow
-                  label="Trip"
-                  value={
-                    tripType === "round_trip" && returnDate
-                      ? `Round trip · ${formatDate(tripDate)} – ${formatDate(returnDate)}`
-                      : `One-way · ${formatDate(tripDate)}`
+              <>
+                <SectionTitle
+                  icon={
+                    <ClipboardList color="#ffffff" size={18} strokeWidth={2} />
                   }
+                  title="Review your charter"
                 />
-                <ReviewRow label="Pickup time" value={formatTime(pickupTime)} />
-                {tripType === "round_trip" && returnTime && (
+                <View style={styles.reviewCard}>
+                  <ReviewRow label="Pickup" value={describePlace(pickup)} />
                   <ReviewRow
-                    label="Return pickup"
-                    value={formatTime(returnTime)}
+                    label="Destination"
+                    value={describePlace(destination)}
                   />
-                )}
-                <ReviewRow label="Occasion" value={occasion} />
-                <ReviewRow
-                  label="Passengers"
-                  value={`${passengers} passenger${passengers === 1 ? "" : "s"}`}
-                />
-                <ReviewRow label="Vehicle" value={vehicleNames[vehicle]} />
-                <ReviewRow
-                  label="Driver"
-                  value={`${driver.name} · ${driver.model} (${driver.plate})`}
-                />
-                {!!notes.trim() && (
-                  <ReviewRow label="Notes" value={notes.trim()} />
-                )}
-                <View style={styles.totalRow}>
-                  <Text style={styles.totalLabel}>
-                    Estimated total{days > 1 ? ` (${days} days)` : ""}
-                  </Text>
-                  <Text style={styles.totalValue}>
-                    {peso(driver.ratePerDay * days)}
-                  </Text>
+                  <ReviewRow
+                    label="Trip"
+                    value={
+                      tripType === "round_trip" && returnDate
+                        ? `Round trip · ${formatDate(tripDate)} – ${formatDate(returnDate)}`
+                        : `One-way · ${formatDate(tripDate)}`
+                    }
+                  />
+                  <ReviewRow
+                    label="Pickup time"
+                    value={formatTime(pickupTime)}
+                  />
+                  {tripType === "round_trip" && returnTime && (
+                    <ReviewRow
+                      label="Return pickup"
+                      value={formatTime(returnTime)}
+                    />
+                  )}
+                  <ReviewRow label="Occasion" value={occasion} />
+                  <ReviewRow
+                    label="Passengers"
+                    value={`${passengers} passenger${passengers === 1 ? "" : "s"}`}
+                  />
+                  <ReviewRow label="Vehicle" value={vehicleNames[vehicle]} />
+                  <ReviewRow
+                    label="Driver"
+                    value={`${driver.name} · ${driver.model} (${driver.plate})`}
+                  />
+                  {!!notes.trim() && (
+                    <ReviewRow label="Notes" value={notes.trim()} />
+                  )}
                 </View>
-              </View>
-              <Text style={styles.helperText}>
-                The driver will confirm your request and the final price before
-                your trip.
-              </Text>
+                <Text style={styles.helperText}>
+                  The driver will review and confirm your request before your
+                  trip.
+                </Text>
 
-              <ModuleButton
-                label="CONFIRM BOOKING"
-                onPress={() => goToStep(5)}
-              />
-            </>
-          )}
+                <ModuleButton
+                  label="CONFIRM BOOKING"
+                  onPress={() => goToStep(5)}
+                />
+              </>
+            )}
 
           {step === 5 && driver && (
             <View style={styles.success}>
@@ -770,58 +671,15 @@ function StepArrow({
   );
 }
 
-function Chip({
-  label,
-  selected,
-  onPress,
-  grow,
-}: {
-  label: string;
-  selected: boolean;
-  onPress: () => void;
-  grow?: boolean;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      onPress={onPress}
-      style={grow && styles.flex}
-    >
-      <Animated.View
-        style={[styles.chip, selected && styles.chipSelected, cardTransition]}
-      >
-        <Animated.Text
-          style={[
-            styles.chipText,
-            selected && styles.chipTextSelected,
-            cardTextTransition,
-          ]}
-        >
-          {label}
-        </Animated.Text>
-      </Animated.View>
-    </Pressable>
-  );
-}
-
 function DriverCard({
   driver,
-  days,
   selected,
   onPress,
 }: {
   driver: Driver;
-  days: number;
   selected: boolean;
   onPress: () => void;
 }) {
-  const initials = driver.name
-    .split(" ")
-    .map((word) => word[0])
-    .slice(0, 2)
-    .join("");
-
   return (
     <Pressable
       accessibilityRole="button"
@@ -837,7 +695,7 @@ function DriverCard({
         ]}
       >
         <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{initials}</Text>
+          <Text style={styles.avatarText}>{getInitials(driver.name)}</Text>
         </View>
         <View style={styles.flex}>
           <Text style={styles.driverName}>{driver.name}</Text>
@@ -852,17 +710,8 @@ function DriverCard({
           </Text>
           <Text style={styles.driverMeta}>Seats up to {driver.seats}</Text>
         </View>
-        <View style={styles.driverPrice}>
-          <Text style={styles.priceValue}>{peso(driver.ratePerDay)}</Text>
-          <Text style={styles.driverMeta}>per day</Text>
-          {days > 1 && (
-            <Text style={styles.driverMeta}>
-              {peso(driver.ratePerDay * days)} total
-            </Text>
-          )}
-          <View style={[styles.radio, selected && styles.radioSelected]}>
-            {selected && <View style={styles.radioDot} />}
-          </View>
+        <View style={[styles.radio, selected && styles.radioSelected]}>
+          {selected && <View style={styles.radioDot} />}
         </View>
       </Animated.View>
     </Pressable>
@@ -928,19 +777,7 @@ const styles = StyleSheet.create({
   progressBarDone: { backgroundColor: "#ffffff" },
   chipRow: { flexDirection: "row", gap: 8 },
   chipWrap: { flexWrap: "wrap" },
-  chip: {
-    height: 36,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 14,
-    borderWidth: 1.5,
-    borderColor: softBlue,
-    borderRadius: 18,
-    backgroundColor: softBlue,
-  },
-  chipSelected: { borderColor: brandBlue, backgroundColor: brandBlue },
-  chipText: { color: brandBlue, fontFamily: "SoraBold", fontSize: 11 },
-  chipTextSelected: { color: "#ffffff" },
+  occasionChip: { flexBasis: "45%", flexGrow: 1 },
   infoCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -1000,14 +837,11 @@ const styles = StyleSheet.create({
     fontSize: 9,
     marginTop: 2,
   },
-  driverPrice: { alignItems: "flex-end" },
-  priceValue: { color: brandBlue, fontFamily: "SoraBold", fontSize: 13 },
   radio: {
     width: 20,
     height: 20,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 8,
     borderWidth: 2,
     borderColor: "#c4c4c4",
     borderRadius: 10,
@@ -1046,14 +880,6 @@ const styles = StyleSheet.create({
     fontFamily: "SoraBold",
     fontSize: 11,
   },
-  totalRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingTop: 12,
-  },
-  totalLabel: { color: brandBlue, fontFamily: "SoraBold", fontSize: 12 },
-  totalValue: { color: brandBlue, fontFamily: "SoraBold", fontSize: 17 },
   problem: {
     color: error,
     fontFamily: "Sora",
