@@ -1,4 +1,3 @@
-import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import ChevronDown from "lucide-react-native/icons/chevron-down";
 import Clock from "lucide-react-native/icons/clock";
@@ -16,12 +15,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { vehicleTypeLabels } from "@/api/v1/transit-routes/controllers";
 import { EmptyState } from "@/components/empty-state";
 import { Chip, ModuleHeader, moduleColors } from "@/components/module-ui";
+import { RouteTimeline } from "@/components/route-timeline";
 import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
-import {
-  formatDuration,
-  type TransitTrip,
-} from "@/pages/transit/types";
+import type { TransitTrip } from "@/pages/transit/types";
+import { formatDuration } from "@/utils/format";
+import { goBackOr } from "@/utils/navigation";
 
 const { brandBlue, softBlue, mutedText, text } = moduleColors;
 
@@ -62,10 +61,7 @@ export default function TripHistoryScreen() {
     0,
   );
 
-  const goBack = () => {
-    if (router.canGoBack()) router.back();
-    else router.replace(Routes.transitHome);
-  };
+  const goBack = () => goBackOr(Routes.transitHome);
 
   return (
     <View style={styles.screen}>
@@ -191,11 +187,7 @@ function TripCard({
         onPress={onPress}
         style={({ pressed }) => [styles.cardMain, pressed && styles.pressed]}
       >
-        <View style={styles.timeline}>
-          <View style={styles.timelineStart} />
-          <View style={styles.timelineLine} />
-          <View style={styles.timelineEnd} />
-        </View>
+        <RouteTimeline />
 
         <View style={styles.stops}>
           <View>
@@ -311,22 +303,6 @@ const styles = StyleSheet.create({
     paddingLeft: 16,
     paddingRight: 10,
   },
-  timeline: { alignItems: "center", alignSelf: "stretch", paddingVertical: 4 },
-  timelineStart: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: brandBlue,
-  },
-  timelineLine: { flex: 1, width: 2, backgroundColor: brandBlue },
-  timelineEnd: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: brandBlue,
-    backgroundColor: "#ffffff",
-  },
   stops: { flex: 1, gap: 14, marginLeft: 12 },
   city: { color: brandBlue, fontFamily: "SoraBold", fontSize: 11 },
   place: { color: mutedText, fontFamily: "Sora", fontSize: 8, marginTop: 2 },
@@ -356,6 +332,11 @@ const styles = StyleSheet.create({
     borderTopColor: "#eef1f7",
   },
   detailRow: { flexDirection: "row", gap: 12, paddingVertical: 6 },
-  detailLabel: { width: 90, color: mutedText, fontFamily: "Sora", fontSize: 10 },
+  detailLabel: {
+    width: 90,
+    color: mutedText,
+    fontFamily: "Sora",
+    fontSize: 10,
+  },
   detailValue: { flex: 1, color: text, fontFamily: "SoraBold", fontSize: 11 },
 });

@@ -6,7 +6,11 @@ import Svg, { Circle, Path } from "react-native-svg";
 
 type ModuleIconProps = { color: string; size: number; strokeWidth?: number };
 
-export function PickupIcon({ color, size, strokeWidth = 1.8 }: ModuleIconProps) {
+export function PickupIcon({
+  color,
+  size,
+  strokeWidth = 1.8,
+}: ModuleIconProps) {
   return (
     <Svg
       width={size}

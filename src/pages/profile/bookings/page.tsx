@@ -1,4 +1,3 @@
-import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import Bus from "lucide-react-native/icons/bus";
 import ClipboardList from "lucide-react-native/icons/clipboard-list";
@@ -12,6 +11,7 @@ import { PickupIcon } from "@/components/module-icons";
 import { Chip, ModuleHeader, moduleColors } from "@/components/module-ui";
 import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
+import { goBackOr } from "@/utils/navigation";
 
 const { brandBlue, mutedText, text } = moduleColors;
 
@@ -45,10 +45,7 @@ export default function BookingsScreen() {
 
   const visible = bookings.filter((booking) => booking.kind === tab);
 
-  const goBack = () => {
-    if (router.canGoBack()) router.back();
-    else router.replace(Routes.profile);
-  };
+  const goBack = () => goBackOr(Routes.profile);
 
   return (
     <View style={styles.screen}>

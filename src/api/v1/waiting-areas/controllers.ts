@@ -1,10 +1,14 @@
 import { attempt, unwrap, type Result } from "@/api/v1/result";
 import { waitingAreaRoutes } from "@/api/v1/waiting-areas/routes";
 import type { WaitingAreaRow } from "@/api/v1/waiting-areas/types";
+import { getDistanceMeters, isNearPath, type Coordinates } from "@/utils/geo";
+
+export type WaitingAreaType = "stop" | "terminal";
 
 export type WaitingArea = {
   id: string;
   name: string;
+  type: WaitingAreaType;
   lat: number;
   lng: number;
   routeId: string | null;
@@ -16,86 +20,39 @@ export type NearbyWaitingArea = WaitingArea & {
   walkMinutes: number;
 };
 
-type Coordinates = { lat: number; lng: number };
-
 export const maxWalkMeters = 1000;
 export const onRouteMeters = 40;
 
-const earthRadiusMeters = 6_371_000;
 const walkMetersPerMinute = 80;
 
 export async function loadWaitingAreas(): Promise<Result<WaitingArea[]>> {
   return attempt(async () => {
     const rows: WaitingAreaRow[] =
       (await unwrap(waitingAreaRoutes.listActive())) ?? [];
-    return rows.map(({ id, name, lat, lng, route_id, vicinity, route }) => {
-      const areaVicinity = vicinity?.trim() || null;
-      const matchingRouteVicinity =
-        areaVicinity && Array.isArray(route?.vicinity)
-          ? route.vicinity.find(
-              (item) => item.toLowerCase() === areaVicinity.toLowerCase(),
-            )
-          : null;
-
-      return {
-        id,
-        name,
-        lat,
-        lng,
-        routeId: route_id,
-        vicinity: matchingRouteVicinity ?? areaVicinity,
-      };
-    });
+    return rows.map(({ id, name, lat, lng, route_id, vicinity, type }) => ({
+      id,
+      name,
+      type: type?.trim().toLowerCase() === "terminal" ? "terminal" : "stop",
+      lat,
+      lng,
+      routeId: route_id ?? null,
+      vicinity: vicinity?.trim() || null,
+    }));
   });
-}
-
-export function getDistanceMeters(from: Coordinates, to: Coordinates) {
-  const radians = (degrees: number) => (degrees * Math.PI) / 180;
-  const latDelta = radians(to.lat - from.lat);
-  const lngDelta = radians(to.lng - from.lng);
-  const a =
-    Math.sin(latDelta / 2) ** 2 +
-    Math.cos(radians(from.lat)) *
-      Math.cos(radians(to.lat)) *
-      Math.sin(lngDelta / 2) ** 2;
-  return 2 * earthRadiusMeters * Math.asin(Math.sqrt(a));
-}
-
-function getSegmentDistanceMeters(
-  point: Coordinates,
-  [startLat, startLng]: [number, number],
-  [endLat, endLng]: [number, number],
-) {
-  const metersPerLat = 111_320;
-  const metersPerLng = metersPerLat * Math.cos((point.lat * Math.PI) / 180);
-  const pointX = (point.lng - startLng) * metersPerLng;
-  const pointY = (point.lat - startLat) * metersPerLat;
-  const endX = (endLng - startLng) * metersPerLng;
-  const endY = (endLat - startLat) * metersPerLat;
-  const lengthSquared = endX * endX + endY * endY;
-  const along = lengthSquared
-    ? Math.max(0, Math.min(1, (pointX * endX + pointY * endY) / lengthSquared))
-    : 0;
-  return Math.hypot(pointX - endX * along, pointY - endY * along);
 }
 
 export function findWaitingAreasOnRoute(
   areas: WaitingArea[],
   routeId: string,
   paths: [number, number][][],
+  routeVicinity: string[] = [],
 ): WaitingArea[] {
+  const vicinities = routeVicinity.map((name) => name.toLowerCase());
   return areas.filter(
     (area) =>
       area.routeId === routeId ||
-      paths.some((path) =>
-        path
-          .slice(1)
-          .some(
-            (end, index) =>
-              getSegmentDistanceMeters(area, path[index], end) <=
-              onRouteMeters,
-          ),
-      ),
+      (!!area.vicinity && vicinities.includes(area.vicinity.toLowerCase())) ||
+      paths.some((path) => isNearPath(area, path, onRouteMeters)),
   );
 }
 
@@ -111,7 +68,10 @@ export function findNearestWaitingAreas(
       return {
         ...area,
         distanceMeters,
-        walkMinutes: Math.max(1, Math.round(distanceMeters / walkMetersPerMinute)),
+        walkMinutes: Math.max(
+          1,
+          Math.round(distanceMeters / walkMetersPerMinute),
+        ),
       };
     })
     .sort((a, b) => a.distanceMeters - b.distanceMeters);

@@ -39,24 +39,30 @@ import {
   SectionTitle,
   SoftField,
   VehiclePicker,
-  vehicleOptions,
-  type Vehicle,
+  type VehicleOption,
 } from "@/components/module-ui";
 import { PlaceSearchField } from "@/components/place-search-field";
 import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
+import { getInitials } from "@/utils/format";
 
 const { brandBlue, softBlue, mutedText, text, error } = moduleColors;
 
 type Step = 1 | 2 | 3 | 4 | 5;
 type TripType = "one_way" | "round_trip";
-type CharterVehicle = Exclude<Vehicle, "tricy">;
+type CharterVehicle = "van" | "jeep" | "bus";
 
 const stepTitles = ["Trip details", "Vehicle", "Driver", "Review"];
 
-const charterVehicles = vehicleOptions.filter(
-  (option) => option.value !== "tricy",
-);
+const charterVehicles: VehicleOption<CharterVehicle>[] = [
+  { value: "van", label: "VAN", icon: require("@/assets/images/van.svg") },
+  {
+    value: "jeep",
+    label: "JEEP",
+    icon: require("@/assets/images/jeepney.svg"),
+  },
+  { value: "bus", label: "BUS", icon: require("@/assets/images/bus.svg") },
+];
 
 const vehicleCapacity: Record<CharterVehicle, number> = {
   van: 14,
@@ -99,7 +105,6 @@ const cardTransition: CSSTransitionProperties = {
 };
 
 const maxPassengers = 50;
-
 
 function startOfToday() {
   const today = new Date();
@@ -355,6 +360,7 @@ export default function RentalScreen() {
                       label={option}
                       selected={occasion === option}
                       onPress={() => setOccasion(option)}
+                      style={styles.occasionChip}
                     />
                   ))}
                 </View>
@@ -398,7 +404,7 @@ export default function RentalScreen() {
                 value={vehicle}
                 onChange={(next) => {
                   setProblem("");
-                  setVehicle(next as CharterVehicle);
+                  setVehicle(next);
                 }}
                 options={charterVehicles}
               />
@@ -479,59 +485,62 @@ export default function RentalScreen() {
             pickupTime &&
             pickup &&
             destination && (
-            <>
-              <SectionTitle
-                icon={
-                  <ClipboardList color="#ffffff" size={18} strokeWidth={2} />
-                }
-                title="Review your charter"
-              />
-              <View style={styles.reviewCard}>
-                <ReviewRow label="Pickup" value={describePlace(pickup)} />
-                <ReviewRow
-                  label="Destination"
-                  value={describePlace(destination)}
-                />
-                <ReviewRow
-                  label="Trip"
-                  value={
-                    tripType === "round_trip" && returnDate
-                      ? `Round trip · ${formatDate(tripDate)} – ${formatDate(returnDate)}`
-                      : `One-way · ${formatDate(tripDate)}`
+              <>
+                <SectionTitle
+                  icon={
+                    <ClipboardList color="#ffffff" size={18} strokeWidth={2} />
                   }
+                  title="Review your charter"
                 />
-                <ReviewRow label="Pickup time" value={formatTime(pickupTime)} />
-                {tripType === "round_trip" && returnTime && (
+                <View style={styles.reviewCard}>
+                  <ReviewRow label="Pickup" value={describePlace(pickup)} />
                   <ReviewRow
-                    label="Return pickup"
-                    value={formatTime(returnTime)}
+                    label="Destination"
+                    value={describePlace(destination)}
                   />
-                )}
-                <ReviewRow label="Occasion" value={occasion} />
-                <ReviewRow
-                  label="Passengers"
-                  value={`${passengers} passenger${passengers === 1 ? "" : "s"}`}
-                />
-                <ReviewRow label="Vehicle" value={vehicleNames[vehicle]} />
-                <ReviewRow
-                  label="Driver"
-                  value={`${driver.name} · ${driver.model} (${driver.plate})`}
-                />
-                {!!notes.trim() && (
-                  <ReviewRow label="Notes" value={notes.trim()} />
-                )}
-              </View>
-              <Text style={styles.helperText}>
-                The driver will review and confirm your request before your
-                trip.
-              </Text>
+                  <ReviewRow
+                    label="Trip"
+                    value={
+                      tripType === "round_trip" && returnDate
+                        ? `Round trip · ${formatDate(tripDate)} – ${formatDate(returnDate)}`
+                        : `One-way · ${formatDate(tripDate)}`
+                    }
+                  />
+                  <ReviewRow
+                    label="Pickup time"
+                    value={formatTime(pickupTime)}
+                  />
+                  {tripType === "round_trip" && returnTime && (
+                    <ReviewRow
+                      label="Return pickup"
+                      value={formatTime(returnTime)}
+                    />
+                  )}
+                  <ReviewRow label="Occasion" value={occasion} />
+                  <ReviewRow
+                    label="Passengers"
+                    value={`${passengers} passenger${passengers === 1 ? "" : "s"}`}
+                  />
+                  <ReviewRow label="Vehicle" value={vehicleNames[vehicle]} />
+                  <ReviewRow
+                    label="Driver"
+                    value={`${driver.name} · ${driver.model} (${driver.plate})`}
+                  />
+                  {!!notes.trim() && (
+                    <ReviewRow label="Notes" value={notes.trim()} />
+                  )}
+                </View>
+                <Text style={styles.helperText}>
+                  The driver will review and confirm your request before your
+                  trip.
+                </Text>
 
-              <ModuleButton
-                label="CONFIRM BOOKING"
-                onPress={() => goToStep(5)}
-              />
-            </>
-          )}
+                <ModuleButton
+                  label="CONFIRM BOOKING"
+                  onPress={() => goToStep(5)}
+                />
+              </>
+            )}
 
           {step === 5 && driver && (
             <View style={styles.success}>
@@ -671,12 +680,6 @@ function DriverCard({
   selected: boolean;
   onPress: () => void;
 }) {
-  const initials = driver.name
-    .split(" ")
-    .map((word) => word[0])
-    .slice(0, 2)
-    .join("");
-
   return (
     <Pressable
       accessibilityRole="button"
@@ -692,7 +695,7 @@ function DriverCard({
         ]}
       >
         <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{initials}</Text>
+          <Text style={styles.avatarText}>{getInitials(driver.name)}</Text>
         </View>
         <View style={styles.flex}>
           <Text style={styles.driverName}>{driver.name}</Text>
@@ -774,6 +777,7 @@ const styles = StyleSheet.create({
   progressBarDone: { backgroundColor: "#ffffff" },
   chipRow: { flexDirection: "row", gap: 8 },
   chipWrap: { flexWrap: "wrap" },
+  occasionChip: { flexBasis: "45%", flexGrow: 1 },
   infoCard: {
     flexDirection: "row",
     alignItems: "center",

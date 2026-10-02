@@ -170,7 +170,9 @@ export default function RegisterScreen() {
                           !code[index]?.trim() &&
                           index > 0
                         ) {
-                          const nextCode = code.padEnd(codeLength, " ").split("");
+                          const nextCode = code
+                            .padEnd(codeLength, " ")
+                            .split("");
                           nextCode[index - 1] = " ";
                           setCode(nextCode.join("").trimEnd());
                           focusCodeInput(index - 1);
@@ -205,7 +207,10 @@ export default function RegisterScreen() {
             )}
 
             <Pressable
-              style={[styles.primaryButton, submitting && styles.buttonDisabled]}
+              style={[
+                styles.primaryButton,
+                submitting && styles.buttonDisabled,
+              ]}
               disabled={submitting}
               onPress={continueToNextStep}
             >
@@ -348,7 +353,10 @@ function AccountLink() {
   return (
     <Text style={styles.accountText}>
       Already have an account?{" "}
-      <Text style={styles.accountLink} onPress={() => router.replace(Routes.login)}>
+      <Text
+        style={styles.accountLink}
+        onPress={() => router.replace(Routes.login)}
+      >
         Sign in here
       </Text>
       .

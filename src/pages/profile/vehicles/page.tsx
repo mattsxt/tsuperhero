@@ -1,5 +1,4 @@
 import { Image } from "expo-image";
-import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import BusFront from "lucide-react-native/icons/bus-front";
 import FileText from "lucide-react-native/icons/file-text";
@@ -27,6 +26,7 @@ import {
 } from "@/components/module-ui";
 import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
+import { goBackOr } from "@/utils/navigation";
 
 const { brandBlue, softBlue, mutedText, text } = moduleColors;
 
@@ -48,10 +48,7 @@ export default function VehiclesScreen() {
     };
   }, []);
 
-  const goBack = () => {
-    if (router.canGoBack()) router.back();
-    else router.replace(Routes.profile);
-  };
+  const goBack = () => goBackOr(Routes.profile);
 
   return (
     <View style={styles.screen}>
@@ -304,7 +301,11 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 6,
   },
-  vehicleIconBackdrop: { padding: 8, borderRadius: 10, backgroundColor: softBlue },
+  vehicleIconBackdrop: {
+    padding: 8,
+    borderRadius: 10,
+    backgroundColor: softBlue,
+  },
   vehicleIcon: { width: 36, height: 36 },
   plate: { color: brandBlue, fontFamily: "SoraBold", fontSize: 18 },
 });

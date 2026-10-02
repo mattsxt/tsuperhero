@@ -4,7 +4,12 @@ import type { ReactNode } from "react";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated from "react-native-reanimated";
 
-import { ExpandedOnly, headerLayoutTransition } from "@/components/scroll-chrome";
+import { RouteTimeline } from "@/components/route-timeline";
+import {
+  ExpandedOnly,
+  headerLayoutTransition,
+  headerTitleTransition,
+} from "@/components/scroll-chrome";
 
 export const homeColors = {
   brandBlue: "#193caf",
@@ -37,12 +42,16 @@ export function HomeHeader({
     >
       <View style={[styles.headerRow, collapsed && styles.headerRowCollapsed]}>
         <View style={styles.headerText}>
-          <Text
-            style={[styles.greeting, collapsed && styles.greetingCollapsed]}
+          <Animated.Text
+            style={[
+              styles.greeting,
+              collapsed && styles.greetingCollapsed,
+              headerTitleTransition,
+            ]}
             numberOfLines={collapsed ? 1 : undefined}
           >
             Hello, {firstName}!
-          </Text>
+          </Animated.Text>
           <ExpandedOnly collapsed={collapsed}>
             <Text style={styles.subGreeting}>{subtitle}</Text>
           </ExpandedOnly>
@@ -154,11 +163,7 @@ function TripRow({ trip, last }: { trip: TripSummary; last: boolean }) {
         pressed && styles.tripRowPressed,
       ]}
     >
-      <View style={styles.timeline}>
-        <View style={styles.timelineStart} />
-        <View style={styles.timelineLine} />
-        <View style={styles.timelineEnd} />
-      </View>
+      <RouteTimeline />
 
       <View style={styles.tripStops}>
         <View>
@@ -291,22 +296,6 @@ const styles = StyleSheet.create({
   },
   tripRowDivider: { borderBottomWidth: 1, borderBottomColor: cardBorder },
   tripRowPressed: { backgroundColor: "#f4f6fc" },
-  timeline: { alignItems: "center", alignSelf: "stretch", paddingVertical: 4 },
-  timelineStart: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: brandBlue,
-  },
-  timelineLine: { flex: 1, width: 2, backgroundColor: brandBlue },
-  timelineEnd: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: brandBlue,
-    backgroundColor: "#ffffff",
-  },
   tripStops: { flex: 1, gap: 14, marginLeft: 12 },
   tripCity: { color: brandBlue, fontFamily: "SoraBold", fontSize: 11 },
   tripPlace: {

@@ -5,7 +5,6 @@ import {
   type VehicleType,
 } from "@/api/v1/transit-routes/controllers";
 
-
 export type OperationArea = {
   id: string;
   name: string;
@@ -35,7 +34,8 @@ export const operationAreas: OperationArea[] = [
   {
     id: "upper-barangays",
     name: "Upper Barangays",
-    description: "The upland barangays of Naga City along the Mt. Isarog foothills.",
+    description:
+      "The upland barangays of Naga City along the Mt. Isarog foothills.",
     center: [13.655, 123.262],
     radiusMeters: 4200,
     barangays: ["Carolina", "Cararayan", "Pacol", "Panicuason", "San Isidro"],
@@ -54,7 +54,9 @@ export type OperatorAssignment = {
   cooperative: Cooperative;
 } & (
   | {
-      vehicle: OperatorVehicle & { vehicle_type: Exclude<VehicleType, "tricy"> };
+      vehicle: OperatorVehicle & {
+        vehicle_type: Exclude<VehicleType, "tricy">;
+      };
       routeId: string;
     }
   | {

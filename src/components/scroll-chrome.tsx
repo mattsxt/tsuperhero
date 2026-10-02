@@ -1,6 +1,11 @@
 import { useState, type ReactNode } from "react";
-import { StyleSheet, type LayoutChangeEvent } from "react-native";
+import {
+  StyleSheet,
+  type LayoutChangeEvent,
+  type TextStyle,
+} from "react-native";
 import Animated, {
+  type CSSTransitionProperties,
   FadeIn,
   FadeOut,
   LinearTransition,
@@ -16,6 +21,11 @@ const directionThreshold = 6;
 
 export const chromeDuration = 250;
 export const headerLayoutTransition = LinearTransition.duration(chromeDuration);
+export const headerTitleTransition: CSSTransitionProperties<TextStyle> = {
+  transitionProperty: ["fontSize", "lineHeight"],
+  transitionDuration: chromeDuration,
+  transitionTimingFunction: "ease-in-out",
+};
 export const headerFadeIn = FadeIn.duration(chromeDuration);
 export const headerFadeOut = FadeOut.duration(150);
 

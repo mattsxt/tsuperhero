@@ -23,6 +23,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   ExpandedOnly,
   headerLayoutTransition,
+  headerTitleTransition,
 } from "@/components/scroll-chrome";
 
 export const moduleColors = {
@@ -36,14 +37,15 @@ export const moduleColors = {
 
 const { brandBlue, headerBlue, softBlue, mutedText } = moduleColors;
 
-export type Vehicle = "bus" | "jeep" | "tricy" | "van";
+export type Vehicle = "jeep" | "tricy";
 
-export const vehicleOptions: {
-  value: Vehicle;
+export type VehicleOption<T extends string = Vehicle> = {
+  value: T;
   label: string;
   icon: number;
-}[] = [
-  { value: "bus", label: "BUS", icon: require("@/assets/images/bus.svg") },
+};
+
+export const vehicleOptions: VehicleOption[] = [
   {
     value: "jeep",
     label: "JEEP",
@@ -54,7 +56,6 @@ export const vehicleOptions: {
     label: "TRICY",
     icon: require("@/assets/images/tricycle.svg"),
   },
-  { value: "van", label: "VAN", icon: require("@/assets/images/van.svg") },
 ];
 
 export const tileTransition: CSSTransitionProperties = {
@@ -106,12 +107,16 @@ export function ModuleHeader({
           <ChevronLeft color="#ffffff" size={22} strokeWidth={2.5} />
         </Pressable>
         <View style={styles.headerText}>
-          <Text
-            style={[styles.title, collapsed && styles.titleCollapsed]}
+          <Animated.Text
+            style={[
+              styles.title,
+              collapsed && styles.titleCollapsed,
+              headerTitleTransition,
+            ]}
             numberOfLines={collapsed ? 1 : undefined}
           >
             {title}
-          </Text>
+          </Animated.Text>
           <ExpandedOnly collapsed={collapsed}>
             <Text style={styles.subtitle}>{subtitle}</Text>
           </ExpandedOnly>
@@ -177,14 +182,14 @@ export function FieldLabel({ children }: { children: string }) {
   return <Text style={styles.fieldLabel}>{children}</Text>;
 }
 
-export function VehiclePicker({
+export function VehiclePicker<T extends string = Vehicle>({
   value,
   onChange,
-  options = vehicleOptions,
+  options = vehicleOptions as VehicleOption<T>[],
 }: {
-  value: Vehicle;
-  onChange: (vehicle: Vehicle) => void;
-  options?: typeof vehicleOptions;
+  value: T;
+  onChange: (vehicle: T) => void;
+  options?: VehicleOption<T>[];
 }) {
   return (
     <View style={styles.vehicleRow}>
@@ -300,18 +305,20 @@ export function Chip({
   selected,
   onPress,
   grow,
+  style,
 }: {
   label: string;
   selected: boolean;
   onPress: () => void;
   grow?: boolean;
+  style?: StyleProp<ViewStyle>;
 }) {
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityState={{ selected }}
       onPress={onPress}
-      style={grow && styles.grow}
+      style={[grow && styles.grow, style]}
     >
       <Animated.View
         style={[styles.chip, selected && styles.chipSelected, chipTransition]}
@@ -449,7 +456,7 @@ const styles = StyleSheet.create({
   vehicleOption: { flex: 1 },
   vehicleTile: {
     width: "100%",
-    aspectRatio: 1,
+    height: 88,
     alignItems: "center",
     justifyContent: "center",
     gap: 6,

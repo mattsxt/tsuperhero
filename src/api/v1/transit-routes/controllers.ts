@@ -1,3 +1,5 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
 import { attempt, unwrap, type Result } from "@/api/v1/result";
 import {
   routeTableRoutes,
@@ -5,10 +7,11 @@ import {
   type LatLng,
   type RouteRow,
 } from "@/api/v1/transit-routes/routes";
+import { getPairDistanceMeters } from "@/utils/geo";
 
 export type { LatLng };
 
-export type VehicleType = "bus" | "jeep" | "tricy" | "van";
+export type VehicleType = "jeep" | "tricy";
 
 export type TransitRoute = {
   id: string;
@@ -48,10 +51,8 @@ export type MapBounds = {
 };
 
 export const vehicleTypeLabels: Record<VehicleType, string> = {
-  bus: "Bus",
   jeep: "Jeepney",
   tricy: "Tricycle",
-  van: "Van",
 };
 
 let transitRoutes: TransitRoute[] = [];
@@ -91,7 +92,8 @@ function parseAlternativePaths(paths: unknown): LatLng[][] {
 
 export function loadTransitRoutes(): Promise<Result<TransitRoute[]>> {
   routesRequest ??= attempt(async () => {
-    const rows: RouteRow[] = (await unwrap(routeTableRoutes.listRoutes())) ?? [];
+    const rows: RouteRow[] =
+      (await unwrap(routeTableRoutes.listRoutes())) ?? [];
     transitRoutes = rows.map((row) => ({
       id: row.route_id,
       name: row.route_name,
@@ -138,7 +140,9 @@ export function searchDestinations(query: string): DestinationResults {
   const matches = (value: string) => value.toLowerCase().includes(needle);
 
   const matchingTerminals = terminals
-    .filter((terminal) => !needle || matches(terminal.name) || matches(terminal.city))
+    .filter(
+      (terminal) => !needle || matches(terminal.name) || matches(terminal.city),
+    )
     .map((terminal) => ({
       ...terminal,
       routes: transitRoutes.filter((route) =>
@@ -165,10 +169,8 @@ export function isInBounds(
 }
 
 export const vehicleMaxCapacity: Record<VehicleType, number> = {
-  bus: 50,
   jeep: 24,
   tricy: 6,
-  van: 14,
 };
 
 export function getOccupancyLevel(current: number, max: number) {
@@ -179,20 +181,41 @@ export function getOccupancyLevel(current: number, max: number) {
   return "Available";
 }
 
-function distanceMeters([fromLat, fromLng]: LatLng, [toLat, toLng]: LatLng) {
-  const radians = (degrees: number) => (degrees * Math.PI) / 180;
-  const a =
-    Math.sin(radians(toLat - fromLat) / 2) ** 2 +
-    Math.cos(radians(fromLat)) *
-      Math.cos(radians(toLat)) *
-      Math.sin(radians(toLng - fromLng) / 2) ** 2;
-  return 2 * 6_371_000 * Math.asin(Math.sqrt(a));
-}
-
 const isDetour = (roadMeters: number, straightMeters: number) =>
   roadMeters > straightMeters * 1.6 + 60;
 
-async function followRoads(points: LatLng[]): Promise<LatLng[]> {
+const roadCache = new Map<string, Promise<LatLng[]>>();
+
+function getRoadCacheKey(points: LatLng[]) {
+  let hash = 5381;
+  for (const character of JSON.stringify(points)) {
+    hash = ((hash << 5) + hash + character.charCodeAt(0)) | 0;
+  }
+  return `road-geometry:v1:${points.length}:${hash}`;
+}
+
+function followRoads(points: LatLng[]): Promise<LatLng[]> {
+  const key = getRoadCacheKey(points);
+  const cached = roadCache.get(key);
+  if (cached) return cached;
+
+  const request = (async () => {
+    const stored = await AsyncStorage.getItem(key).catch(() => null);
+    if (stored) return JSON.parse(stored) as LatLng[];
+
+    const roads = await requestRoads(points);
+    if (roads) {
+      AsyncStorage.setItem(key, JSON.stringify(roads)).catch(() => {});
+      return roads;
+    }
+    roadCache.delete(key);
+    return points;
+  })();
+  roadCache.set(key, request);
+  return request;
+}
+
+async function requestRoads(points: LatLng[]): Promise<LatLng[] | null> {
   try {
     const response = await transitRouteApi.drivingRoute(points);
     const legs = response.routes?.[0]?.legs;
@@ -206,7 +229,7 @@ async function followRoads(points: LatLng[]): Promise<LatLng[]> {
         !coordinates?.length ||
         isDetour(
           leg.distanceMeters ?? 0,
-          distanceMeters(straight[0], straight[1]),
+          getPairDistanceMeters(straight[0], straight[1]),
         )
       ) {
         return straight;
@@ -214,7 +237,7 @@ async function followRoads(points: LatLng[]): Promise<LatLng[]> {
       return coordinates.map(([lng, lat]): LatLng => [lat, lng]);
     });
   } catch {
-    return points;
+    return null;
   }
 }
 
@@ -250,4 +273,3 @@ export function pointAlong(path: LatLng[], fraction: number): LatLng {
   }
   return path[0];
 }
-

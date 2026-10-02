@@ -3,12 +3,8 @@ export type WaitingAreaRow = {
   name: string;
   lat: number;
   lng: number;
-  route_id: string | null;
+  route_id?: string | null;
+  type?: string | null;
   vicinity?: string | null;
-  route?: {
-    route_name: string;
-    route_code: string;
-    vicinity: string[] | null;
-  } | null;
   is_active: boolean;
 };

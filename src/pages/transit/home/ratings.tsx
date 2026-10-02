@@ -2,10 +2,8 @@ import Star from "lucide-react-native/icons/star";
 import { StyleSheet, Text, View } from "react-native";
 
 import { homeColors } from "@/components/home-ui";
-import {
-  getInitials,
-  type CommuterRating,
-} from "@/pages/transit/types";
+import type { CommuterRating } from "@/pages/transit/types";
+import { getInitials } from "@/utils/format";
 
 const { brandBlue, mutedText, cardBorder, cardEdgeBlue } = homeColors;
 const starColor = "#f5b301";
@@ -44,7 +42,9 @@ export function RatingsCard({
                   <View
                     style={[
                       styles.barFill,
-                      { width: `${(count / Math.max(ratings.length, 1)) * 100}%` },
+                      {
+                        width: `${(count / Math.max(ratings.length, 1)) * 100}%`,
+                      },
                     ]}
                   />
                 </View>

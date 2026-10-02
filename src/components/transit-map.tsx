@@ -15,12 +15,13 @@ export type TransitMapState = {
     lat: number;
     lng: number;
     tag?: string | null;
+    kind?: "stop" | "terminal";
   }[];
   vehicles: { id: string; lat: number; lng: number; type: string }[];
   terminals: { id: string; name: string; lat: number; lng: number }[];
   highlightedTerminalId: string | null;
   selectedId: string | null;
-  focus: { key: number; lat: number; lng: number } | null;
+  focus: { key: number; lat: number; lng: number; zoom?: number } | null;
   padTop: number;
   padBottom: number;
   pickups?: { id: string; lat: number; lng: number }[];
@@ -120,12 +121,9 @@ const mapHtml = `<!DOCTYPE html>
     padding: 2px 7px; border-radius: 999px;
     background: #e3ecfb; color: #193caf; font: bold 9px sans-serif;
   }
-  .pickup {
-    width: 22px; height: 22px; box-sizing: border-box; margin-bottom: 4px;
-    border-radius: 50% 50% 50% 0; transform: rotate(-45deg);
-    background: #ffffff; border: 4px solid #c81e1e;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35);
-  }
+  .waiting.hub .waiting-icon { border-radius: 6px; background: #193caf; }
+  .waiting.hub .waiting-label { color: #193caf; }
+  .pickup { line-height: 0; filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.35)); }
 </style>
 </head>
 <body>
@@ -133,7 +131,7 @@ const mapHtml = `<!DOCTYPE html>
 <script>
   var ICONS = ${JSON.stringify(vehicleIconUris)};
   var API_KEY = ${JSON.stringify(googleMapsApiKey ?? "")};
-  var TERMINAL_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22V4a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v18"/><path d="M4 22h16"/><path d="M9 7h6M9 11h6M9 15h6"/></svg>';
+  var TERMINAL_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6v6M15 6v6M2 12h19.6M18 18h3s.5-1.7.8-2.8c.1-.4.2-.8.2-1.2 0-.4-.1-.8-.2-1.2l-1.4-5C20.1 6.8 19.1 6 18 6H4a2 2 0 0 0-2 2v10h3"/><circle cx="7" cy="18" r="2"/><path d="M9 18h5"/><circle cx="16" cy="18" r="2"/></svg>';
   var map = null;
   var routeLine = null;
   var alternativeLines = [];
@@ -142,6 +140,7 @@ const mapHtml = `<!DOCTYPE html>
   var waitingMarkers = [];
   var lastWaitingKey = "";
   var WAITING_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2"/><path d="M12 8v7M9 22l3-7 3 7M8 12h8"/></svg>';
+  var MAP_PIN_SVG = '<svg width="32" height="32" viewBox="0 0 24 24" fill="#c81e1e" stroke="#c81e1e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3" fill="#ffffff" stroke="none"/></svg>';
   var lastRouteId = null;
   var lastFocusKey = null;
   var pickupMarkers = [];
@@ -201,6 +200,7 @@ const mapHtml = `<!DOCTYPE html>
 
     if (state.focus && state.focus.key !== lastFocusKey) {
       map.panTo({ lat: state.focus.lat, lng: state.focus.lng });
+      if (state.focus.zoom) map.setZoom(state.focus.zoom);
     }
     lastFocusKey = state.focus ? state.focus.key : null;
   }
@@ -226,6 +226,7 @@ const mapHtml = `<!DOCTYPE html>
     (state.pickups || []).forEach(function (pickup) {
       var content = document.createElement("div");
       content.className = "pickup";
+      content.innerHTML = MAP_PIN_SVG;
       pickupMarkers.push(new google.maps.marker.AdvancedMarkerElement({
         map: map, position: { lat: pickup.lat, lng: pickup.lng }, content: content, zIndex: 800
       }));
@@ -241,14 +242,15 @@ const mapHtml = `<!DOCTYPE html>
 
   function applyWaitingAreas(state) {
     var areas = state.waitingAreas || [];
-    var key = areas.map(function (area) { return area.id + ":" + (area.tag || ""); }).join(",");
+    var key = areas.map(function (area) { return area.id + ":" + (area.tag || "") + ":" + (area.kind || ""); }).join(",");
     if (key === lastWaitingKey) return;
     lastWaitingKey = key;
     waitingMarkers.forEach(function (entry) { entry.marker.map = null; });
     waitingMarkers = areas.map(function (area) {
       var content = document.createElement("div");
-      content.className = "waiting";
-      content.innerHTML = '<div class="waiting-icon">' + WAITING_SVG + '</div><div class="waiting-label"><span></span></div>';
+      var terminal = area.kind === "terminal";
+      content.className = "waiting" + (terminal ? " hub" : "");
+      content.innerHTML = '<div class="waiting-icon">' + (terminal ? TERMINAL_SVG : WAITING_SVG) + '</div><div class="waiting-label"><span></span></div>';
       content.lastChild.firstChild.textContent = area.name;
       if (area.tag) {
         var tag = document.createElement("span");
@@ -257,9 +259,9 @@ const mapHtml = `<!DOCTYPE html>
         content.lastChild.appendChild(tag);
       }
       var marker = new google.maps.marker.AdvancedMarkerElement({
-        map: map, position: { lat: area.lat, lng: area.lng }, content: content, zIndex: 600
+        map: map, position: { lat: area.lat, lng: area.lng }, content: content, zIndex: terminal ? 650 : 600
       });
-      var entry = { marker: marker, content: content };
+      var entry = { marker: marker, content: content, zIndex: terminal ? 650 : 600 };
       marker.addListener("click", function () {
         var open = !content.classList.contains("open");
         closeWaitingAreas();
@@ -277,7 +279,7 @@ const mapHtml = `<!DOCTYPE html>
   function closeWaitingAreas() {
     waitingMarkers.forEach(function (entry) {
       entry.content.classList.remove("open");
-      entry.marker.zIndex = 600;
+      entry.marker.zIndex = entry.zIndex;
     });
     updatePinFocus();
   }

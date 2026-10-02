@@ -1,5 +1,4 @@
 import { Image } from "expo-image";
-import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import Check from "lucide-react-native/icons/check";
 import CircleAlert from "lucide-react-native/icons/circle-alert";
@@ -35,6 +34,7 @@ import { EmptyState } from "@/components/empty-state";
 import { ModuleHeader, vehicleOptions } from "@/components/module-ui";
 import { TransitMap, type TransitMapState } from "@/components/transit-map";
 import { Routes } from "@/constants/routes";
+import { goBackOr } from "@/utils/navigation";
 
 const panelNavy = "#1d3354";
 const routeCyan = "#7fd4f7";
@@ -84,7 +84,10 @@ function areaLoop(center: LatLng, radiusMeters: number): LatLng[] {
   const lngRadius = latRadius / Math.cos((lat * Math.PI) / 180);
   return Array.from({ length: 25 }, (_, index) => {
     const angle = (index / 24) * Math.PI * 2;
-    return [lat + latRadius * Math.sin(angle), lng + lngRadius * Math.cos(angle)];
+    return [
+      lat + latRadius * Math.sin(angle),
+      lng + lngRadius * Math.cos(angle),
+    ];
   });
 }
 
@@ -120,11 +123,7 @@ export default function TripScreen() {
           title="Trip"
           subtitle="Start a trip and track your passengers along your route."
           icon={<MapPin color="#ffffff" size={44} strokeWidth={1.8} />}
-          onBack={() =>
-            router.canGoBack()
-              ? router.back()
-              : router.replace(Routes.transitHome)
-          }
+          onBack={() => goBackOr(Routes.transitHome)}
         />
         <EmptyState
           icon={<BusFront color={circleNavy} size={32} strokeWidth={1.8} />}
@@ -220,8 +219,7 @@ function Trip({ details }: { details: AssignmentDetails }) {
       setToast(nextToast("Stop the trip before leaving.", "danger", "left"));
       return;
     }
-    if (router.canGoBack()) router.back();
-    else router.replace(Routes.transitHome);
+    goBackOr(Routes.transitHome);
   };
 
   useEffect(() => {
@@ -240,7 +238,8 @@ function Trip({ details }: { details: AssignmentDetails }) {
     if (count >= capacity) return;
     const next = count + 1;
     setCount(next);
-    if (next >= capacity) setToast(nextToast("Vehicle is Full!", "danger", "left"));
+    if (next >= capacity)
+      setToast(nextToast("Vehicle is Full!", "danger", "left"));
   };
 
   const removePassenger = () => {
@@ -308,13 +307,28 @@ function Trip({ details }: { details: AssignmentDetails }) {
       selectedId: null,
       focus: null,
       pickups: pickup
-        ? [{ id: `pickup-${pickup.id}`, lat: pickup.position[0], lng: pickup.position[1] }]
+        ? [
+            {
+              id: `pickup-${pickup.id}`,
+              lat: pickup.position[0],
+              lng: pickup.position[1],
+            },
+          ]
         : [],
       pickupLine: pickup?.accepted ? [position, pickup.position] : null,
       padTop: headerHeight + 30,
       padBottom: panelHeight + 30,
     }),
-    [route, routePath, area, position, vehicle, pickup, headerHeight, panelHeight],
+    [
+      route,
+      routePath,
+      area,
+      position,
+      vehicle,
+      pickup,
+      headerHeight,
+      panelHeight,
+    ],
   );
 
   const occupancy = markedFull ? "Full" : getOccupancyLevel(count, capacity);
@@ -387,7 +401,9 @@ function Trip({ details }: { details: AssignmentDetails }) {
             size={13}
             strokeWidth={2.5}
           />
-          <Text style={[styles.toastText, { color: toastTones[toast.tone].color }]}>
+          <Text
+            style={[styles.toastText, { color: toastTones[toast.tone].color }]}
+          >
             {toast.text}
           </Text>
           {toast.dismissible && (

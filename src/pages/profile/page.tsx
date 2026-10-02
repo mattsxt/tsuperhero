@@ -28,6 +28,7 @@ import { BottomNav, bottomNavHeight } from "@/components/bottom-nav";
 import {
   ExpandedOnly,
   headerLayoutTransition,
+  headerTitleTransition,
   StickyHeader,
   useScrollChrome,
 } from "@/components/scroll-chrome";
@@ -191,11 +192,15 @@ export default function ProfileScreen() {
               { paddingTop: insets.top + (chrome.collapsed ? 10 : 16) },
             ]}
           >
-            <Text
-              style={[styles.title, chrome.collapsed && styles.titleCollapsed]}
+            <Animated.Text
+              style={[
+                styles.title,
+                chrome.collapsed && styles.titleCollapsed,
+                headerTitleTransition,
+              ]}
             >
               User Profile and Actions
-            </Text>
+            </Animated.Text>
             <ExpandedOnly collapsed={chrome.collapsed}>
               <Text style={styles.subtitle}>
                 Manage your own profile and settings

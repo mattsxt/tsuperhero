@@ -144,7 +144,9 @@ export async function getCurrentPlace(): Promise<Result<Place>> {
     }
 
     if (!(await Location.hasServicesEnabledAsync())) {
-      return failure("Turn on Location in your device settings, then try again.");
+      return failure(
+        "Turn on Location in your device settings, then try again.",
+      );
     }
 
     const position = await getPosition();

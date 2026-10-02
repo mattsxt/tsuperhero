@@ -28,7 +28,11 @@ export function EmptyState({
 }
 
 const styles = StyleSheet.create({
-  container: { alignItems: "center", paddingVertical: 36, paddingHorizontal: 28 },
+  container: {
+    alignItems: "center",
+    paddingVertical: 36,
+    paddingHorizontal: 28,
+  },
   icon: {
     width: 68,
     height: 68,

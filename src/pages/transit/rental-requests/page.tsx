@@ -1,4 +1,3 @@
-import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import CalendarDays from "lucide-react-native/icons/calendar-days";
 import Check from "lucide-react-native/icons/check";
@@ -16,13 +15,12 @@ import { vehicleTypeLabels } from "@/api/v1/transit-routes/controllers";
 import { EmptyState } from "@/components/empty-state";
 import { MiniToast, type MiniToastMessage } from "@/components/mini-toast";
 import { Chip, ModuleHeader, moduleColors } from "@/components/module-ui";
+import { RouteTimeline } from "@/components/route-timeline";
 import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
-import {
-  getInitials,
-  type RentalRequest,
-  type RentalStatus,
-} from "@/pages/transit/types";
+import { type RentalRequest, type RentalStatus } from "@/pages/transit/types";
+import { getInitials } from "@/utils/format";
+import { goBackOr } from "@/utils/navigation";
 
 const { brandBlue, softBlue, mutedText, text, error } = moduleColors;
 const success = "#1e9e45";
@@ -68,10 +66,7 @@ export default function RentalRequestsScreen() {
     }));
   };
 
-  const goBack = () => {
-    if (router.canGoBack()) router.back();
-    else router.replace(Routes.transitHome);
-  };
+  const goBack = () => goBackOr(Routes.transitHome);
 
   return (
     <View style={styles.screen}>
@@ -179,11 +174,7 @@ function RequestCard({
       </View>
 
       <View style={styles.stops}>
-        <View style={styles.timeline}>
-          <View style={styles.timelineStart} />
-          <View style={styles.timelineLine} />
-          <View style={styles.timelineEnd} />
-        </View>
+        <RouteTimeline stretch={false} />
         <View style={styles.stopText}>
           <View>
             <Text style={styles.city}>{request.pickup.city}</Text>
@@ -217,7 +208,6 @@ function RequestCard({
           <Text style={styles.notesText}>{request.notes}</Text>
         </View>
       )}
-
 
       {request.status === "pending" &&
         (confirmingDecline ? (
@@ -345,22 +335,6 @@ const styles = StyleSheet.create({
   badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4 },
   badgeText: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 9 },
   stops: { flexDirection: "row", marginTop: 14 },
-  timeline: { alignItems: "center", paddingVertical: 4 },
-  timelineStart: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: brandBlue,
-  },
-  timelineLine: { flex: 1, width: 2, backgroundColor: brandBlue },
-  timelineEnd: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: brandBlue,
-    backgroundColor: "#ffffff",
-  },
   stopText: { flex: 1, gap: 12, marginLeft: 12 },
   city: { color: brandBlue, fontFamily: "SoraBold", fontSize: 11 },
   place: { color: mutedText, fontFamily: "Sora", fontSize: 9, marginTop: 2 },

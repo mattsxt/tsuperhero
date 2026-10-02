@@ -1,5 +1,5 @@
 import { Image } from "expo-image";
-import { router, useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import Bus from "lucide-react-native/icons/bus";
 import ChevronsDown from "lucide-react-native/icons/chevrons-down";
@@ -52,6 +52,7 @@ import {
 import { TransitMap, type TransitMapState } from "@/components/transit-map";
 import { Routes } from "@/constants/routes";
 import { useTransitRoutes } from "@/hooks/use-transit-routes";
+import { goBackOr } from "@/utils/navigation";
 
 const { brandBlue, headerBlue, mutedText, softBlue, text } = moduleColors;
 const cardNavy = "#0f2a5c";
@@ -59,7 +60,7 @@ const lightBlue = "#a8dcf7";
 
 const activeVehicles: RouteVehicle[] = [];
 
-const allTypes: VehicleType[] = ["bus", "jeep", "tricy", "van"];
+const allTypes: VehicleType[] = ["jeep", "tricy"];
 
 const vehicleIcons = Object.fromEntries(
   vehicleOptions.map((option) => [option.value, option.icon]),
@@ -153,12 +154,14 @@ export default function RoutesScreen() {
   const routeWaitingAreas = useMemo(
     () =>
       routeId && path
-        ? findWaitingAreasOnRoute(waitingAreas, routeId, [
-            path,
-            ...alternativePaths,
-          ])
+        ? findWaitingAreasOnRoute(
+            waitingAreas,
+            routeId,
+            [path, ...alternativePaths],
+            route?.vicinity,
+          )
         : [],
-    [waitingAreas, routeId, path, alternativePaths],
+    [waitingAreas, routeId, path, alternativePaths, route],
   );
 
   const vehicles = activeVehicles;
@@ -181,15 +184,18 @@ export default function RoutesScreen() {
       routeId,
       route: path,
       alternativeRoutes: alternativePaths,
-      waitingAreas: showWaitingAreas
-        ? routeWaitingAreas.map(({ id, name, lat, lng, vicinity }) => ({
-            id,
-            name,
-            lat,
-            lng,
-            tag: findVicinity(route?.vicinity ?? [], vicinity),
-          }))
-        : [],
+      waitingAreas: routeWaitingAreas
+        .filter(({ type }) =>
+          type === "terminal" ? showTerminals : showWaitingAreas,
+        )
+        .map(({ id, name, lat, lng, vicinity, type }) => ({
+          id,
+          name,
+          lat,
+          lng,
+          tag: findVicinity(route?.vicinity ?? [], vicinity),
+          kind: type,
+        })),
       vehicles: visibleVehicles.map(({ id, lat, lng, type }) => ({
         id,
         lat,
@@ -279,10 +285,7 @@ export default function RoutesScreen() {
     }));
   };
 
-  const goBack = () => {
-    if (router.canGoBack()) router.back();
-    else router.replace(Routes.commuterHome);
-  };
+  const goBack = () => goBackOr(Routes.commuterHome);
 
   const showVehicleList =
     !!route && !loadingRoute && !pickerOpen && panelExpanded;

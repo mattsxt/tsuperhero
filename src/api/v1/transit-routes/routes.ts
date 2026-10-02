@@ -34,10 +34,7 @@ export type RouteRow = {
 const routesTable = () => getSupabaseClient().from("routes");
 
 export const routeTableRoutes = {
-  listRoutes: () =>
-    routesTable()
-      .select("*")
-      .order("route_name"),
+  listRoutes: () => routesTable().select("*").order("route_name"),
 };
 
 export const transitRouteApi = {
