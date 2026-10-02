@@ -27,6 +27,7 @@ import {
   type TransitRoute,
 } from "@/api/v1/transit-routes/controllers";
 import { Routes } from "@/constants/routes";
+import { useTransitRoutes } from "@/hooks/use-transit-routes";
 
 const brandBlue = "#193caf";
 const softBlue = "#e3ecfb";
@@ -110,6 +111,7 @@ export function DestinationSearchPanel({
     return () => subscription.remove();
   }, [onClose]);
 
+  useTransitRoutes();
   const results = searchDestinations(query);
 
   const availableHeight =

@@ -1,11 +1,8 @@
 import { useSyncExternalStore } from "react";
 
-import {
-  getSampleNotifications,
-  type AppNotification,
-} from "@/api/v1/notifications/controllers";
+import type { AppNotification } from "@/api/v1/notifications/controllers";
 
-let notifications: AppNotification[] = getSampleNotifications();
+let notifications: AppNotification[] = [];
 const listeners = new Set<() => void>();
 
 function setNotifications(

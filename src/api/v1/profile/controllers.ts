@@ -194,11 +194,7 @@ export type ProfileForm = {
 };
 
 export type ProfileFormField =
-  | "firstName"
-  | "lastName"
-  | "birthdate"
-  | "gender"
-  | "contact";
+  "firstName" | "lastName" | "birthdate" | "gender" | "contact";
 
 export type ProfileFormErrors = Partial<Record<ProfileFormField, string>>;
 
@@ -218,11 +214,7 @@ export async function submitProfile(
     fieldErrors.contact = `Enter ${contactLength} digits.`;
   }
 
-  if (
-    Object.keys(fieldErrors).length > 0 ||
-    !form.birthdate ||
-    !form.gender
-  ) {
+  if (Object.keys(fieldErrors).length > 0 || !form.birthdate || !form.gender) {
     return { ...failure("Please complete the form."), fieldErrors };
   }
 

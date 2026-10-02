@@ -1,11 +1,15 @@
 import { Image } from "expo-image";
-import { router, useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import Bus from "lucide-react-native/icons/bus";
+import ChevronsDown from "lucide-react-native/icons/chevrons-down";
+import ChevronsUp from "lucide-react-native/icons/chevrons-up";
 import MapPin from "lucide-react-native/icons/map-pin";
 import Navigation from "lucide-react-native/icons/navigation";
+import PersonStanding from "lucide-react-native/icons/person-standing";
 import Search from "lucide-react-native/icons/search";
 import X from "lucide-react-native/icons/x";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
   Keyboard,
@@ -16,7 +20,9 @@ import {
   TextInput,
   View,
 } from "react-native";
-import Animated from "react-native-reanimated";
+import Animated, {
+  type CSSTransitionProperties,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
@@ -24,11 +30,9 @@ import {
   findTerminal,
   getOccupancyLevel,
   getRouteTerminals,
-  getRouteVehicles,
   isInBounds,
+  loadAlternativeGeometry,
   loadRouteGeometry,
-  transitRoutes,
-  vehicleTickMs,
   vehicleTypeLabels,
   type LatLng,
   type MapBounds,
@@ -36,22 +40,43 @@ import {
   type VehicleType,
 } from "@/api/v1/transit-routes/controllers";
 import {
+  findWaitingAreasOnRoute,
+  loadWaitingAreas,
+  type WaitingArea,
+} from "@/api/v1/waiting-areas/controllers";
+import {
   ModuleHeader,
   moduleColors,
-  tileTransition,
   vehicleOptions,
 } from "@/components/module-ui";
 import { TransitMap, type TransitMapState } from "@/components/transit-map";
 import { Routes } from "@/constants/routes";
+import { useTransitRoutes } from "@/hooks/use-transit-routes";
+import { goBackOr } from "@/utils/navigation";
 
 const { brandBlue, headerBlue, mutedText, softBlue, text } = moduleColors;
 const cardNavy = "#0f2a5c";
+const lightBlue = "#a8dcf7";
 
-const allTypes: VehicleType[] = ["bus", "jeep", "tricy", "van"];
+const activeVehicles: RouteVehicle[] = [];
+
+const allTypes: VehicleType[] = ["jeep", "tricy"];
 
 const vehicleIcons = Object.fromEntries(
   vehicleOptions.map((option) => [option.value, option.icon]),
 ) as Record<VehicleType, number>;
+
+const chipTransition: CSSTransitionProperties = {
+  transitionProperty: ["backgroundColor", "transform", "opacity"],
+  transitionDuration: 250,
+  transitionTimingFunction: "ease-in-out",
+};
+
+const slideTransition: CSSTransitionProperties = {
+  transitionProperty: ["maxHeight", "opacity", "marginBottom"],
+  transitionDuration: 320,
+  transitionTimingFunction: "ease-in-out",
+};
 
 const occupancyColors: Record<string, string> = {
   Available: "#1e9e45",
@@ -60,29 +85,40 @@ const occupancyColors: Record<string, string> = {
   Full: "#d93025",
 };
 
+function findVicinity(routeVicinity: string[], vicinity: string | null) {
+  if (!vicinity) return null;
+  const needle = vicinity.toLowerCase();
+  return (
+    routeVicinity.find((option) => option.toLowerCase() === needle) ?? vicinity
+  );
+}
+
 export default function RoutesScreen() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{
     routeId?: string;
     terminalId?: string;
   }>();
+  const transitRoutes = useTransitRoutes();
   const initialRoute = findRoute(params.routeId);
 
   const [headerHeight, setHeaderHeight] = useState(140);
   const [panelHeight, setPanelHeight] = useState(insets.bottom + 84);
-  const [routeId, setRouteId] = useState<string | null>(
-    initialRoute?.id ?? null,
-  );
+  const [routeId, setRouteId] = useState<string | null>(params.routeId ?? null);
   const [terminalId, setTerminalId] = useState<string | null>(
-    initialRoute ? (findTerminal(params.terminalId)?.id ?? null) : null,
+    params.routeId ? (findTerminal(params.terminalId)?.id ?? null) : null,
   );
   const [path, setPath] = useState<LatLng[] | null>(null);
-  const [loadingRoute, setLoadingRoute] = useState(!!initialRoute);
+  const [alternativePaths, setAlternativePaths] = useState<LatLng[][]>([]);
+  const [waitingAreas, setWaitingAreas] = useState<WaitingArea[]>([]);
+  const [loadingRoute, setLoadingRoute] = useState(!!params.routeId);
   const [activeTypes, setActiveTypes] = useState<VehicleType[]>(allTypes);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState(initialRoute?.name ?? "");
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [now, setNow] = useState(() => Date.now());
+  const [panelExpanded, setPanelExpanded] = useState(false);
+  const [showTerminals, setShowTerminals] = useState(true);
+  const [showWaitingAreas, setShowWaitingAreas] = useState(true);
   const [bounds, setBounds] = useState<MapBounds | null>(null);
   const [focus, setFocus] = useState<TransitMapState["focus"]>(null);
 
@@ -91,8 +127,12 @@ export default function RoutesScreen() {
   useEffect(() => {
     if (!route) return;
     let active = true;
-    loadRouteGeometry(route).then((geometry) => {
+    Promise.all([
+      loadRouteGeometry(route),
+      loadAlternativeGeometry(route),
+    ]).then(([geometry, alternatives]) => {
       if (!active) return;
+      setAlternativePaths(alternatives);
       setPath(geometry);
       setLoadingRoute(false);
     });
@@ -102,15 +142,29 @@ export default function RoutesScreen() {
   }, [route]);
 
   useEffect(() => {
-    if (!routeId) return;
-    const timer = setInterval(() => setNow(Date.now()), vehicleTickMs);
-    return () => clearInterval(timer);
-  }, [routeId]);
+    let active = true;
+    loadWaitingAreas().then((result) => {
+      if (active && result.ok) setWaitingAreas(result.data);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
-  const vehicles = useMemo(
-    () => (route && path ? getRouteVehicles(route, path, now) : []),
-    [route, path, now],
+  const routeWaitingAreas = useMemo(
+    () =>
+      routeId && path
+        ? findWaitingAreasOnRoute(
+            waitingAreas,
+            routeId,
+            [path, ...alternativePaths],
+            route?.vicinity,
+          )
+        : [],
+    [waitingAreas, routeId, path, alternativePaths, route],
   );
+
+  const vehicles = activeVehicles;
   const visibleVehicles = useMemo(
     () => vehicles.filter((vehicle) => activeTypes.includes(vehicle.type)),
     [vehicles, activeTypes],
@@ -129,18 +183,33 @@ export default function RoutesScreen() {
     () => ({
       routeId,
       route: path,
+      alternativeRoutes: alternativePaths,
+      waitingAreas: routeWaitingAreas
+        .filter(({ type }) =>
+          type === "terminal" ? showTerminals : showWaitingAreas,
+        )
+        .map(({ id, name, lat, lng, vicinity, type }) => ({
+          id,
+          name,
+          lat,
+          lng,
+          tag: findVicinity(route?.vicinity ?? [], vicinity),
+          kind: type,
+        })),
       vehicles: visibleVehicles.map(({ id, lat, lng, type }) => ({
         id,
         lat,
         lng,
         type,
       })),
-      terminals: routeTerminals.map(({ id, name, lat, lng }) => ({
-        id,
-        name,
-        lat,
-        lng,
-      })),
+      terminals: showTerminals
+        ? routeTerminals.map(({ id, name, lat, lng }) => ({
+            id,
+            name,
+            lat,
+            lng,
+          }))
+        : [],
       highlightedTerminalId: terminalId,
       selectedId: selected?.id ?? null,
       focus,
@@ -150,8 +219,13 @@ export default function RoutesScreen() {
     [
       routeId,
       path,
+      alternativePaths,
+      route,
+      routeWaitingAreas,
+      showWaitingAreas,
       visibleVehicles,
       routeTerminals,
+      showTerminals,
       terminalId,
       selected,
       focus,
@@ -211,12 +285,10 @@ export default function RoutesScreen() {
     }));
   };
 
-  const goBack = () => {
-    if (router.canGoBack()) router.back();
-    else router.replace(Routes.commuterHome);
-  };
+  const goBack = () => goBackOr(Routes.commuterHome);
 
-  const showVehicleList = !!route && !loadingRoute && !pickerOpen;
+  const showVehicleList =
+    !!route && !loadingRoute && !pickerOpen && panelExpanded;
 
   return (
     <View style={styles.screen}>
@@ -238,6 +310,27 @@ export default function RoutesScreen() {
           onBack={goBack}
         />
       </View>
+
+      {route && (
+        <View style={[styles.layerFilters, { top: headerHeight + 12 }]}>
+          <FilterChip
+            label="Terminals"
+            text="Terminals"
+            active={showTerminals}
+            onPress={() => setShowTerminals((current) => !current)}
+          >
+            <Bus color="#000000" size={20} strokeWidth={2} />
+          </FilterChip>
+          <FilterChip
+            label="Waiting areas"
+            text="Waiting Areas"
+            active={showWaitingAreas}
+            onPress={() => setShowWaitingAreas((current) => !current)}
+          >
+            <PersonStanding color="#000000" size={20} strokeWidth={2} />
+          </FilterChip>
+        </View>
+      )}
 
       {selected && (
         <View style={[styles.infoCard, { top: headerHeight + 12 }]}>
@@ -272,58 +365,15 @@ export default function RoutesScreen() {
         </View>
       )}
 
-      {route && (
-        <View style={[styles.chipRow, { bottom: panelHeight + 12 }]}>
-          {loadingRoute ? (
-            <View style={styles.chip}>
-              <ActivityIndicator color="#ffffff" size="small" />
-              <Text style={styles.chipText}>Loading route...</Text>
-            </View>
-          ) : (
-            allTypes.map((type) => {
-              const active = activeTypes.includes(type);
-              return (
-                <Pressable
-                  key={type}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${vehicleTypeLabels[type]} vehicles`}
-                  accessibilityState={{ selected: active }}
-                  onPress={() => toggleType(type)}
-                >
-                  <Animated.View
-                    style={[
-                      styles.chip,
-                      active ? styles.chipActive : styles.chipInactive,
-                      { transform: [{ scale: active ? 1.05 : 1 }] },
-                      tileTransition,
-                    ]}
-                  >
-                    <View style={styles.chipIconBackdrop}>
-                      <Image
-                        source={vehicleIcons[type]}
-                        style={styles.chipIcon}
-                        tintColor="#000000"
-                        contentFit="contain"
-                      />
-                    </View>
-                    {active && (
-                      <Text style={styles.chipText}>
-                        {vehicleTypeLabels[type]}
-                      </Text>
-                    )}
-                  </Animated.View>
-                </Pressable>
-              );
-            })
-          )}
-        </View>
-      )}
-
       {pickerOpen && (
         <View style={[styles.picker, { bottom: panelHeight - 8 }]}>
           <ScrollView keyboardShouldPersistTaps="handled">
             {matchingRoutes.length === 0 ? (
-              <Text style={styles.pickerEmpty}>No routes found.</Text>
+              <Text style={styles.pickerEmpty}>
+                {transitRoutes.length === 0
+                  ? "Nothing to see here yet. Routes will show up here once they’re added."
+                  : "No routes found."}
+              </Text>
             ) : (
               matchingRoutes.map((option) => (
                 <Pressable
@@ -345,69 +395,170 @@ export default function RoutesScreen() {
         </View>
       )}
 
-      <View
-        style={[styles.bottomPanel, { paddingBottom: insets.bottom + 16 }]}
-        onLayout={(event) => setPanelHeight(event.nativeEvent.layout.height)}
-      >
-        {showVehicleList && (
-          <View style={styles.vehicleSection}>
-            <View style={styles.vehicleSectionHeader}>
-              <Text style={styles.vehicleSectionTitle}>Vehicles in view</Text>
-              <Text style={styles.vehicleSectionCount}>
-                {vehiclesInView.length} of {visibleVehicles.length} on route
-              </Text>
+      <View style={styles.bottomDock} pointerEvents="box-none">
+        {route && (
+          <View style={styles.chipRow}>
+            <View style={styles.chipGroup}>
+              {loadingRoute ? (
+                <View style={styles.chip}>
+                  <ActivityIndicator color="#ffffff" size="small" />
+                  <Text style={styles.chipText}>Loading route...</Text>
+                </View>
+              ) : (
+                allTypes.map((type) => {
+                  const active = activeTypes.includes(type);
+                  return (
+                    <FilterChip
+                      key={type}
+                      label={`${vehicleTypeLabels[type]} vehicles`}
+                      active={active}
+                      onPress={() => toggleType(type)}
+                    >
+                      <Image
+                        source={vehicleIcons[type]}
+                        style={styles.chipIcon}
+                        tintColor="#000000"
+                        contentFit="contain"
+                      />
+                    </FilterChip>
+                  );
+                })
+              )}
             </View>
-            {vehiclesInView.length === 0 ? (
-              <Text style={styles.vehicleEmpty}>
-                {visibleVehicles.length === 0
-                  ? "Turn on a vehicle type to see vehicles."
-                  : "No vehicles in view. Zoom out or pan along the route."}
-              </Text>
-            ) : (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.vehicleList}
+            {!loadingRoute && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={
+                  panelExpanded ? "Minimize vehicle list" : "Show vehicle list"
+                }
+                accessibilityState={{ expanded: panelExpanded }}
+                hitSlop={6}
+                onPress={() => setPanelExpanded((current) => !current)}
+                style={({ pressed }) => [
+                  styles.panelToggle,
+                  pressed && styles.pressed,
+                ]}
               >
-                {vehiclesInView.map((vehicle) => (
-                  <VehicleCard
-                    key={vehicle.id}
-                    vehicle={vehicle}
-                    selected={vehicle.id === selectedId}
-                    onPress={() => focusVehicle(vehicle)}
-                  />
-                ))}
-              </ScrollView>
+                {panelExpanded ? (
+                  <ChevronsDown color="#ffffff" size={20} strokeWidth={2.5} />
+                ) : (
+                  <ChevronsUp color="#ffffff" size={20} strokeWidth={2.5} />
+                )}
+              </Pressable>
             )}
           </View>
         )}
 
-        <View style={styles.searchPill}>
-          <Search color={mutedText} size={18} strokeWidth={2} />
-          <TextInput
-            value={query}
-            onChangeText={(value) => {
-              setQuery(value);
-              setPickerOpen(true);
-            }}
-            onFocus={() => setPickerOpen(true)}
-            placeholder="Select Routes"
-            placeholderTextColor={mutedText}
-            style={styles.searchInput}
-          />
-          {(query.length > 0 || route) && (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Clear route search"
-              hitSlop={8}
-              onPress={clearRoute}
+        <View
+          style={[styles.bottomPanel, { paddingBottom: insets.bottom + 16 }]}
+          onLayout={(event) => setPanelHeight(event.nativeEvent.layout.height)}
+        >
+          {!!route && (
+            <Animated.View
+              pointerEvents={showVehicleList ? "auto" : "none"}
+              style={[
+                styles.vehicleSection,
+                showVehicleList
+                  ? styles.vehicleSectionOpen
+                  : styles.vehicleSectionClosed,
+                slideTransition,
+              ]}
             >
-              <X color={mutedText} size={18} strokeWidth={2} />
-            </Pressable>
+              <View style={styles.vehicleSectionHeader}>
+                <Text style={styles.vehicleSectionTitle}>Vehicles in view</Text>
+                <Text style={styles.vehicleSectionCount}>
+                  {vehiclesInView.length} of {visibleVehicles.length} on route
+                </Text>
+              </View>
+              {vehiclesInView.length === 0 ? (
+                <Text style={styles.vehicleEmpty}>
+                  {vehicles.length === 0
+                    ? "Nothing to see here yet. Active vehicles on this route will show up here."
+                    : visibleVehicles.length === 0
+                      ? "Turn on a vehicle type to see vehicles."
+                      : "No vehicles in view. Zoom out or pan along the route."}
+                </Text>
+              ) : (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.vehicleList}
+                >
+                  {vehiclesInView.map((vehicle) => (
+                    <VehicleCard
+                      key={vehicle.id}
+                      vehicle={vehicle}
+                      selected={vehicle.id === selectedId}
+                      onPress={() => focusVehicle(vehicle)}
+                    />
+                  ))}
+                </ScrollView>
+              )}
+            </Animated.View>
           )}
+
+          <View style={styles.searchPill}>
+            <Search color={mutedText} size={18} strokeWidth={2} />
+            <TextInput
+              value={query}
+              onChangeText={(value) => {
+                setQuery(value);
+                setPickerOpen(true);
+              }}
+              onFocus={() => setPickerOpen(true)}
+              placeholder="Select Routes"
+              placeholderTextColor={mutedText}
+              style={styles.searchInput}
+            />
+            {(query.length > 0 || route) && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Clear route search"
+                hitSlop={8}
+                onPress={clearRoute}
+              >
+                <X color={mutedText} size={18} strokeWidth={2} />
+              </Pressable>
+            )}
+          </View>
         </View>
       </View>
     </View>
+  );
+}
+
+function FilterChip({
+  label,
+  text,
+  active,
+  onPress,
+  children,
+}: {
+  label: string;
+  text?: string;
+  active: boolean;
+  onPress: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ selected: active }}
+      onPress={onPress}
+    >
+      <Animated.View
+        style={[
+          styles.chip,
+          active ? styles.chipActive : styles.chipInactive,
+          { transform: [{ scale: active ? 1.05 : 1 }] },
+          chipTransition,
+        ]}
+      >
+        <View style={styles.chipIconBackdrop}>{children}</View>
+        {!!text && <Text style={styles.chipLabel}>{text}</Text>}
+      </Animated.View>
+    </Pressable>
   );
 }
 
@@ -420,10 +571,7 @@ function VehicleCard({
   selected: boolean;
   onPress: () => void;
 }) {
-  const level = getOccupancyLevel(
-    vehicle.currentCapacity,
-    vehicle.maxCapacity,
-  );
+  const level = getOccupancyLevel(vehicle.currentCapacity, vehicle.maxCapacity);
   const fill = Math.min(vehicle.currentCapacity / vehicle.maxCapacity, 1);
 
   return (
@@ -461,7 +609,10 @@ function VehicleCard({
         <View
           style={[
             styles.occupancyFill,
-            { width: `${fill * 100}%`, backgroundColor: occupancyColors[level] },
+            {
+              width: `${fill * 100}%`,
+              backgroundColor: occupancyColors[level],
+            },
           ]}
         />
       </View>
@@ -516,13 +667,28 @@ const styles = StyleSheet.create({
     fontSize: 9,
     lineHeight: 14,
   },
-  chipRow: {
+  layerFilters: {
     position: "absolute",
     left: 12,
-    right: 12,
     flexDirection: "row",
-    flexWrap: "wrap",
     gap: 8,
+  },
+  bottomDock: { position: "absolute", left: 0, right: 0, bottom: 0 },
+  chipRow: {
+    marginHorizontal: 12,
+    marginBottom: 12,
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 8,
+  },
+  chipGroup: { flex: 1, flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  panelToggle: {
+    width: 34,
+    height: 34,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 9,
+    backgroundColor: cardNavy,
   },
   chip: {
     height: 34,
@@ -533,8 +699,8 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     backgroundColor: cardNavy,
   },
-  chipActive: { backgroundColor: brandBlue },
-  chipInactive: { backgroundColor: softBlue },
+  chipActive: { backgroundColor: lightBlue },
+  chipInactive: { backgroundColor: softBlue, opacity: 0.45 },
   chipIconBackdrop: {
     padding: 2,
     borderRadius: 6,
@@ -542,6 +708,12 @@ const styles = StyleSheet.create({
   },
   chipIcon: { width: 20, height: 20 },
   chipText: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 12 },
+  chipLabel: {
+    color: brandBlue,
+    fontFamily: "SoraBold",
+    fontSize: 11,
+    marginRight: 4,
+  },
   picker: {
     position: "absolute",
     left: 16,
@@ -572,17 +744,15 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   bottomPanel: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
     paddingTop: 16,
     paddingHorizontal: 20,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     backgroundColor: headerBlue,
   },
-  vehicleSection: { marginBottom: 14 },
+  vehicleSection: { overflow: "hidden" },
+  vehicleSectionOpen: { maxHeight: 240, opacity: 1, marginBottom: 14 },
+  vehicleSectionClosed: { maxHeight: 0, opacity: 0, marginBottom: 0 },
   vehicleSectionHeader: {
     flexDirection: "row",
     alignItems: "baseline",

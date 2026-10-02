@@ -1,4 +1,3 @@
-import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import CalendarDays from "lucide-react-native/icons/calendar-days";
 import Check from "lucide-react-native/icons/check";
@@ -13,16 +12,15 @@ import Animated, { FadeIn, LinearTransition } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { vehicleTypeLabels } from "@/api/v1/transit-routes/controllers";
+import { EmptyState } from "@/components/empty-state";
 import { MiniToast, type MiniToastMessage } from "@/components/mini-toast";
 import { Chip, ModuleHeader, moduleColors } from "@/components/module-ui";
+import { RouteTimeline } from "@/components/route-timeline";
 import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
-import {
-  getInitials,
-  sampleRentalRequests,
-  type RentalRequest,
-  type RentalStatus,
-} from "@/pages/transit/sample-data";
+import { type RentalRequest, type RentalStatus } from "@/pages/transit/types";
+import { getInitials } from "@/utils/format";
+import { goBackOr } from "@/utils/navigation";
 
 const { brandBlue, softBlue, mutedText, text, error } = moduleColors;
 const success = "#1e9e45";
@@ -34,7 +32,7 @@ const tabs: { value: RentalStatus; label: string }[] = [
 ];
 
 const emptyMessages: Record<RentalStatus, string> = {
-  pending: "No new requests right now. New charter requests will show up here.",
+  pending: "Charter requests from commuters will show up here.",
   accepted: "You haven't accepted any requests yet.",
   declined: "You haven't declined any requests.",
 };
@@ -42,7 +40,7 @@ const emptyMessages: Record<RentalStatus, string> = {
 export default function RentalRequestsScreen() {
   const insets = useSafeAreaInsets();
   const chrome = useScrollChrome();
-  const [requests, setRequests] = useState(sampleRentalRequests);
+  const [requests, setRequests] = useState<RentalRequest[]>([]);
   const [tab, setTab] = useState<RentalStatus>("pending");
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [toast, setToast] = useState<MiniToastMessage | null>(null);
@@ -68,10 +66,7 @@ export default function RentalRequestsScreen() {
     }));
   };
 
-  const goBack = () => {
-    if (router.canGoBack()) router.back();
-    else router.replace(Routes.transitHome);
-  };
+  const goBack = () => goBackOr(Routes.transitHome);
 
   return (
     <View style={styles.screen}>
@@ -102,12 +97,10 @@ export default function RentalRequestsScreen() {
           </View>
 
           {visible.length === 0 ? (
-            <View style={styles.empty}>
-              <View style={styles.emptyIcon}>
-                <Inbox color={brandBlue} size={32} strokeWidth={1.8} />
-              </View>
-              <Text style={styles.emptyText}>{emptyMessages[tab]}</Text>
-            </View>
+            <EmptyState
+              icon={<Inbox color={brandBlue} size={32} strokeWidth={1.8} />}
+              message={emptyMessages[tab]}
+            />
           ) : (
             <View style={styles.list}>
               {visible.map((request) => (
@@ -181,11 +174,7 @@ function RequestCard({
       </View>
 
       <View style={styles.stops}>
-        <View style={styles.timeline}>
-          <View style={styles.timelineStart} />
-          <View style={styles.timelineLine} />
-          <View style={styles.timelineEnd} />
-        </View>
+        <RouteTimeline stretch={false} />
         <View style={styles.stopText}>
           <View>
             <Text style={styles.city}>{request.pickup.city}</Text>
@@ -219,7 +208,6 @@ function RequestCard({
           <Text style={styles.notesText}>{request.notes}</Text>
         </View>
       )}
-
 
       {request.status === "pending" &&
         (confirmingDecline ? (
@@ -323,23 +311,6 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.8 },
   tabRow: { flexDirection: "row", gap: 6 },
   list: { gap: 14, marginTop: 16 },
-  empty: { alignItems: "center", paddingTop: 48, paddingHorizontal: 24 },
-  emptyIcon: {
-    width: 68,
-    height: 68,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 34,
-    backgroundColor: softBlue,
-  },
-  emptyText: {
-    color: mutedText,
-    fontFamily: "Sora",
-    fontSize: 11,
-    lineHeight: 17,
-    textAlign: "center",
-    marginTop: 14,
-  },
   card: {
     padding: 14,
     borderWidth: 1.5,
@@ -364,22 +335,6 @@ const styles = StyleSheet.create({
   badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4 },
   badgeText: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 9 },
   stops: { flexDirection: "row", marginTop: 14 },
-  timeline: { alignItems: "center", paddingVertical: 4 },
-  timelineStart: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: brandBlue,
-  },
-  timelineLine: { flex: 1, width: 2, backgroundColor: brandBlue },
-  timelineEnd: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: brandBlue,
-    backgroundColor: "#ffffff",
-  },
   stopText: { flex: 1, gap: 12, marginLeft: 12 },
   city: { color: brandBlue, fontFamily: "SoraBold", fontSize: 11 },
   place: { color: mutedText, fontFamily: "Sora", fontSize: 9, marginTop: 2 },

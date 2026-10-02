@@ -1,8 +1,8 @@
 import { Image } from "expo-image";
-import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import Check from "lucide-react-native/icons/check";
 import CircleAlert from "lucide-react-native/icons/circle-alert";
+import BusFront from "lucide-react-native/icons/bus-front";
 import MapPin from "lucide-react-native/icons/map-pin";
 import Minus from "lucide-react-native/icons/minus";
 import Plus from "lucide-react-native/icons/plus";
@@ -30,22 +30,21 @@ import {
   pointAlong,
   type LatLng,
 } from "@/api/v1/transit-routes/controllers";
+import { EmptyState } from "@/components/empty-state";
 import { ModuleHeader, vehicleOptions } from "@/components/module-ui";
 import { TransitMap, type TransitMapState } from "@/components/transit-map";
 import { Routes } from "@/constants/routes";
+import { goBackOr } from "@/utils/navigation";
 
 const panelNavy = "#1d3354";
 const routeCyan = "#7fd4f7";
 const counterBlue = "#7dd3f5";
 const circleNavy = "#1034A6";
 
-// Seconds the simulated vehicle takes to cover its route or area loop once.
 const routeLoopSeconds = 300;
 const areaLoopSeconds = 180;
-const requestDelayMs = 10_000;
 const pickupTravelMs = 6_000;
 const toastMs = 4_000;
-const requestSizes = [4, 2, 3, 1];
 
 type ToastTone = "danger" | "success" | "info";
 
@@ -85,27 +84,52 @@ function areaLoop(center: LatLng, radiusMeters: number): LatLng[] {
   const lngRadius = latRadius / Math.cos((lat * Math.PI) / 180);
   return Array.from({ length: 25 }, (_, index) => {
     const angle = (index / 24) * Math.PI * 2;
-    return [lat + latRadius * Math.sin(angle), lng + lngRadius * Math.cos(angle)];
+    return [
+      lat + latRadius * Math.sin(angle),
+      lng + lngRadius * Math.cos(angle),
+    ];
   });
 }
 
 export default function TripScreen() {
   const [details, setDetails] = useState<AssignmentDetails | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
     loadOperatorAssignment().then((assignment) => {
-      if (active) setDetails(describeAssignment(assignment));
+      if (!active) return;
+      setDetails(assignment ? describeAssignment(assignment) : null);
+      setLoading(false);
     });
     return () => {
       active = false;
     };
   }, []);
 
-  if (!details) {
+  if (loading) {
     return (
       <View style={styles.loadingScreen}>
         <ActivityIndicator color={circleNavy} />
+      </View>
+    );
+  }
+
+  if (!details) {
+    return (
+      <View style={styles.emptyScreen}>
+        <StatusBar style="light" />
+        <ModuleHeader
+          title="Trip"
+          subtitle="Start a trip and track your passengers along your route."
+          icon={<MapPin color="#ffffff" size={44} strokeWidth={1.8} />}
+          onBack={() => goBackOr(Routes.transitHome)}
+        />
+        <EmptyState
+          icon={<BusFront color={circleNavy} size={32} strokeWidth={1.8} />}
+          message="You can start a trip once your transport cooperative assigns you a vehicle and a route."
+          style={styles.emptyBody}
+        />
       </View>
     );
   }
@@ -131,7 +155,6 @@ function Trip({ details }: { details: AssignmentDetails }) {
   const [count, setCount] = useState(0);
   const [markedFull, setMarkedFull] = useState(false);
   const [pickup, setPickup] = useState<Pickup | null>(null);
-  const [requestNumber, setRequestNumber] = useState(0);
   const [toast, setToast] = useState<Toast | null>(null);
 
   const full = markedFull || count >= capacity;
@@ -145,7 +168,6 @@ function Trip({ details }: { details: AssignmentDetails }) {
     [route, routePath, area],
   );
 
-  // Routes go back and forth along the line; areas loop around the circle.
   const fraction = route
     ? progress <= 1
       ? progress
@@ -176,27 +198,6 @@ function Trip({ details }: { details: AssignmentDetails }) {
     return () => clearInterval(timer);
   }, [inTransit, loopSeconds]);
 
-  // Simulate a commuter along the way requesting a pickup.
-  useEffect(() => {
-    if (!inTransit || pickup || full || path.length < 2) return;
-    const timer = setTimeout(() => {
-      const ahead = route
-        ? Math.min(Math.max(fraction + (progress <= 1 ? 0.05 : -0.05), 0), 1)
-        : (fraction + 0.08) % 1;
-      setPickup({
-        id: requestNumber,
-        passengers: requestSizes[requestNumber % requestSizes.length],
-        position: pointAlong(path, ahead),
-        accepted: false,
-      });
-      setRequestNumber((current) => current + 1);
-    }, requestDelayMs);
-    return () => clearTimeout(timer);
-    // Only reschedule when the trip or request state changes, not every tick.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inTransit, pickup, full, path]);
-
-  // After accepting, the driver reaches the commuter and picks them up.
   useEffect(() => {
     if (!pickup?.accepted) return;
     const timer = setTimeout(() => {
@@ -218,8 +219,7 @@ function Trip({ details }: { details: AssignmentDetails }) {
       setToast(nextToast("Stop the trip before leaving.", "danger", "left"));
       return;
     }
-    if (router.canGoBack()) router.back();
-    else router.replace(Routes.transitHome);
+    goBackOr(Routes.transitHome);
   };
 
   useEffect(() => {
@@ -238,7 +238,8 @@ function Trip({ details }: { details: AssignmentDetails }) {
     if (count >= capacity) return;
     const next = count + 1;
     setCount(next);
-    if (next >= capacity) setToast(nextToast("Vehicle is Full!", "danger", "left"));
+    if (next >= capacity)
+      setToast(nextToast("Vehicle is Full!", "danger", "left"));
   };
 
   const removePassenger = () => {
@@ -306,13 +307,28 @@ function Trip({ details }: { details: AssignmentDetails }) {
       selectedId: null,
       focus: null,
       pickups: pickup
-        ? [{ id: `pickup-${pickup.id}`, lat: pickup.position[0], lng: pickup.position[1] }]
+        ? [
+            {
+              id: `pickup-${pickup.id}`,
+              lat: pickup.position[0],
+              lng: pickup.position[1],
+            },
+          ]
         : [],
       pickupLine: pickup?.accepted ? [position, pickup.position] : null,
       padTop: headerHeight + 30,
       padBottom: panelHeight + 30,
     }),
-    [route, routePath, area, position, vehicle, pickup, headerHeight, panelHeight],
+    [
+      route,
+      routePath,
+      area,
+      position,
+      vehicle,
+      pickup,
+      headerHeight,
+      panelHeight,
+    ],
   );
 
   const occupancy = markedFull ? "Full" : getOccupancyLevel(count, capacity);
@@ -385,7 +401,9 @@ function Trip({ details }: { details: AssignmentDetails }) {
             size={13}
             strokeWidth={2.5}
           />
-          <Text style={[styles.toastText, { color: toastTones[toast.tone].color }]}>
+          <Text
+            style={[styles.toastText, { color: toastTones[toast.tone].color }]}
+          >
             {toast.text}
           </Text>
           {toast.dismissible && (
@@ -557,6 +575,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "#ffffff",
   },
+  emptyScreen: { flex: 1, backgroundColor: "#ffffff" },
+  emptyBody: { marginTop: 32 },
   screen: { flex: 1, backgroundColor: "#e8eaed" },
   headerWrap: { position: "absolute", top: 0, left: 0, right: 0 },
   pressed: { opacity: 0.7 },

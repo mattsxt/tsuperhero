@@ -1,4 +1,3 @@
-import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import ChevronDown from "lucide-react-native/icons/chevron-down";
 import Clock from "lucide-react-native/icons/clock";
@@ -14,14 +13,14 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { vehicleTypeLabels } from "@/api/v1/transit-routes/controllers";
+import { EmptyState } from "@/components/empty-state";
 import { Chip, ModuleHeader, moduleColors } from "@/components/module-ui";
+import { RouteTimeline } from "@/components/route-timeline";
 import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
-import {
-  formatDuration,
-  sampleTransitTrips,
-  type TransitTrip,
-} from "@/pages/transit/sample-data";
+import type { TransitTrip } from "@/pages/transit/types";
+import { formatDuration } from "@/utils/format";
+import { goBackOr } from "@/utils/navigation";
 
 const { brandBlue, softBlue, mutedText, text } = moduleColors;
 
@@ -32,6 +31,8 @@ const filters: { value: Filter; label: string }[] = [
   { value: "regular", label: "Regular" },
   { value: "rental", label: "Rental" },
 ];
+
+const completedTrips: TransitTrip[] = [];
 
 const layoutTransition = LinearTransition.duration(200);
 
@@ -51,7 +52,7 @@ export default function TripHistoryScreen() {
   const [filter, setFilter] = useState<Filter>("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const trips = sampleTransitTrips.filter(
+  const trips = completedTrips.filter(
     (trip) => filter === "all" || trip.kind === filter,
   );
   const totalPassengers = trips.reduce((sum, trip) => sum + trip.passengers, 0);
@@ -60,10 +61,7 @@ export default function TripHistoryScreen() {
     0,
   );
 
-  const goBack = () => {
-    if (router.canGoBack()) router.back();
-    else router.replace(Routes.transitHome);
-  };
+  const goBack = () => goBackOr(Routes.transitHome);
 
   return (
     <View style={styles.screen}>
@@ -112,7 +110,10 @@ export default function TripHistoryScreen() {
           </View>
 
           {trips.length === 0 ? (
-            <Text style={styles.empty}>No trips to show yet.</Text>
+            <EmptyState
+              icon={<Route color={brandBlue} size={32} strokeWidth={1.8} />}
+              message="Trips you complete will show up here."
+            />
           ) : (
             groupByDate(trips).map((group) => (
               <Animated.View key={group.date} layout={layoutTransition}>
@@ -186,11 +187,7 @@ function TripCard({
         onPress={onPress}
         style={({ pressed }) => [styles.cardMain, pressed && styles.pressed]}
       >
-        <View style={styles.timeline}>
-          <View style={styles.timelineStart} />
-          <View style={styles.timelineLine} />
-          <View style={styles.timelineEnd} />
-        </View>
+        <RouteTimeline />
 
         <View style={styles.stops}>
           <View>
@@ -281,13 +278,6 @@ const styles = StyleSheet.create({
   },
   statLabel: { color: mutedText, fontFamily: "Sora", fontSize: 9 },
   filterRow: { flexDirection: "row", gap: 8, marginTop: 16 },
-  empty: {
-    color: mutedText,
-    fontFamily: "Sora",
-    fontSize: 11,
-    textAlign: "center",
-    marginTop: 40,
-  },
   dateHeading: {
     color: brandBlue,
     fontFamily: "SoraBold",
@@ -312,22 +302,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingLeft: 16,
     paddingRight: 10,
-  },
-  timeline: { alignItems: "center", alignSelf: "stretch", paddingVertical: 4 },
-  timelineStart: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: brandBlue,
-  },
-  timelineLine: { flex: 1, width: 2, backgroundColor: brandBlue },
-  timelineEnd: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: brandBlue,
-    backgroundColor: "#ffffff",
   },
   stops: { flex: 1, gap: 14, marginLeft: 12 },
   city: { color: brandBlue, fontFamily: "SoraBold", fontSize: 11 },
@@ -358,6 +332,11 @@ const styles = StyleSheet.create({
     borderTopColor: "#eef1f7",
   },
   detailRow: { flexDirection: "row", gap: 12, paddingVertical: 6 },
-  detailLabel: { width: 90, color: mutedText, fontFamily: "Sora", fontSize: 10 },
+  detailLabel: {
+    width: 90,
+    color: mutedText,
+    fontFamily: "Sora",
+    fontSize: 10,
+  },
   detailValue: { flex: 1, color: text, fontFamily: "SoraBold", fontSize: 11 },
 });

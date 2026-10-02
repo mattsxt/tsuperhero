@@ -44,6 +44,7 @@ import {
 } from "@/components/module-ui";
 import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
+import { goBackOr } from "@/utils/navigation";
 
 const { brandBlue, error: errorRed, mutedText, text } = moduleColors;
 
@@ -87,10 +88,7 @@ export default function EditProfileScreen() {
     };
   }, []);
 
-  const goBack = () => {
-    if (router.canGoBack()) router.back();
-    else router.replace(Routes.profile);
-  };
+  const goBack = () => goBackOr(Routes.profile);
 
   const clearError = (field: ProfileEditField) => {
     if (errors[field]) {

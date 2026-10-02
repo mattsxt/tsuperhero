@@ -5,9 +5,6 @@ import {
   type VehicleType,
 } from "@/api/v1/transit-routes/controllers";
 
-// Operator assignments are managed by the transport cooperative in the admin
-// dashboard. Transit personnel can only view them in the app.
-
 export type OperationArea = {
   id: string;
   name: string;
@@ -37,7 +34,8 @@ export const operationAreas: OperationArea[] = [
   {
     id: "upper-barangays",
     name: "Upper Barangays",
-    description: "The upland barangays of Naga City along the Mt. Isarog foothills.",
+    description:
+      "The upland barangays of Naga City along the Mt. Isarog foothills.",
     center: [13.655, 123.262],
     radiusMeters: 4200,
     barangays: ["Carolina", "Cararayan", "Pacol", "Panicuason", "San Isidro"],
@@ -52,13 +50,13 @@ export type OperatorVehicle = {
   max_capacity: number;
 };
 
-// Buses, vans and jeepneys run on exactly one route. Tricycles are not tied to
-// a route and operate anywhere inside an operation area instead.
 export type OperatorAssignment = {
   cooperative: Cooperative;
 } & (
   | {
-      vehicle: OperatorVehicle & { vehicle_type: Exclude<VehicleType, "tricy"> };
+      vehicle: OperatorVehicle & {
+        vehicle_type: Exclude<VehicleType, "tricy">;
+      };
       routeId: string;
     }
   | {
@@ -67,24 +65,8 @@ export type OperatorAssignment = {
     }
 );
 
-const sampleAssignments = {
-  jeepney: {
-    cooperative: { name: "SAFETRASCO - San Felipe Transport Cooperative" },
-    vehicle: { vehicle_type: "jeep", plate_number: "JPA-001", max_capacity: 24 },
-    routeId: "naga-san-felipe",
-  },
-  tricycle: {
-    cooperative: { name: "Naga City Tricycle Operators and Drivers Association" },
-    vehicle: { vehicle_type: "tricy", plate_number: "TRC-214", max_capacity: 6 },
-    areaId: "downtown-naga",
-  },
-} satisfies Record<string, OperatorAssignment>;
-
-// Switch to "tricycle" to preview the operation-area flow.
-const demoAssignment: keyof typeof sampleAssignments = "jeepney";
-
-export async function loadOperatorAssignment(): Promise<OperatorAssignment> {
-  return sampleAssignments[demoAssignment];
+export async function loadOperatorAssignment(): Promise<OperatorAssignment | null> {
+  return null;
 }
 
 export type AssignmentDetails = {

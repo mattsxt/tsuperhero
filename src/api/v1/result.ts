@@ -1,8 +1,7 @@
 import { getErrorMessage } from "@/api/v1/client";
 
 export type Result<T = void> =
-  | { ok: true; data: T }
-  | { ok: false; error: string };
+  { ok: true; data: T } | { ok: false; error: string };
 
 export const success = <T>(data: T): Result<T> => ({ ok: true, data });
 

@@ -101,7 +101,8 @@ export async function changePassword(
   else if (form.next === form.current) {
     fieldErrors.next = "New password must be different from your current one.";
   }
-  if (form.confirm !== form.next) fieldErrors.confirm = "Passwords don't match.";
+  if (form.confirm !== form.next)
+    fieldErrors.confirm = "Passwords don't match.";
 
   if (Object.keys(fieldErrors).length > 0) {
     return { ...failure("Please check the form."), fieldErrors };

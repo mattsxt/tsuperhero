@@ -31,5 +31,6 @@ export const profileRoutes = {
 
   removePicture: (path: string) => pictureBucket().remove([path]),
 
-  getPictureUrl: (path: string) => pictureBucket().getPublicUrl(path).data.publicUrl,
+  getPictureUrl: (path: string) =>
+    pictureBucket().getPublicUrl(path).data.publicUrl,
 };
