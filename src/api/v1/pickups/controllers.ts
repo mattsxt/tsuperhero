@@ -50,7 +50,7 @@ export async function loadActivePickup(): Promise<
     const row: PickupRequestRow | null = await unwrap(
       pickupRoutes.findActiveRequest(commuterId),
     );
-    const pickup = Array.isArray(row?.pickups) ? row.pickups[0] : row?.pickups;
+    const pickup = Array.isArray(row?.pickup) ? row.pickup[0] : row?.pickup;
     if (!row || !pickup) return null;
     return {
       id: row.request_id,
@@ -65,7 +65,7 @@ export async function loadActivePickup(): Promise<
 
 type PickupPoint = { name: string; lat: number; lng: number };
 
-export type PickupForm = {
+type PickupForm = {
   vehicle: PickupVehicle;
   passengers: number;
   location: PickupPoint | null;

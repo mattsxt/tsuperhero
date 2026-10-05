@@ -5,7 +5,10 @@ import {
   getPasswordProblem,
 } from "@/api/v1/auth/validation";
 import { getErrorMessage } from "@/api/v1/client";
-import { getSignedInRoute } from "@/api/v1/profile/controllers";
+import {
+  getSignedInRoute,
+  unsupportedAccountMessage,
+} from "@/api/v1/profile/controllers";
 import {
   attempt,
   failure,
@@ -17,17 +20,15 @@ import { Routes, type AppRoute } from "@/constants/routes";
 
 export {
   codeLength,
-  getCodeProblem,
   getEmailProblem,
   getPasswordProblem,
-  passwordRules,
 } from "@/api/v1/auth/validation";
 
 export async function getStartupRoute(): Promise<AppRoute> {
   try {
     const { session } = await unwrap(authRoutes.getSession());
     if (!session) return Routes.login;
-    return await getSignedInRoute(session.user.id);
+    return (await getSignedInRoute(session.user.id)) ?? Routes.login;
   } catch {
     return Routes.login;
   }
@@ -47,7 +48,9 @@ export async function login(
       authRoutes.signInWithPassword(normalizedEmail, password),
     );
     if (!user) throw new Error("Sign in failed. Please try again.");
-    return getSignedInRoute(user.id);
+    const route = await getSignedInRoute(user.id);
+    if (!route) throw new Error(unsupportedAccountMessage);
+    return route;
   });
 }
 

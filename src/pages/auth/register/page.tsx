@@ -227,15 +227,17 @@ export default function RegisterScreen() {
 }
 
 function StepIndicator({ step }: { step: number }) {
-  const progress = useRef(new Animated.Value(step)).current;
+  const [progress] = useState(() => new Animated.Value(step));
 
   useEffect(() => {
-    Animated.timing(progress, {
+    const animation = Animated.timing(progress, {
       toValue: step,
       duration: 320,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: false,
-    }).start();
+    });
+    animation.start();
+    return () => animation.stop();
   }, [progress, step]);
 
   return (

@@ -23,6 +23,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   ExpandedOnly,
   headerLayoutTransition,
+  headerLogoTransition,
   headerTitleTransition,
 } from "@/components/scroll-chrome";
 
@@ -58,7 +59,7 @@ export const vehicleOptions: VehicleOption[] = [
   },
 ];
 
-export const tileTransition: CSSTransitionProperties = {
+const tileTransition: CSSTransitionProperties = {
   transitionProperty: ["backgroundColor", "transform"],
   transitionDuration: 250,
   transitionTimingFunction: "ease-in-out",
@@ -121,7 +122,15 @@ export function ModuleHeader({
             <Text style={styles.subtitle}>{subtitle}</Text>
           </ExpandedOnly>
         </View>
-        <ExpandedOnly collapsed={collapsed}>{icon}</ExpandedOnly>
+        <Animated.View
+          style={[
+            styles.headerIcon,
+            collapsed && styles.headerIconCollapsed,
+            headerLogoTransition,
+          ]}
+        >
+          {icon}
+        </Animated.View>
       </View>
       {children}
     </Animated.View>
@@ -382,6 +391,21 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: "row", alignItems: "flex-start" },
   headerRowCollapsed: { alignItems: "center" },
   backButtonCollapsed: { marginTop: 0 },
+  headerIcon: {
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+    opacity: 1,
+    transform: [{ scale: 1 }],
+  },
+  headerIconCollapsed: {
+    width: 0,
+    height: 0,
+    opacity: 0,
+    transform: [{ scale: 0.4 }],
+  },
   titleCollapsed: { fontSize: 18, lineHeight: 24 },
   backButton: {
     width: 34,

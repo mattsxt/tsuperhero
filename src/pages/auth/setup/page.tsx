@@ -3,7 +3,6 @@ import DateTimePicker, {
 } from "@react-native-community/datetimepicker";
 import { router } from "expo-router";
 import Calendar1 from "lucide-react-native/icons/calendar-1";
-import ChevronDown from "lucide-react-native/icons/chevron-down";
 import ChevronLeft from "lucide-react-native/icons/chevron-left";
 import { createElement, useEffect, useState } from "react";
 import {
@@ -25,12 +24,10 @@ import {
   checkSetupAccess,
   contactLength,
   contactLengthMessage,
-  genderOptions,
   getContactProblem,
   getNameProblem,
   submitProfile,
   toIsoDate,
-  type Gender,
   type ProfileFormErrors,
   type ProfileFormField,
 } from "@/api/v1/profile/controllers";
@@ -50,8 +47,6 @@ export default function SetupScreen() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [birthdate, setBirthdate] = useState<Date | null>(null);
-  const [gender, setGender] = useState<Gender | null>(null);
-  const [genderOpen, setGenderOpen] = useState(false);
   const [contact, setContact] = useState("");
   const [errors, setErrors] = useState<ProfileFormErrors>({});
   const [saveError, setSaveError] = useState("");
@@ -84,7 +79,6 @@ export default function SetupScreen() {
 
   const canGoBack = step >= 2 && step <= 3;
   const goBack = () => {
-    setGenderOpen(false);
     setStep((currentStep) => Math.max(currentStep - 1, 1));
   };
 
@@ -93,7 +87,6 @@ export default function SetupScreen() {
       "hardwareBackPress",
       () => {
         if (canGoBack) {
-          setGenderOpen(false);
           setStep((currentStep) => Math.max(currentStep - 1, 1));
         }
         return true;
@@ -117,7 +110,6 @@ export default function SetupScreen() {
       firstName,
       lastName,
       birthdate,
-      gender,
       contact,
     });
     setSaving(false);
@@ -218,7 +210,7 @@ export default function SetupScreen() {
                   </FormField>
                 </View>
 
-                <View style={[styles.row, styles.rowAboveDropdown]}>
+                <View style={styles.row}>
                   <FormField label="BIRTHDATE" error={errors.birthdate}>
                     <BirthdateField
                       value={birthdate}
@@ -227,49 +219,6 @@ export default function SetupScreen() {
                         clearError("birthdate");
                       }}
                     />
-                  </FormField>
-                  <FormField label="GENDER" error={errors.gender}>
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel="Select gender"
-                      onPress={() => setGenderOpen((open) => !open)}
-                      style={styles.inputWithIcon}
-                    >
-                      <Text
-                        style={[
-                          styles.selectText,
-                          !gender && styles.placeholderText,
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {genderOptions.find((option) => option.value === gender)
-                          ?.label ?? "Select"}
-                      </Text>
-                      <ChevronDown color="#111111" size={15} />
-                    </Pressable>
-                    {genderOpen && (
-                      <View style={styles.dropdown}>
-                        {genderOptions.map((option) => (
-                          <Pressable
-                            key={option.value}
-                            onPress={() => {
-                              setGender(option.value);
-                              setGenderOpen(false);
-                              clearError("gender");
-                            }}
-                            style={[
-                              styles.dropdownOption,
-                              option.value === gender &&
-                                styles.dropdownOptionSelected,
-                            ]}
-                          >
-                            <Text style={styles.selectText}>
-                              {option.label}
-                            </Text>
-                          </Pressable>
-                        ))}
-                      </View>
-                    )}
                   </FormField>
                 </View>
 
@@ -543,7 +492,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   row: { flexDirection: "row", gap: 50 },
-  rowAboveDropdown: { zIndex: 10 },
   field: { flex: 1, gap: 5 },
   fieldLabel: {
     color: "#ffffff",
@@ -592,22 +540,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   placeholderText: { color: "#9a9a9a" },
-  dropdown: {
-    position: "absolute",
-    top: 60,
-    left: 0,
-    right: 0,
-    backgroundColor: "#ffffff",
-    borderRadius: 8,
-    paddingVertical: 4,
-    elevation: 6,
-    shadowColor: "#000000",
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-  },
-  dropdownOption: { paddingHorizontal: 10, paddingVertical: 9 },
-  dropdownOptionSelected: { backgroundColor: "#e3f3fb" },
   webDateInput: {
     flex: 1,
     height: "100%",

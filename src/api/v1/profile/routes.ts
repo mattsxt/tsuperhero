@@ -9,7 +9,7 @@ export const profileRoutes = {
   findProfile: (userId: string) =>
     profileTable()
       .select("user_type, first_name")
-      .eq("id", userId)
+      .eq("user_id", userId)
       .maybeSingle(),
 
   findProfileDetails: (userId: string) =>
@@ -17,14 +17,16 @@ export const profileRoutes = {
       .select(
         "user_type, first_name, last_name, birth_date, contact_number, profile_picture",
       )
-      .eq("id", userId)
+      .eq("user_id", userId)
       .maybeSingle(),
 
-  upsertProfile: (profile: Omit<ProfileRow, "profile_picture">) =>
-    profileTable().upsert(profile),
+  upsertProfile: (
+    profile: Omit<ProfileRow, "profile_id" | "profile_picture">,
+  ) =>
+    profileTable().upsert(profile, { onConflict: "user_id" }),
 
   updateProfile: (userId: string, changes: ProfileChanges) =>
-    profileTable().update(changes).eq("id", userId),
+    profileTable().update(changes).eq("user_id", userId),
 
   uploadPicture: (path: string, body: ArrayBuffer, contentType: string) =>
     pictureBucket().upload(path, body, { contentType }),

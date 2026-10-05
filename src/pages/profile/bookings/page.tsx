@@ -2,7 +2,7 @@ import { StatusBar } from "expo-status-bar";
 import Bus from "lucide-react-native/icons/bus";
 import ClipboardList from "lucide-react-native/icons/clipboard-list";
 import { useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -13,20 +13,9 @@ import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
 import { goBackOr } from "@/utils/navigation";
 
-const { brandBlue, mutedText, text } = moduleColors;
+const { brandBlue } = moduleColors;
 
 type BookingKind = "rental" | "pickup";
-
-type Booking = {
-  id: string;
-  kind: BookingKind;
-  from: string;
-  to: string;
-  date: string;
-  status: string;
-};
-
-const bookings: Booking[] = [];
 
 const tabs: { value: BookingKind; label: string }[] = [
   { value: "rental", label: "Rental" },
@@ -42,8 +31,6 @@ export default function BookingsScreen() {
   const insets = useSafeAreaInsets();
   const chrome = useScrollChrome();
   const [tab, setTab] = useState<BookingKind>("rental");
-
-  const visible = bookings.filter((booking) => booking.kind === tab);
 
   const goBack = () => goBackOr(Routes.profile);
 
@@ -72,34 +59,16 @@ export default function BookingsScreen() {
             ))}
           </View>
 
-          {visible.length === 0 ? (
-            <EmptyState
-              icon={
-                tab === "rental" ? (
-                  <Bus color={brandBlue} size={32} strokeWidth={1.8} />
-                ) : (
-                  <PickupIcon color={brandBlue} size={32} />
-                )
-              }
-              message={emptyMessages[tab]}
-            />
-          ) : (
-            <View style={styles.list}>
-              {visible.map((booking) => (
-                <View key={booking.id} style={styles.card}>
-                  <View style={styles.cardTop}>
-                    <Text style={styles.route} numberOfLines={2}>
-                      {booking.from} – {booking.to}
-                    </Text>
-                    <View style={styles.badge}>
-                      <Text style={styles.badgeText}>{booking.status}</Text>
-                    </View>
-                  </View>
-                  <Text style={styles.date}>{booking.date}</Text>
-                </View>
-              ))}
-            </View>
-          )}
+          <EmptyState
+            icon={
+              tab === "rental" ? (
+                <Bus color={brandBlue} size={32} strokeWidth={1.8} />
+              ) : (
+                <PickupIcon color={brandBlue} size={32} />
+              )
+            }
+            message={emptyMessages[tab]}
+          />
         </View>
       </Animated.ScrollView>
 
@@ -120,24 +89,4 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#ffffff" },
   body: { paddingHorizontal: 12, paddingTop: 18 },
   tabRow: { flexDirection: "row", gap: 8 },
-  list: { gap: 12, marginTop: 16 },
-  card: {
-    padding: 14,
-    borderWidth: 1.5,
-    borderColor: brandBlue,
-    borderRightWidth: 5,
-    borderRightColor: "#1a2f8f",
-    borderRadius: 10,
-    backgroundColor: "#ffffff",
-  },
-  cardTop: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
-  route: { flex: 1, color: text, fontFamily: "SoraBold", fontSize: 12 },
-  badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 4,
-    backgroundColor: brandBlue,
-  },
-  badgeText: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 9 },
-  date: { color: mutedText, fontFamily: "Sora", fontSize: 10, marginTop: 6 },
 });

@@ -5,7 +5,7 @@ const placesBaseUrl = "https://places.googleapis.com/v1";
 const searchCenter = { latitude: 13.6218, longitude: 123.1948 };
 const searchRadiusMeters = 50000;
 
-export type AutocompleteResponse = {
+type AutocompleteResponse = {
   suggestions?: {
     placePrediction?: {
       placeId: string;
@@ -19,7 +19,7 @@ export type AutocompleteResponse = {
   error?: { message: string };
 };
 
-export type PlaceDetailsResponse = {
+type PlaceDetailsResponse = {
   id?: string;
   displayName?: { text: string };
   formattedAddress?: string;

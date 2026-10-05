@@ -4,7 +4,6 @@ import BusFront from "lucide-react-native/icons/bus-front";
 import FileText from "lucide-react-native/icons/file-text";
 import Handshake from "lucide-react-native/icons/handshake";
 import Lock from "lucide-react-native/icons/lock";
-import MapPinned from "lucide-react-native/icons/map-pinned";
 import Route from "lucide-react-native/icons/route";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
@@ -16,7 +15,6 @@ import {
   loadOperatorAssignment,
   type AssignmentDetails,
 } from "@/api/v1/operator/controllers";
-import { getRouteTerminals } from "@/api/v1/transit-routes/controllers";
 import { EmptyState } from "@/components/empty-state";
 import {
   ModuleHeader,
@@ -89,7 +87,7 @@ export default function VehiclesScreen() {
 }
 
 function AssignmentView({ details }: { details: AssignmentDetails }) {
-  const { assignment, route, area, vehicleLabel } = details;
+  const { assignment, route, vehicleLabel } = details;
   const { cooperative, vehicle } = assignment;
   const vehicleIcon = vehicleOptions.find(
     (option) => option.value === vehicle.vehicle_type,
@@ -105,13 +103,18 @@ function AssignmentView({ details }: { details: AssignmentDetails }) {
         </Text>
       </View>
 
-      <SectionTitle
-        icon={<Handshake color="#ffffff" size={18} strokeWidth={2} />}
-        title="Transport Cooperative"
-      />
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>{cooperative.name}</Text>
-      </View>
+      {cooperative && (
+        <>
+          <SectionTitle
+            icon={<Handshake color="#ffffff" size={18} strokeWidth={2} />}
+            title="Transport Cooperative"
+          />
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>{cooperative.name}</Text>
+            <Text style={styles.helper}>{cooperative.type} operator</Text>
+          </View>
+        </>
+      )}
 
       {route && (
         <>
@@ -124,48 +127,6 @@ function AssignmentView({ details }: { details: AssignmentDetails }) {
             <Text style={styles.helper}>
               {vehicleLabel} operators run on one assigned route only.
             </Text>
-            <View style={styles.stops}>
-              {getRouteTerminals(route.id).map((terminal, index, list) => (
-                <View key={terminal.id} style={styles.stopRow}>
-                  <View style={styles.stopRail}>
-                    <View
-                      style={[
-                        styles.stopDot,
-                        index === list.length - 1 && styles.stopDotEnd,
-                      ]}
-                    />
-                    {index < list.length - 1 && (
-                      <View style={styles.stopLine} />
-                    )}
-                  </View>
-                  <View style={styles.stopText}>
-                    <Text style={styles.stopName}>{terminal.name}</Text>
-                    <Text style={styles.stopCity}>{terminal.city}</Text>
-                  </View>
-                </View>
-              ))}
-            </View>
-          </View>
-        </>
-      )}
-
-      {area && (
-        <>
-          <SectionTitle
-            icon={<MapPinned color="#ffffff" size={18} strokeWidth={2} />}
-            title="Operation Area"
-          />
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>{area.name}</Text>
-            <Text style={styles.helper}>{area.description}</Text>
-            <Text style={styles.subLabel}>BARANGAYS COVERED</Text>
-            <View style={styles.pills}>
-              {area.barangays.map((barangay) => (
-                <View key={barangay} style={styles.pill}>
-                  <Text style={styles.pillText}>{barangay}</Text>
-                </View>
-              ))}
-            </View>
           </View>
         </>
       )}
@@ -196,6 +157,10 @@ function AssignmentView({ details }: { details: AssignmentDetails }) {
         <InfoRow
           label="Max Capacity"
           value={`${vehicle.max_capacity} passengers`}
+        />
+        <InfoRow
+          label="Documents"
+          value={vehicle.verified ? "Verified" : "Pending verification"}
           last
         />
       </View>
@@ -261,40 +226,6 @@ const styles = StyleSheet.create({
   infoRowDivider: { borderBottomWidth: 1, borderBottomColor: "#eef1f7" },
   infoLabel: { width: 110, color: mutedText, fontFamily: "Sora", fontSize: 10 },
   infoValue: { flex: 1, color: text, fontFamily: "SoraBold", fontSize: 11 },
-  stops: { marginTop: 14 },
-  stopRow: { flexDirection: "row", gap: 12 },
-  stopRail: { width: 12, alignItems: "center" },
-  stopDot: {
-    width: 12,
-    height: 12,
-    marginTop: 2,
-    borderRadius: 6,
-    backgroundColor: brandBlue,
-  },
-  stopDotEnd: {
-    borderWidth: 2,
-    borderColor: brandBlue,
-    backgroundColor: "#ffffff",
-  },
-  stopLine: { flex: 1, width: 2, backgroundColor: brandBlue },
-  stopText: { flex: 1, paddingBottom: 14 },
-  stopName: { color: text, fontFamily: "SoraBold", fontSize: 11 },
-  stopCity: { color: mutedText, fontFamily: "Sora", fontSize: 9, marginTop: 2 },
-  subLabel: {
-    color: brandBlue,
-    fontFamily: "SoraBold",
-    fontSize: 10,
-    marginTop: 14,
-    marginBottom: 8,
-  },
-  pills: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
-  pill: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 14,
-    backgroundColor: softBlue,
-  },
-  pillText: { color: brandBlue, fontFamily: "SoraBold", fontSize: 10 },
   vehicleTop: {
     flexDirection: "row",
     alignItems: "center",

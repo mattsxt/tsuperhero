@@ -99,11 +99,15 @@ export default function PickupScreen() {
   const activeStatus = active?.status;
   useEffect(() => {
     if (!activeId || activeStatus !== "pending") return;
+    let mounted = true;
     const timer = setInterval(async () => {
       const latest = await loadActivePickup();
-      if (latest.ok) setActive(latest.data);
+      if (mounted && latest.ok) setActive(latest.data);
     }, 10_000);
-    return () => clearInterval(timer);
+    return () => {
+      mounted = false;
+      clearInterval(timer);
+    };
   }, [activeId, activeStatus]);
 
   const goBack = () => goBackOr(Routes.commuterHome);
@@ -385,9 +389,6 @@ function LocationMap({
       routeId: null,
       route: null,
       vehicles: [],
-      terminals: [],
-      highlightedTerminalId: null,
-      selectedId: null,
       waitingAreas:
         kind === "stop"
           ? [
@@ -452,7 +453,7 @@ function LocationMap({
             </Pressable>
           </View>
           <View style={styles.map}>
-            <TransitMap state={state} onSelect={() => {}} />
+            <TransitMap state={state} />
           </View>
         </View>
       </View>

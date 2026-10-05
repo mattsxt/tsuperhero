@@ -1,13 +1,12 @@
 import ArrowRight from "lucide-react-native/icons/arrow-right";
-import ChevronRight from "lucide-react-native/icons/chevron-right";
 import type { ReactNode } from "react";
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import Animated from "react-native-reanimated";
 
-import { RouteTimeline } from "@/components/route-timeline";
 import {
   ExpandedOnly,
   headerLayoutTransition,
+  headerLogoTransition,
   headerTitleTransition,
 } from "@/components/scroll-chrome";
 
@@ -56,9 +55,13 @@ export function HomeHeader({
             <Text style={styles.subGreeting}>{subtitle}</Text>
           </ExpandedOnly>
         </View>
-        <Image
+        <Animated.Image
           source={require("@/assets/images/tsuperhero_icon.png")}
-          style={[styles.headerLogo, collapsed && styles.headerLogoCollapsed]}
+          style={[
+            styles.headerLogo,
+            collapsed && styles.headerLogoCollapsed,
+            headerLogoTransition,
+          ]}
           resizeMode="contain"
         />
       </View>
@@ -106,86 +109,11 @@ export function SectionDivider() {
   return <View style={styles.sectionDivider} />;
 }
 
-export function SectionHeader({
-  title,
-  onViewAll,
-  showViewAll = true,
-}: {
-  title: string;
-  onViewAll?: () => void;
-  showViewAll?: boolean;
-}) {
+export function SectionHeader({ title }: { title: string }) {
   return (
     <View style={styles.sectionHeader}>
       <Text style={styles.sectionTitle}>{title}</Text>
-      {showViewAll && (
-        <Pressable
-          accessibilityRole="button"
-          hitSlop={8}
-          onPress={onViewAll}
-          style={styles.viewAll}
-        >
-          <Text style={styles.viewAllText}>View All</Text>
-          <ChevronRight color={brandBlue} size={16} strokeWidth={2.5} />
-        </Pressable>
-      )}
     </View>
-  );
-}
-
-export type TripSummary = {
-  id: string;
-  from: { city: string; place: string };
-  to: { city: string; place: string };
-  date: string;
-  badge: string;
-  badgeIcon?: ReactNode;
-};
-
-export function TripList({ trips }: { trips: TripSummary[] }) {
-  return (
-    <View style={[styles.card, styles.tripList]}>
-      {trips.map((trip, index) => (
-        <TripRow key={trip.id} trip={trip} last={index === trips.length - 1} />
-      ))}
-    </View>
-  );
-}
-
-function TripRow({ trip, last }: { trip: TripSummary; last: boolean }) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`Trip from ${trip.from.city} to ${trip.to.city}`}
-      style={({ pressed }) => [
-        styles.tripRow,
-        !last && styles.tripRowDivider,
-        pressed && styles.tripRowPressed,
-      ]}
-    >
-      <RouteTimeline />
-
-      <View style={styles.tripStops}>
-        <View>
-          <Text style={styles.tripCity}>{trip.from.city}</Text>
-          <Text style={styles.tripPlace}>{trip.from.place}</Text>
-        </View>
-        <View>
-          <Text style={styles.tripCity}>{trip.to.city}</Text>
-          <Text style={styles.tripPlace}>{trip.to.place}</Text>
-        </View>
-      </View>
-
-      <View style={styles.tripMeta}>
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>{trip.badge}</Text>
-          {trip.badgeIcon}
-        </View>
-        <Text style={styles.tripDate}>{trip.date}</Text>
-      </View>
-
-      <ChevronRight color={brandBlue} size={20} strokeWidth={2.5} />
-    </Pressable>
   );
 }
 
@@ -284,42 +212,4 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   sectionTitle: { color: brandBlue, fontFamily: "SoraBold", fontSize: 15 },
-  viewAll: { flexDirection: "row", alignItems: "center", gap: 6 },
-  viewAllText: { color: brandBlue, fontFamily: "SoraBold", fontSize: 10 },
-  tripList: { overflow: "hidden" },
-  tripRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12,
-    paddingLeft: 16,
-    paddingRight: 10,
-  },
-  tripRowDivider: { borderBottomWidth: 1, borderBottomColor: cardBorder },
-  tripRowPressed: { backgroundColor: "#f4f6fc" },
-  tripStops: { flex: 1, gap: 14, marginLeft: 12 },
-  tripCity: { color: brandBlue, fontFamily: "SoraBold", fontSize: 11 },
-  tripPlace: {
-    color: mutedText,
-    fontFamily: "Sora",
-    fontSize: 8,
-    marginTop: 2,
-  },
-  tripMeta: {
-    alignItems: "flex-end",
-    justifyContent: "space-between",
-    alignSelf: "stretch",
-    paddingVertical: 8,
-    marginRight: 6,
-  },
-  badge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 4,
-    backgroundColor: brandBlue,
-  },
-  badgeText: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 10 },
-  tripDate: { color: mutedText, fontFamily: "Sora", fontSize: 8 },
 });

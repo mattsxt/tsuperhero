@@ -1,26 +1,42 @@
 import { authRoutes } from "@/api/v1/auth/routes";
 import { getEmailProblem } from "@/api/v1/auth/validation";
 import { profileRoutes } from "@/api/v1/profile/routes";
-import type { ProfileChanges, ProfileRow } from "@/api/v1/profile/types";
+import type {
+  MobileUserType,
+  ProfileChanges,
+  ProfileRow,
+} from "@/api/v1/profile/types";
 import { attempt, failure, unwrap, type Result } from "@/api/v1/result";
 import { Routes, type AppRoute } from "@/constants/routes";
 
-export type UserType = ProfileRow["user_type"];
-export type Gender = ProfileRow["gender"];
+export type UserType = MobileUserType;
 
-export const genderOptions: { value: Gender; label: string }[] = [
-  { value: "male", label: "Male" },
-  { value: "female", label: "Female" },
-  { value: "prefer_not_to_say", label: "Prefer not to say" },
-];
+const mobileUserTypes: readonly string[] = [
+  "commuter",
+  "transit_personnel",
+] satisfies UserType[];
 
-export function getHomeRoute(userType: UserType) {
+export const unsupportedAccountMessage =
+  "Only commuter and transit personnel accounts can sign in to the app.";
+
+function isMobileUserType(userType: string): userType is UserType {
+  return mobileUserTypes.includes(userType);
+}
+
+function getHomeRoute(userType: UserType) {
   return userType === "commuter" ? Routes.commuterHome : Routes.transitHome;
 }
 
-export async function getSignedInRoute(userId: string) {
+export async function getSignedInRoute(
+  userId: string,
+): Promise<AppRoute | null> {
   const profile = await unwrap(profileRoutes.findProfile(userId));
-  return profile ? getHomeRoute(profile.user_type) : Routes.setup;
+  if (!profile) return Routes.setup;
+  if (!isMobileUserType(profile.user_type)) {
+    await authRoutes.signOut();
+    return null;
+  }
+  return getHomeRoute(profile.user_type);
 }
 
 export async function loadHome(
@@ -32,6 +48,10 @@ export async function loadHome(
 
     const profile = await unwrap(profileRoutes.findProfile(session.user.id));
     if (!profile) return { redirect: Routes.setup };
+    if (!isMobileUserType(profile.user_type)) {
+      await authRoutes.signOut();
+      return { redirect: Routes.login };
+    }
     if (profile.user_type !== userType) {
       return { redirect: getHomeRoute(profile.user_type) };
     }
@@ -50,7 +70,7 @@ export async function checkSetupAccess(): Promise<
     if (!session) return { redirect: Routes.login };
 
     const route = await getSignedInRoute(session.user.id);
-    if (route !== Routes.setup) return { redirect: route };
+    if (route !== Routes.setup) return { redirect: route ?? Routes.login };
 
     return { userId: session.user.id };
   } catch {
@@ -66,6 +86,7 @@ export async function loadHomeRoute(): Promise<
     if (!session) return { redirect: Routes.login };
 
     const route = await getSignedInRoute(session.user.id);
+    if (!route) return { redirect: Routes.login };
     if (route === Routes.setup) return { redirect: route };
 
     return { homeRoute: route };
@@ -108,7 +129,9 @@ function getPictureUrl(path: string | null) {
   return path ? profileRoutes.getPictureUrl(path) : null;
 }
 
-type ProfileDetails = Omit<ProfileRow, "id" | "gender">;
+type ProfileDetails = Omit<ProfileRow, "profile_id" | "user_id" | "user_type"> & {
+  user_type: UserType;
+};
 
 async function loadSignedInProfile(): Promise<
   | {
@@ -122,12 +145,17 @@ async function loadSignedInProfile(): Promise<
   const { session } = await unwrap(authRoutes.getSession());
   if (!session) return { redirect: Routes.login };
 
-  const profile: ProfileDetails | null = await unwrap(
+  const profile = await unwrap(
     profileRoutes.findProfileDetails(session.user.id),
   );
   if (!profile) return { redirect: Routes.setup };
+  const { user_type: userType } = profile;
+  if (!isMobileUserType(userType)) {
+    await authRoutes.signOut();
+    return { redirect: Routes.login };
+  }
 
-  return { user: session.user, profile };
+  return { user: session.user, profile: { ...profile, user_type: userType } };
 }
 
 export async function loadProfileSummary(): Promise<
@@ -185,16 +213,15 @@ export function toIsoDate(date: Date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
-export type ProfileForm = {
+type ProfileForm = {
   firstName: string;
   lastName: string;
   birthdate: Date | null;
-  gender: Gender | null;
   contact: string;
 };
 
 export type ProfileFormField =
-  "firstName" | "lastName" | "birthdate" | "gender" | "contact";
+  "firstName" | "lastName" | "birthdate" | "contact";
 
 export type ProfileFormErrors = Partial<Record<ProfileFormField, string>>;
 
@@ -209,25 +236,23 @@ export async function submitProfile(
   if (!firstName) fieldErrors.firstName = "First name is required.";
   if (!lastName) fieldErrors.lastName = "Last name is required.";
   if (!form.birthdate) fieldErrors.birthdate = "Select your birthdate.";
-  if (!form.gender) fieldErrors.gender = "Select a gender.";
   if (form.contact.length !== contactLength) {
     fieldErrors.contact = `Enter ${contactLength} digits.`;
   }
 
-  if (Object.keys(fieldErrors).length > 0 || !form.birthdate || !form.gender) {
+  if (Object.keys(fieldErrors).length > 0 || !form.birthdate) {
     return { ...failure("Please complete the form."), fieldErrors };
   }
 
-  const { birthdate, gender, contact } = form;
+  const { birthdate, contact } = form;
   return attempt(async () => {
     await unwrap(
       profileRoutes.upsertProfile({
-        id: userId,
+        user_id: userId,
         user_type: "commuter",
         first_name: firstName,
         last_name: lastName,
         birth_date: toIsoDate(birthdate),
-        gender,
         contact_number: `+63${contact}`,
       }),
     );
@@ -279,7 +304,7 @@ export async function loadEditableProfile(): Promise<
 
 export type PictureUpload = { uri: string; mimeType?: string };
 
-export type ProfileEditForm = {
+type ProfileEditForm = {
   email: string;
   contact: string;
   birthDate: Date | null;

@@ -22,34 +22,6 @@ export type TransitRoute = {
   vicinity: string[];
 };
 
-export type RouteVehicle = {
-  id: string;
-  plate: string;
-  type: VehicleType;
-  maxCapacity: number;
-  currentCapacity: number;
-  status: string;
-  towards: string;
-  lat: number;
-  lng: number;
-};
-
-export type Terminal = {
-  id: string;
-  name: string;
-  city: string;
-  lat: number;
-  lng: number;
-  routeCodes: string[];
-};
-
-export type MapBounds = {
-  north: number;
-  south: number;
-  east: number;
-  west: number;
-};
-
 export const vehicleTypeLabels: Record<VehicleType, string> = {
   jeep: "Jeepney",
   tricy: "Tricycle",
@@ -113,65 +85,16 @@ export function loadTransitRoutes(): Promise<Result<TransitRoute[]>> {
   return routesRequest;
 }
 
-export const terminals: Terminal[] = [];
-
 export function findRoute(id: string | null | undefined) {
   return transitRoutes.find((route) => route.id === id) ?? null;
 }
 
-export function findTerminal(id: string | null | undefined) {
-  return terminals.find((terminal) => terminal.id === id) ?? null;
-}
-
-export function getRouteTerminals(routeId: string) {
-  const code = findRoute(routeId)?.code;
-  return code
-    ? terminals.filter((terminal) => terminal.routeCodes.includes(code))
-    : [];
-}
-
-export type DestinationResults = {
-  terminals: (Terminal & { routes: TransitRoute[] })[];
-  routes: TransitRoute[];
-};
-
-export function searchDestinations(query: string): DestinationResults {
+export function searchDestinations(query: string) {
   const needle = query.trim().toLowerCase();
-  const matches = (value: string) => value.toLowerCase().includes(needle);
-
-  const matchingTerminals = terminals
-    .filter(
-      (terminal) => !needle || matches(terminal.name) || matches(terminal.city),
-    )
-    .map((terminal) => ({
-      ...terminal,
-      routes: transitRoutes.filter((route) =>
-        terminal.routeCodes.includes(route.code),
-      ),
-    }));
-
-  return {
-    terminals: matchingTerminals,
-    routes: needle ? transitRoutes.filter((route) => matches(route.name)) : [],
-  };
+  return transitRoutes.filter((route) =>
+    route.name.toLowerCase().includes(needle),
+  );
 }
-
-export function isInBounds(
-  { lat, lng }: { lat: number; lng: number },
-  bounds: MapBounds | null,
-) {
-  if (!bounds) return true;
-  const withinLng =
-    bounds.west <= bounds.east
-      ? lng >= bounds.west && lng <= bounds.east
-      : lng >= bounds.west || lng <= bounds.east;
-  return lat >= bounds.south && lat <= bounds.north && withinLng;
-}
-
-export const vehicleMaxCapacity: Record<VehicleType, number> = {
-  jeep: 24,
-  tricy: 6,
-};
 
 export function getOccupancyLevel(current: number, max: number) {
   const ratio = current / max;

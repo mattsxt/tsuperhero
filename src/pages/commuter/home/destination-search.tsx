@@ -1,5 +1,4 @@
 import { router } from "expo-router";
-import Building from "lucide-react-native/icons/building";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
 import MapPin from "lucide-react-native/icons/map-pin";
 import MapPinSearch from "lucide-react-native/icons/map-pin-search";
@@ -23,7 +22,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
   searchDestinations,
-  type DestinationResults,
   type TransitRoute,
 } from "@/api/v1/transit-routes/controllers";
 import { Routes } from "@/constants/routes";
@@ -112,7 +110,7 @@ export function DestinationSearchPanel({
   }, [onClose]);
 
   useTransitRoutes();
-  const results = searchDestinations(query);
+  const routes = searchDestinations(query);
 
   const availableHeight =
     windowHeight -
@@ -127,24 +125,17 @@ export function DestinationSearchPanel({
     120,
   );
 
-  const openRoute = (route: TransitRoute, terminalId?: string) => {
+  const openRoute = (route: TransitRoute) => {
     Keyboard.dismiss();
     onClose();
     router.push({
       pathname: Routes.commuterRoutes,
-      params: terminalId
-        ? { routeId: route.id, terminalId }
-        : { routeId: route.id },
+      params: { routeId: route.id },
     });
   };
 
   const openBestMatch = () => {
-    const [terminal] = results.terminals;
-    if (query.trim() && terminal?.routes[0]) {
-      openRoute(terminal.routes[0], terminal.id);
-    } else if (query.trim() && results.routes[0]) {
-      openRoute(results.routes[0]);
-    }
+    if (query.trim() && routes[0]) openRoute(routes[0]);
   };
 
   const close = () => {
@@ -152,7 +143,7 @@ export function DestinationSearchPanel({
     onClose();
   };
 
-  const { items, stickyIndices } = buildResultItems(query, results, openRoute);
+  const { items, stickyIndices } = buildResultItems(query, routes, openRoute);
 
   return (
     <View style={styles.wrap}>
@@ -219,82 +210,29 @@ export function DestinationSearchPanel({
 
 function buildResultItems(
   query: string,
-  results: DestinationResults,
-  onOpenRoute: (route: TransitRoute, terminalId?: string) => void,
+  routes: TransitRoute[],
+  onOpenRoute: (route: TransitRoute) => void,
 ): { items: ReactElement[]; stickyIndices: number[] } {
-  const items: ReactElement[] = [];
-  const stickyIndices: number[] = [];
-
-  const addLabel = (key: string, label: string) => {
-    stickyIndices.push(items.length);
-    items.push(
-      <View key={key} style={styles.sectionLabelWrap}>
-        <Text style={styles.sectionLabel}>{label}</Text>
-      </View>,
-    );
-  };
-
-  if (results.terminals.length === 0 && results.routes.length === 0) {
-    items.push(
-      <Text key="empty" style={styles.empty}>
-        No terminals or routes match “{query.trim()}”.
-      </Text>,
-    );
-    return { items, stickyIndices };
+  if (routes.length === 0) {
+    return {
+      items: [
+        <Text key="empty" style={styles.empty}>
+          No routes match “{query.trim()}”.
+        </Text>,
+      ],
+      stickyIndices: [],
+    };
   }
 
-  if (results.terminals.length > 0) {
-    addLabel(
-      "terminals-label",
-      query.trim() ? "TERMINALS" : "POPULAR TERMINALS",
-    );
-  }
-  results.terminals.forEach((terminal) => {
-    items.push(
-      <View key={terminal.id} style={styles.terminalRow}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`${terminal.name}, ${terminal.city}`}
-          disabled={terminal.routes.length === 0}
-          onPress={() => onOpenRoute(terminal.routes[0], terminal.id)}
-          style={({ pressed }) => [styles.rowMain, pressed && styles.pressed]}
-        >
-          <View style={styles.rowIcon}>
-            <Building color={brandBlue} size={16} strokeWidth={2} />
-          </View>
-          <View style={styles.rowText}>
-            <Text style={styles.rowTitle} numberOfLines={1}>
-              {terminal.name}
-            </Text>
-            <Text style={styles.rowSubtitle}>{terminal.city}</Text>
-          </View>
-        </Pressable>
-        <View style={styles.routeChips}>
-          {terminal.routes.map((route) => (
-            <Pressable
-              key={route.id}
-              accessibilityRole="button"
-              accessibilityLabel={`View ${route.name} route to ${terminal.name}`}
-              onPress={() => onOpenRoute(route, terminal.id)}
-              style={({ pressed }) => [
-                styles.routeChip,
-                pressed && styles.pressed,
-              ]}
-            >
-              <MapPinSearch color={brandBlue} size={11} strokeWidth={2.2} />
-              <Text style={styles.routeChipText}>{route.name}</Text>
-            </Pressable>
-          ))}
-        </View>
-      </View>,
-    );
-  });
-
-  if (results.routes.length > 0) addLabel("routes-label", "ROUTES");
-  results.routes.forEach((route) => {
+  const items: ReactElement[] = [
+    <View key="routes-label" style={styles.sectionLabelWrap}>
+      <Text style={styles.sectionLabel}>ROUTES</Text>
+    </View>,
+  ];
+  routes.forEach((route) => {
     items.push(
       <Pressable
-        key={`route-${route.id}`}
+        key={route.id}
         accessibilityRole="button"
         accessibilityLabel={`View ${route.name} route`}
         onPress={() => onOpenRoute(route)}
@@ -313,7 +251,7 @@ function buildResultItems(
     );
   });
 
-  return { items, stickyIndices };
+  return { items, stickyIndices: [0] };
 }
 
 const styles = StyleSheet.create({
@@ -372,11 +310,6 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     textAlign: "center",
   },
-  terminalRow: {
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: "#eef1f7",
-  },
   rowMain: { flexDirection: "row", alignItems: "center", gap: 10 },
   routeRow: { paddingVertical: 8 },
   rowIcon: {
@@ -389,27 +322,4 @@ const styles = StyleSheet.create({
   },
   rowText: { flex: 1 },
   rowTitle: { color: brandBlue, fontFamily: "SoraBold", fontSize: 11 },
-  rowSubtitle: {
-    color: mutedText,
-    fontFamily: "Sora",
-    fontSize: 9,
-    marginTop: 1,
-  },
-  routeChips: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-    marginTop: 6,
-    marginLeft: 40,
-  },
-  routeChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 999,
-    backgroundColor: softBlue,
-  },
-  routeChipText: { color: brandBlue, fontFamily: "SoraBold", fontSize: 9 },
 });

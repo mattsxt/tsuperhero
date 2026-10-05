@@ -4,30 +4,19 @@ import BusFront from "lucide-react-native/icons/bus-front";
 import CalendarDays from "lucide-react-native/icons/calendar-days";
 import ChevronLeft from "lucide-react-native/icons/chevron-left";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
-import CircleCheckBig from "lucide-react-native/icons/circle-check-big";
-import ClipboardList from "lucide-react-native/icons/clipboard-list";
 import Flag from "lucide-react-native/icons/flag";
 import MapPin from "lucide-react-native/icons/map-pin";
 import NotebookPen from "lucide-react-native/icons/notebook-pen";
-import PartyPopper from "lucide-react-native/icons/party-popper";
-import Star from "lucide-react-native/icons/star";
 import TriangleAlert from "lucide-react-native/icons/triangle-alert";
 import UserRoundCheck from "lucide-react-native/icons/user-round-check";
 import Users from "lucide-react-native/icons/users";
 import { useEffect, useState } from "react";
 import { BackHandler, Pressable, StyleSheet, Text, View } from "react-native";
-import Animated, {
-  useAnimatedRef,
-  type CSSTransitionProperties,
-} from "react-native-reanimated";
+import Animated, { useAnimatedRef } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import type { Place } from "@/api/v1/places/controllers";
-import {
-  DateTimeField,
-  formatDate,
-  formatTime,
-} from "@/components/date-time-field";
+import { DateTimeField } from "@/components/date-time-field";
 import { EmptyState } from "@/components/empty-state";
 import {
   Chip,
@@ -44,15 +33,14 @@ import {
 import { PlaceSearchField } from "@/components/place-search-field";
 import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
-import { getInitials } from "@/utils/format";
 
-const { brandBlue, softBlue, mutedText, text, error } = moduleColors;
+const { brandBlue, softBlue, text, error } = moduleColors;
 
-type Step = 1 | 2 | 3 | 4 | 5;
+type Step = 1 | 2 | 3;
 type TripType = "one_way" | "round_trip";
 type CharterVehicle = "van" | "jeep" | "bus";
 
-const stepTitles = ["Trip details", "Vehicle", "Driver", "Review"];
+const stepTitles = ["Trip details", "Vehicle", "Driver"];
 
 const charterVehicles: VehicleOption<CharterVehicle>[] = [
   { value: "van", label: "VAN", icon: require("@/assets/images/van.svg") },
@@ -85,25 +73,6 @@ const occasions = [
   "Other",
 ];
 
-type Driver = {
-  id: string;
-  name: string;
-  rating: number;
-  trips: number;
-  vehicle: CharterVehicle;
-  model: string;
-  plate: string;
-  seats: number;
-};
-
-const availableDrivers: Driver[] = [];
-
-const cardTransition: CSSTransitionProperties = {
-  transitionProperty: ["backgroundColor", "borderColor"],
-  transitionDuration: 250,
-  transitionTimingFunction: "ease-in-out",
-};
-
 const maxPassengers = 50;
 
 function startOfToday() {
@@ -117,10 +86,6 @@ function sameOrAfter(a: Date, b: Date) {
     new Date(a.getFullYear(), a.getMonth(), a.getDate()) >=
     new Date(b.getFullYear(), b.getMonth(), b.getDate())
   );
-}
-
-function describePlace(place: Place) {
-  return place.address ? `${place.name}, ${place.address}` : place.name;
 }
 
 function sameDay(a: Date, b: Date) {
@@ -149,12 +114,6 @@ export default function RentalScreen() {
   const [passengers, setPassengers] = useState(1);
   const [notes, setNotes] = useState("");
   const [vehicle, setVehicle] = useState<CharterVehicle>("van");
-  const [driverId, setDriverId] = useState<string | null>(null);
-
-  const drivers = availableDrivers.filter(
-    (driver) => driver.vehicle === vehicle && driver.seats >= passengers,
-  );
-  const driver = availableDrivers.find((option) => option.id === driverId);
 
   const goToStep = (next: Step) => {
     setProblem("");
@@ -163,7 +122,7 @@ export default function RentalScreen() {
   };
 
   const goHome = () => {
-    if (step === 5 || !router.canGoBack()) router.replace(Routes.commuterHome);
+    if (!router.canGoBack()) router.replace(Routes.commuterHome);
     else router.back();
   };
 
@@ -197,24 +156,18 @@ export default function RentalScreen() {
       ? `A ${vehicleNames[vehicle].toLowerCase()} fits up to ${vehicleCapacity[vehicle]} passengers. Choose a bigger vehicle.`
       : null;
 
-  const getDriverProblem = () =>
-    driver && drivers.includes(driver) ? null : "Select a driver to continue.";
-
   const stepProblems: Record<Step, () => string | null> = {
     1: getTripProblem,
     2: getVehicleProblem,
-    3: getDriverProblem,
-    4: () => "Confirm your booking to continue.",
-    5: () => "",
+    3: () => "No drivers are available for this trip yet.",
   };
 
-  const canGoForward = step < 4 && !stepProblems[step]();
-  const canGoBackward = step > 1 && step < 5;
+  const canGoForward = step < 3 && !stepProblems[step]();
+  const canGoBackward = step > 1;
 
   const advance = () => {
     const problem = stepProblems[step]();
     if (problem) return setProblem(problem);
-    if (step === 2 && driver && driver.vehicle !== vehicle) setDriverId(null);
     goToStep((step + 1) as Step);
   };
 
@@ -226,7 +179,7 @@ export default function RentalScreen() {
     const subscription = BackHandler.addEventListener(
       "hardwareBackPress",
       () => {
-        if (step > 1 && step < 5) {
+        if (step > 1) {
           setProblem("");
           setStep((current) => (current - 1) as Step);
           return true;
@@ -439,133 +392,17 @@ export default function RentalScreen() {
                 }
                 title="Available drivers"
               />
-              {drivers.length > 0 ? (
-                <Text style={styles.helperText}>
-                  {`${drivers.length} ${vehicleNames[vehicle].toLowerCase()} driver${drivers.length === 1 ? "" : "s"} available on ${tripDate ? formatDate(tripDate) : "your date"}. Select one to continue.`}
-                </Text>
-              ) : (
-                <EmptyState
-                  icon={
-                    <UserRoundCheck
-                      color={brandBlue}
-                      size={32}
-                      strokeWidth={1.8}
-                    />
-                  }
-                  message="Drivers available for this vehicle and group size will show up here."
-                />
-              )}
-
-              <View style={styles.driverList}>
-                {drivers.map((option) => (
-                  <DriverCard
-                    key={option.id}
-                    driver={option}
-                    selected={option.id === driverId}
-                    onPress={() => {
-                      setProblem("");
-                      setDriverId(option.id);
-                    }}
+              <EmptyState
+                icon={
+                  <UserRoundCheck
+                    color={brandBlue}
+                    size={32}
+                    strokeWidth={1.8}
                   />
-                ))}
-              </View>
-
-              <Problem message={problem} />
-              <ModuleButton
-                label="REVIEW BOOKING"
-                onPress={advance}
-                disabled={drivers.length === 0}
+                }
+                message="Drivers available for this vehicle and group size will show up here."
               />
             </>
-          )}
-
-          {step === 4 &&
-            driver &&
-            tripDate &&
-            pickupTime &&
-            pickup &&
-            destination && (
-              <>
-                <SectionTitle
-                  icon={
-                    <ClipboardList color="#ffffff" size={18} strokeWidth={2} />
-                  }
-                  title="Review your charter"
-                />
-                <View style={styles.reviewCard}>
-                  <ReviewRow label="Pickup" value={describePlace(pickup)} />
-                  <ReviewRow
-                    label="Destination"
-                    value={describePlace(destination)}
-                  />
-                  <ReviewRow
-                    label="Trip"
-                    value={
-                      tripType === "round_trip" && returnDate
-                        ? `Round trip · ${formatDate(tripDate)} – ${formatDate(returnDate)}`
-                        : `One-way · ${formatDate(tripDate)}`
-                    }
-                  />
-                  <ReviewRow
-                    label="Pickup time"
-                    value={formatTime(pickupTime)}
-                  />
-                  {tripType === "round_trip" && returnTime && (
-                    <ReviewRow
-                      label="Return pickup"
-                      value={formatTime(returnTime)}
-                    />
-                  )}
-                  <ReviewRow label="Occasion" value={occasion} />
-                  <ReviewRow
-                    label="Passengers"
-                    value={`${passengers} passenger${passengers === 1 ? "" : "s"}`}
-                  />
-                  <ReviewRow label="Vehicle" value={vehicleNames[vehicle]} />
-                  <ReviewRow
-                    label="Driver"
-                    value={`${driver.name} · ${driver.model} (${driver.plate})`}
-                  />
-                  {!!notes.trim() && (
-                    <ReviewRow label="Notes" value={notes.trim()} />
-                  )}
-                </View>
-                <Text style={styles.helperText}>
-                  The driver will review and confirm your request before your
-                  trip.
-                </Text>
-
-                <ModuleButton
-                  label="CONFIRM BOOKING"
-                  onPress={() => goToStep(5)}
-                />
-              </>
-            )}
-
-          {step === 5 && driver && (
-            <View style={styles.success}>
-              <View style={styles.successIcon}>
-                <CircleCheckBig color="#ffffff" size={44} strokeWidth={2} />
-              </View>
-              <Text style={styles.successTitle}>Charter request sent!</Text>
-              <Text style={styles.successText}>
-                We’ve sent your request to {driver.name}. You’ll be notified
-                once they accept your trip.
-              </Text>
-              <View style={styles.successNote}>
-                <PartyPopper color={brandBlue} size={18} strokeWidth={2} />
-                <Text style={styles.infoText}>
-                  {occasion === "Other"
-                    ? "Enjoy your trip!"
-                    : `Enjoy your ${occasion.toLowerCase()}!`}
-                </Text>
-              </View>
-              <ModuleButton
-                label="BACK TO HOME"
-                onPress={() => router.replace(Routes.commuterHome)}
-                style={styles.fullWidth}
-              />
-            </View>
           )}
         </View>
       </Animated.ScrollView>
@@ -578,16 +415,14 @@ export default function RentalScreen() {
           onBack={goHome}
           collapsed={chrome.collapsed}
         >
-          {step < 5 && (
-            <StepProgress
-              step={step}
-              collapsed={chrome.collapsed}
-              canGoBack={canGoBackward}
-              canGoForward={canGoForward}
-              onBack={retreat}
-              onForward={advance}
-            />
-          )}
+          <StepProgress
+            step={step}
+            collapsed={chrome.collapsed}
+            canGoBack={canGoBackward}
+            canGoForward={canGoForward}
+            onBack={retreat}
+            onForward={advance}
+          />
         </ModuleHeader>
       </StickyHeader>
     </View>
@@ -671,62 +506,6 @@ function StepArrow({
   );
 }
 
-function DriverCard({
-  driver,
-  selected,
-  onPress,
-}: {
-  driver: Driver;
-  selected: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`Driver ${driver.name}`}
-      accessibilityState={{ selected }}
-      onPress={onPress}
-    >
-      <Animated.View
-        style={[
-          styles.driverCard,
-          selected && styles.driverCardSelected,
-          cardTransition,
-        ]}
-      >
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{getInitials(driver.name)}</Text>
-        </View>
-        <View style={styles.flex}>
-          <Text style={styles.driverName}>{driver.name}</Text>
-          <View style={styles.ratingRow}>
-            <Star color="#f5b301" fill="#f5b301" size={12} />
-            <Text style={styles.driverMeta}>
-              {driver.rating.toFixed(1)} · {driver.trips} trips
-            </Text>
-          </View>
-          <Text style={styles.driverMeta}>
-            {driver.model} · {driver.plate}
-          </Text>
-          <Text style={styles.driverMeta}>Seats up to {driver.seats}</Text>
-        </View>
-        <View style={[styles.radio, selected && styles.radioSelected]}>
-          {selected && <View style={styles.radioDot} />}
-        </View>
-      </Animated.View>
-    </Pressable>
-  );
-}
-
-function ReviewRow({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.reviewRow}>
-      <Text style={styles.reviewLabel}>{label}</Text>
-      <Text style={styles.reviewValue}>{value}</Text>
-    </View>
-  );
-}
-
 function Problem({ message }: { message: string }) {
   if (!message) return null;
   return <Text style={styles.problem}>{message}</Text>;
@@ -739,7 +518,6 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", gap: 12 },
   gap: { height: 14 },
   gapTop: { marginTop: 16 },
-  fullWidth: { alignSelf: "stretch" },
   bold: { fontFamily: "SoraBold" },
   progress: { marginTop: 18 },
   progressCollapsed: { marginTop: 10 },
@@ -796,129 +574,11 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   warningText: { color: error },
-  helperText: {
-    color: mutedText,
-    fontFamily: "Sora",
-    fontSize: 10,
-    lineHeight: 15,
-    marginTop: 12,
-  },
-  driverList: { gap: 12, marginTop: 14 },
-  driverCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    padding: 14,
-    borderWidth: 1.5,
-    borderColor: softBlue,
-    borderRadius: 12,
-    backgroundColor: "#ffffff",
-  },
-  driverCardSelected: { borderColor: brandBlue, backgroundColor: "#f3f7ff" },
-  avatar: {
-    width: 46,
-    height: 46,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 23,
-    backgroundColor: softBlue,
-  },
-  avatarText: { color: brandBlue, fontFamily: "SoraBold", fontSize: 14 },
-  driverName: { color: brandBlue, fontFamily: "SoraBold", fontSize: 13 },
-  ratingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    marginTop: 2,
-  },
-  driverMeta: {
-    color: mutedText,
-    fontFamily: "Sora",
-    fontSize: 9,
-    marginTop: 2,
-  },
-  radio: {
-    width: 20,
-    height: 20,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 2,
-    borderColor: "#c4c4c4",
-    borderRadius: 10,
-  },
-  radioSelected: { borderColor: brandBlue },
-  radioDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: brandBlue,
-  },
-  reviewCard: {
-    padding: 16,
-    borderWidth: 1.5,
-    borderColor: brandBlue,
-    borderRightWidth: 5,
-    borderRightColor: "#1a2f8f",
-    borderRadius: 10,
-  },
-  reviewRow: {
-    flexDirection: "row",
-    gap: 12,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: "#eef1f7",
-  },
-  reviewLabel: {
-    width: 90,
-    color: mutedText,
-    fontFamily: "Sora",
-    fontSize: 10,
-  },
-  reviewValue: {
-    flex: 1,
-    color: text,
-    fontFamily: "SoraBold",
-    fontSize: 11,
-  },
   problem: {
     color: error,
     fontFamily: "Sora",
     fontSize: 10,
     marginTop: 16,
     textAlign: "center",
-  },
-  success: { alignItems: "center", paddingTop: 36 },
-  successIcon: {
-    width: 84,
-    height: 84,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 42,
-    backgroundColor: brandBlue,
-  },
-  successTitle: {
-    color: brandBlue,
-    fontFamily: "SoraBold",
-    fontSize: 20,
-    marginTop: 18,
-  },
-  successText: {
-    color: text,
-    fontFamily: "Sora",
-    fontSize: 11,
-    lineHeight: 17,
-    textAlign: "center",
-    marginTop: 8,
-    paddingHorizontal: 16,
-  },
-  successNote: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    alignSelf: "stretch",
-    marginTop: 20,
-    padding: 14,
-    borderRadius: 10,
-    backgroundColor: softBlue,
   },
 });

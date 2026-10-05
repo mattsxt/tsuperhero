@@ -19,17 +19,22 @@ import { scheduleOnRN } from "react-native-worklets";
 const collapseOffset = 8;
 const directionThreshold = 6;
 
-export const chromeDuration = 250;
+const chromeDuration = 250;
 export const headerLayoutTransition = LinearTransition.duration(chromeDuration);
 export const headerTitleTransition: CSSTransitionProperties<TextStyle> = {
   transitionProperty: ["fontSize", "lineHeight"],
   transitionDuration: chromeDuration,
   transitionTimingFunction: "ease-in-out",
 };
-export const headerFadeIn = FadeIn.duration(chromeDuration);
-export const headerFadeOut = FadeOut.duration(150);
+export const headerLogoTransition: CSSTransitionProperties = {
+  transitionProperty: ["width", "height", "opacity", "transform"],
+  transitionDuration: chromeDuration,
+  transitionTimingFunction: "ease-in-out",
+};
+const headerFadeIn = FadeIn.duration(chromeDuration);
+const headerFadeOut = FadeOut.duration(150);
 
-export type ScrollChrome = {
+type ScrollChrome = {
   collapsed: boolean;
   navHidden: SharedValue<number>;
   scrollHandler: ReturnType<typeof useAnimatedScrollHandler>;

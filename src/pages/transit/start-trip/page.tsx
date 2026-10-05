@@ -1,12 +1,10 @@
 import { Image } from "expo-image";
 import { StatusBar } from "expo-status-bar";
-import Check from "lucide-react-native/icons/check";
 import CircleAlert from "lucide-react-native/icons/circle-alert";
 import BusFront from "lucide-react-native/icons/bus-front";
 import MapPin from "lucide-react-native/icons/map-pin";
 import Minus from "lucide-react-native/icons/minus";
 import Plus from "lucide-react-native/icons/plus";
-import Users from "lucide-react-native/icons/users";
 import X from "lucide-react-native/icons/x";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
@@ -42,8 +40,6 @@ const counterBlue = "#7dd3f5";
 const circleNavy = "#1034A6";
 
 const routeLoopSeconds = 300;
-const areaLoopSeconds = 180;
-const pickupTravelMs = 6_000;
 const toastMs = 4_000;
 
 type ToastTone = "danger" | "success" | "info";
@@ -54,13 +50,6 @@ type Toast = {
   tone: ToastTone;
   side: "left" | "right";
   dismissible: boolean;
-};
-
-type Pickup = {
-  id: number;
-  passengers: number;
-  position: LatLng;
-  accepted: boolean;
 };
 
 function nextToast(
@@ -75,19 +64,6 @@ function nextToast(
     tone,
     side,
     dismissible,
-  });
-}
-
-function areaLoop(center: LatLng, radiusMeters: number): LatLng[] {
-  const [lat, lng] = center;
-  const latRadius = (radiusMeters * 0.45) / 111_320;
-  const lngRadius = latRadius / Math.cos((lat * Math.PI) / 180);
-  return Array.from({ length: 25 }, (_, index) => {
-    const angle = (index / 24) * Math.PI * 2;
-    return [
-      lat + latRadius * Math.sin(angle),
-      lng + lngRadius * Math.cos(angle),
-    ];
   });
 }
 
@@ -139,10 +115,9 @@ export default function TripScreen() {
 
 function Trip({ details }: { details: AssignmentDetails }) {
   const insets = useSafeAreaInsets();
-  const { assignment, route, area, vehicleLabel, coverageTitle } = details;
+  const { assignment, route, vehicleLabel, coverageTitle } = details;
   const { vehicle } = assignment;
   const capacity = vehicle.max_capacity;
-  const loopSeconds = route ? routeLoopSeconds : areaLoopSeconds;
   const vehicleIcon = vehicleOptions.find(
     (option) => option.value === vehicle.vehicle_type,
   )?.icon;
@@ -154,29 +129,17 @@ function Trip({ details }: { details: AssignmentDetails }) {
   const [progress, setProgress] = useState(0);
   const [count, setCount] = useState(0);
   const [markedFull, setMarkedFull] = useState(false);
-  const [pickup, setPickup] = useState<Pickup | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
 
   const full = markedFull || count >= capacity;
   const path = useMemo(
-    () =>
-      route
-        ? (routePath ?? route.waypoints)
-        : area
-          ? areaLoop(area.center, area.radiusMeters)
-          : [],
-    [route, routePath, area],
+    () => (route ? (routePath ?? route.waypoints) : []),
+    [route, routePath],
   );
-
-  const fraction = route
-    ? progress <= 1
-      ? progress
-      : 2 - progress
-    : progress % 1;
-  const position = useMemo<LatLng>(
-    () =>
-      path.length > 1 ? pointAlong(path, fraction) : (area?.center ?? [0, 0]),
-    [path, fraction, area],
+  const fraction = progress <= 1 ? progress : 2 - progress;
+  const position = useMemo<LatLng | null>(
+    () => (path.length > 1 ? pointAlong(path, fraction) : null),
+    [path, fraction],
   );
 
   useEffect(() => {
@@ -193,20 +156,10 @@ function Trip({ details }: { details: AssignmentDetails }) {
   useEffect(() => {
     if (!inTransit) return;
     const timer = setInterval(() => {
-      setProgress((current) => (current + 1 / loopSeconds) % 2);
+      setProgress((current) => (current + 1 / routeLoopSeconds) % 2);
     }, 1000);
     return () => clearInterval(timer);
-  }, [inTransit, loopSeconds]);
-
-  useEffect(() => {
-    if (!pickup?.accepted) return;
-    const timer = setTimeout(() => {
-      setCount((current) => Math.min(current + pickup.passengers, capacity));
-      setPickup(null);
-      setToast(nextToast("Passenger Picked Up!", "success", "right"));
-    }, pickupTravelMs);
-    return () => clearTimeout(timer);
-  }, [pickup, capacity]);
+  }, [inTransit]);
 
   useEffect(() => {
     if (!toast) return;
@@ -256,7 +209,6 @@ function Trip({ details }: { details: AssignmentDetails }) {
     setProgress(0);
     setCount(0);
     setMarkedFull(false);
-    setPickup(null);
     setToast(nextToast("Trip Ended!", "info", "left"));
   };
 
@@ -271,61 +223,29 @@ function Trip({ details }: { details: AssignmentDetails }) {
     }
   };
 
-  const acceptPickup = () => {
-    if (!pickup) return;
-    setPickup({ ...pickup, accepted: true });
-    setToast(nextToast("Pickup Accepted", "success", "right", false));
-  };
-
-  const rejectPickup = () => {
-    setPickup(null);
-    setToast(nextToast("Request Rejected!", "info", "left"));
-  };
-
   const mapState = useMemo<TransitMapState>(
     () => ({
       routeId: route?.id ?? null,
       route: route ? routePath : null,
-      area: area
-        ? {
-            id: area.id,
-            lat: area.center[0],
-            lng: area.center[1],
-            radius: area.radiusMeters,
-          }
-        : null,
-      vehicles: [
-        {
-          id: "my-vehicle",
-          lat: position[0],
-          lng: position[1],
-          type: vehicle.vehicle_type,
-        },
-      ],
-      terminals: [],
-      highlightedTerminalId: null,
-      selectedId: null,
-      focus: null,
-      pickups: pickup
+      vehicles: position
         ? [
             {
-              id: `pickup-${pickup.id}`,
-              lat: pickup.position[0],
-              lng: pickup.position[1],
+              id: "my-vehicle",
+              lat: position[0],
+              lng: position[1],
+              type: vehicle.vehicle_type,
             },
           ]
         : [],
-      pickupLine: pickup?.accepted ? [position, pickup.position] : null,
+      focus: null,
       padTop: headerHeight + 30,
       padBottom: panelHeight + 30,
     }),
     [
       route,
       routePath,
-      area,
       position,
       vehicle,
-      pickup,
       headerHeight,
       panelHeight,
     ],
@@ -337,7 +257,7 @@ function Trip({ details }: { details: AssignmentDetails }) {
   return (
     <View style={styles.screen}>
       <StatusBar style="light" />
-      <TransitMap state={mapState} onSelect={() => {}} />
+      <TransitMap state={mapState} />
 
       <View
         style={styles.headerWrap}
@@ -350,42 +270,6 @@ function Trip({ details }: { details: AssignmentDetails }) {
           onBack={leave}
         />
       </View>
-
-      {pickup && !pickup.accepted && (
-        <View style={[styles.requestCard, { bottom: overlayBottom }]}>
-          <View>
-            <Text style={styles.requestTitle}>Passengers</Text>
-            <View style={styles.requestCount}>
-              <Users color="#3b2a14" size={14} strokeWidth={2} />
-              <Text style={styles.requestCountText}>{pickup.passengers}</Text>
-            </View>
-          </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Accept pickup for ${pickup.passengers} passengers`}
-            onPress={acceptPickup}
-            style={({ pressed }) => [
-              styles.requestButton,
-              styles.requestAccept,
-              pressed && styles.pressed,
-            ]}
-          >
-            <Check color="#15803d" size={18} strokeWidth={2.5} />
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Reject pickup request"
-            onPress={rejectPickup}
-            style={({ pressed }) => [
-              styles.requestButton,
-              styles.requestReject,
-              pressed && styles.pressed,
-            ]}
-          >
-            <X color="#dc2626" size={18} strokeWidth={2.5} />
-          </Pressable>
-        </View>
-      )}
 
       {toast && (
         <View
@@ -580,40 +464,6 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#e8eaed" },
   headerWrap: { position: "absolute", top: 0, left: 0, right: 0 },
   pressed: { opacity: 0.7 },
-  requestCard: {
-    position: "absolute",
-    right: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderRadius: 10,
-    backgroundColor: "#fbb574",
-    shadowColor: "#000000",
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 5,
-  },
-  requestTitle: { color: "#3b2a14", fontFamily: "SoraBold", fontSize: 10 },
-  requestCount: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginTop: 3,
-    marginLeft: 12,
-  },
-  requestCountText: { color: "#3b2a14", fontFamily: "SoraBold", fontSize: 10 },
-  requestButton: {
-    width: 32,
-    height: 32,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 16,
-  },
-  requestAccept: { backgroundColor: "#86efac" },
-  requestReject: { backgroundColor: "#fca5a5" },
   toast: {
     position: "absolute",
     flexDirection: "row",

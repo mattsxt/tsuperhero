@@ -1,11 +1,9 @@
-import { Image } from "expo-image";
 import { useLocalSearchParams } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import Bus from "lucide-react-native/icons/bus";
 import ChevronsDown from "lucide-react-native/icons/chevrons-down";
 import ChevronsUp from "lucide-react-native/icons/chevrons-up";
 import MapPin from "lucide-react-native/icons/map-pin";
-import Navigation from "lucide-react-native/icons/navigation";
 import PersonStanding from "lucide-react-native/icons/person-standing";
 import Search from "lucide-react-native/icons/search";
 import X from "lucide-react-native/icons/x";
@@ -27,17 +25,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
   findRoute,
-  findTerminal,
-  getOccupancyLevel,
-  getRouteTerminals,
-  isInBounds,
   loadAlternativeGeometry,
   loadRouteGeometry,
-  vehicleTypeLabels,
   type LatLng,
-  type MapBounds,
-  type RouteVehicle,
-  type VehicleType,
 } from "@/api/v1/transit-routes/controllers";
 import {
   findWaitingAreasOnRoute,
@@ -47,7 +37,6 @@ import {
 import {
   ModuleHeader,
   moduleColors,
-  vehicleOptions,
 } from "@/components/module-ui";
 import { TransitMap, type TransitMapState } from "@/components/transit-map";
 import { Routes } from "@/constants/routes";
@@ -57,14 +46,6 @@ import { goBackOr } from "@/utils/navigation";
 const { brandBlue, headerBlue, mutedText, softBlue, text } = moduleColors;
 const cardNavy = "#0f2a5c";
 const lightBlue = "#a8dcf7";
-
-const activeVehicles: RouteVehicle[] = [];
-
-const allTypes: VehicleType[] = ["jeep", "tricy"];
-
-const vehicleIcons = Object.fromEntries(
-  vehicleOptions.map((option) => [option.value, option.icon]),
-) as Record<VehicleType, number>;
 
 const chipTransition: CSSTransitionProperties = {
   transitionProperty: ["backgroundColor", "transform", "opacity"],
@@ -76,13 +57,6 @@ const slideTransition: CSSTransitionProperties = {
   transitionProperty: ["maxHeight", "opacity", "marginBottom"],
   transitionDuration: 320,
   transitionTimingFunction: "ease-in-out",
-};
-
-const occupancyColors: Record<string, string> = {
-  Available: "#1e9e45",
-  Moderate: "#e0a800",
-  "Almost Full": "#e8710a",
-  Full: "#d93025",
 };
 
 function findVicinity(routeVicinity: string[], vicinity: string | null) {
@@ -97,7 +71,6 @@ export default function RoutesScreen() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{
     routeId?: string;
-    terminalId?: string;
   }>();
   const transitRoutes = useTransitRoutes();
   const initialRoute = findRoute(params.routeId);
@@ -105,22 +78,15 @@ export default function RoutesScreen() {
   const [headerHeight, setHeaderHeight] = useState(140);
   const [panelHeight, setPanelHeight] = useState(insets.bottom + 84);
   const [routeId, setRouteId] = useState<string | null>(params.routeId ?? null);
-  const [terminalId, setTerminalId] = useState<string | null>(
-    params.routeId ? (findTerminal(params.terminalId)?.id ?? null) : null,
-  );
   const [path, setPath] = useState<LatLng[] | null>(null);
   const [alternativePaths, setAlternativePaths] = useState<LatLng[][]>([]);
   const [waitingAreas, setWaitingAreas] = useState<WaitingArea[]>([]);
   const [loadingRoute, setLoadingRoute] = useState(!!params.routeId);
-  const [activeTypes, setActiveTypes] = useState<VehicleType[]>(allTypes);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState(initialRoute?.name ?? "");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [panelExpanded, setPanelExpanded] = useState(false);
   const [showTerminals, setShowTerminals] = useState(true);
   const [showWaitingAreas, setShowWaitingAreas] = useState(true);
-  const [bounds, setBounds] = useState<MapBounds | null>(null);
-  const [focus, setFocus] = useState<TransitMapState["focus"]>(null);
 
   const route = findRoute(routeId);
 
@@ -164,21 +130,6 @@ export default function RoutesScreen() {
     [waitingAreas, routeId, path, alternativePaths, route],
   );
 
-  const vehicles = activeVehicles;
-  const visibleVehicles = useMemo(
-    () => vehicles.filter((vehicle) => activeTypes.includes(vehicle.type)),
-    [vehicles, activeTypes],
-  );
-  const vehiclesInView = useMemo(
-    () => visibleVehicles.filter((vehicle) => isInBounds(vehicle, bounds)),
-    [visibleVehicles, bounds],
-  );
-  const selected = visibleVehicles.find((vehicle) => vehicle.id === selectedId);
-  const routeTerminals = useMemo(
-    () => (routeId ? getRouteTerminals(routeId) : []),
-    [routeId],
-  );
-
   const mapState = useMemo<TransitMapState>(
     () => ({
       routeId,
@@ -196,23 +147,8 @@ export default function RoutesScreen() {
           tag: findVicinity(route?.vicinity ?? [], vicinity),
           kind: type,
         })),
-      vehicles: visibleVehicles.map(({ id, lat, lng, type }) => ({
-        id,
-        lat,
-        lng,
-        type,
-      })),
-      terminals: showTerminals
-        ? routeTerminals.map(({ id, name, lat, lng }) => ({
-            id,
-            name,
-            lat,
-            lng,
-          }))
-        : [],
-      highlightedTerminalId: terminalId,
-      selectedId: selected?.id ?? null,
-      focus,
+      vehicles: [],
+      focus: null,
       padTop: headerHeight + 30,
       padBottom: panelHeight + 70,
     }),
@@ -223,12 +159,7 @@ export default function RoutesScreen() {
       route,
       routeWaitingAreas,
       showWaitingAreas,
-      visibleVehicles,
-      routeTerminals,
       showTerminals,
-      terminalId,
-      selected,
-      focus,
       headerHeight,
       panelHeight,
     ],
@@ -240,12 +171,8 @@ export default function RoutesScreen() {
 
   const selectRoute = (id: string) => {
     setRouteId(id);
-    setTerminalId(null);
     setPath(null);
     setLoadingRoute(true);
-    setSelectedId(null);
-    setFocus(null);
-    setActiveTypes(allTypes);
     setQuery(findRoute(id)?.name ?? "");
     setPickerOpen(false);
     Keyboard.dismiss();
@@ -253,36 +180,11 @@ export default function RoutesScreen() {
 
   const clearRoute = () => {
     setRouteId(null);
-    setTerminalId(null);
     setPath(null);
     setLoadingRoute(false);
-    setSelectedId(null);
-    setFocus(null);
-    setActiveTypes(allTypes);
     setQuery("");
     setPickerOpen(false);
     Keyboard.dismiss();
-  };
-
-  const toggleType = (type: VehicleType) => {
-    setActiveTypes((current) =>
-      current.includes(type)
-        ? current.filter((value) => value !== type)
-        : [...current, type],
-    );
-  };
-
-  const focusVehicle = (vehicle: RouteVehicle) => {
-    if (vehicle.id === selectedId) {
-      setSelectedId(null);
-      return;
-    }
-    setSelectedId(vehicle.id);
-    setFocus((current) => ({
-      key: (current?.key ?? 0) + 1,
-      lat: vehicle.lat,
-      lng: vehicle.lng,
-    }));
   };
 
   const goBack = () => goBackOr(Routes.commuterHome);
@@ -293,11 +195,7 @@ export default function RoutesScreen() {
   return (
     <View style={styles.screen}>
       <StatusBar style="light" />
-      <TransitMap
-        state={mapState}
-        onSelect={setSelectedId}
-        onBoundsChange={setBounds}
-      />
+      <TransitMap state={mapState} />
 
       <View
         style={styles.headerWrap}
@@ -329,39 +227,6 @@ export default function RoutesScreen() {
           >
             <PersonStanding color="#000000" size={20} strokeWidth={2} />
           </FilterChip>
-        </View>
-      )}
-
-      {selected && (
-        <View style={[styles.infoCard, { top: headerHeight + 12 }]}>
-          <View style={styles.infoHeader}>
-            <View style={styles.infoIconBackdrop}>
-              <Image
-                source={vehicleIcons[selected.type]}
-                style={styles.infoIcon}
-                tintColor="#000000"
-                contentFit="contain"
-              />
-            </View>
-            <View>
-              <Text style={styles.infoPlate}>{selected.plate}</Text>
-              <Text style={styles.infoType}>
-                {vehicleTypeLabels[selected.type]}
-              </Text>
-            </View>
-          </View>
-          <Text style={styles.infoLine}>
-            Max Capacity: {selected.maxCapacity}
-          </Text>
-          <Text style={styles.infoLine}>
-            Current Capacity: {selected.currentCapacity}
-          </Text>
-          <Text style={styles.infoLine}>
-            Occupancy Level:{" "}
-            {getOccupancyLevel(selected.currentCapacity, selected.maxCapacity)}
-          </Text>
-          <Text style={styles.infoLine}>Status: {selected.status}</Text>
-          <Text style={styles.infoLine}>Towards: {selected.towards}</Text>
         </View>
       )}
 
@@ -399,30 +264,11 @@ export default function RoutesScreen() {
         {route && (
           <View style={styles.chipRow}>
             <View style={styles.chipGroup}>
-              {loadingRoute ? (
+              {loadingRoute && (
                 <View style={styles.chip}>
                   <ActivityIndicator color="#ffffff" size="small" />
                   <Text style={styles.chipText}>Loading route...</Text>
                 </View>
-              ) : (
-                allTypes.map((type) => {
-                  const active = activeTypes.includes(type);
-                  return (
-                    <FilterChip
-                      key={type}
-                      label={`${vehicleTypeLabels[type]} vehicles`}
-                      active={active}
-                      onPress={() => toggleType(type)}
-                    >
-                      <Image
-                        source={vehicleIcons[type]}
-                        style={styles.chipIcon}
-                        tintColor="#000000"
-                        contentFit="contain"
-                      />
-                    </FilterChip>
-                  );
-                })
               )}
             </View>
             {!loadingRoute && (
@@ -466,34 +312,11 @@ export default function RoutesScreen() {
             >
               <View style={styles.vehicleSectionHeader}>
                 <Text style={styles.vehicleSectionTitle}>Vehicles in view</Text>
-                <Text style={styles.vehicleSectionCount}>
-                  {vehiclesInView.length} of {visibleVehicles.length} on route
-                </Text>
               </View>
-              {vehiclesInView.length === 0 ? (
-                <Text style={styles.vehicleEmpty}>
-                  {vehicles.length === 0
-                    ? "Nothing to see here yet. Active vehicles on this route will show up here."
-                    : visibleVehicles.length === 0
-                      ? "Turn on a vehicle type to see vehicles."
-                      : "No vehicles in view. Zoom out or pan along the route."}
-                </Text>
-              ) : (
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.vehicleList}
-                >
-                  {vehiclesInView.map((vehicle) => (
-                    <VehicleCard
-                      key={vehicle.id}
-                      vehicle={vehicle}
-                      selected={vehicle.id === selectedId}
-                      onPress={() => focusVehicle(vehicle)}
-                    />
-                  ))}
-                </ScrollView>
-              )}
+              <Text style={styles.vehicleEmpty}>
+                Nothing to see here yet. Active vehicles on this route will show
+                up here.
+              </Text>
             </Animated.View>
           )}
 
@@ -562,111 +385,10 @@ function FilterChip({
   );
 }
 
-function VehicleCard({
-  vehicle,
-  selected,
-  onPress,
-}: {
-  vehicle: RouteVehicle;
-  selected: boolean;
-  onPress: () => void;
-}) {
-  const level = getOccupancyLevel(vehicle.currentCapacity, vehicle.maxCapacity);
-  const fill = Math.min(vehicle.currentCapacity / vehicle.maxCapacity, 1);
-
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${vehicleTypeLabels[vehicle.type]} ${vehicle.plate}, ${level}, ${vehicle.status}, towards ${vehicle.towards}`}
-      accessibilityState={{ selected }}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.vehicleCard,
-        selected && styles.vehicleCardSelected,
-        pressed && styles.pressed,
-      ]}
-    >
-      <View style={styles.vehicleCardTop}>
-        <View style={styles.vehicleIconBackdrop}>
-          <Image
-            source={vehicleIcons[vehicle.type]}
-            style={styles.vehicleIcon}
-            tintColor="#000000"
-            contentFit="contain"
-          />
-        </View>
-        <View style={styles.flex}>
-          <Text style={styles.vehiclePlate} numberOfLines={1}>
-            {vehicle.plate}
-          </Text>
-          <Text style={styles.vehicleMeta} numberOfLines={1}>
-            {vehicleTypeLabels[vehicle.type]} · {vehicle.status}
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.occupancyTrack}>
-        <View
-          style={[
-            styles.occupancyFill,
-            {
-              width: `${fill * 100}%`,
-              backgroundColor: occupancyColors[level],
-            },
-          ]}
-        />
-      </View>
-      <Text style={styles.vehicleMeta} numberOfLines={1}>
-        {vehicle.currentCapacity}/{vehicle.maxCapacity} · {level}
-      </Text>
-      <View style={styles.towardsRow}>
-        <Navigation color={brandBlue} size={10} strokeWidth={2.5} />
-        <Text style={styles.towardsText} numberOfLines={1}>
-          To {vehicle.towards}
-        </Text>
-      </View>
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#e8eaed" },
   headerWrap: { position: "absolute", top: 0, left: 0, right: 0 },
-  flex: { flex: 1 },
   pressed: { opacity: 0.8 },
-  infoCard: {
-    position: "absolute",
-    right: 12,
-    width: 190,
-    padding: 12,
-    borderRadius: 10,
-    backgroundColor: cardNavy,
-    shadowColor: "#000000",
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 6,
-  },
-  infoHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginBottom: 8,
-  },
-  infoIconBackdrop: {
-    padding: 4,
-    borderRadius: 8,
-    backgroundColor: "#ffffff",
-  },
-  infoIcon: { width: 28, height: 28 },
-  infoPlate: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 17 },
-  infoType: { color: "#ffffff", fontFamily: "Sora", fontSize: 8 },
-  infoLine: {
-    color: "#ffffff",
-    fontFamily: "Sora",
-    fontSize: 9,
-    lineHeight: 14,
-  },
   layerFilters: {
     position: "absolute",
     left: 12,
@@ -706,7 +428,6 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: "#ffffff",
   },
-  chipIcon: { width: 20, height: 20 },
   chipText: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 12 },
   chipLabel: {
     color: brandBlue,
@@ -764,65 +485,12 @@ const styles = StyleSheet.create({
     fontFamily: "SoraBold",
     fontSize: 13,
   },
-  vehicleSectionCount: {
-    color: "rgba(255, 255, 255, 0.8)",
-    fontFamily: "Sora",
-    fontSize: 10,
-  },
   vehicleEmpty: {
     color: "rgba(255, 255, 255, 0.85)",
     fontFamily: "Sora",
     fontSize: 10,
     paddingVertical: 18,
     textAlign: "center",
-  },
-  vehicleList: { gap: 10, paddingRight: 4 },
-  vehicleCard: {
-    width: 150,
-    padding: 10,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: "transparent",
-    backgroundColor: "#ffffff",
-  },
-  vehicleCardSelected: { borderColor: "#1e9e45" },
-  vehicleCardTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 8,
-  },
-  vehicleIconBackdrop: {
-    padding: 4,
-    borderRadius: 8,
-    backgroundColor: softBlue,
-  },
-  vehicleIcon: { width: 20, height: 20 },
-  vehiclePlate: { color: brandBlue, fontFamily: "SoraBold", fontSize: 12 },
-  vehicleMeta: {
-    color: mutedText,
-    fontFamily: "Sora",
-    fontSize: 9,
-    marginTop: 2,
-  },
-  occupancyTrack: {
-    height: 5,
-    overflow: "hidden",
-    borderRadius: 3,
-    backgroundColor: "#e6e9f0",
-  },
-  occupancyFill: { height: "100%", borderRadius: 3 },
-  towardsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    marginTop: 4,
-  },
-  towardsText: {
-    flex: 1,
-    color: brandBlue,
-    fontFamily: "SoraBold",
-    fontSize: 9,
   },
   searchPill: {
     height: 44,

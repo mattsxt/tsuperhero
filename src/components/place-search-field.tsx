@@ -1,4 +1,3 @@
-import Building from "lucide-react-native/icons/building";
 import LocateFixed from "lucide-react-native/icons/locate-fixed";
 import MapPin from "lucide-react-native/icons/map-pin";
 import X from "lucide-react-native/icons/x";
@@ -117,8 +116,6 @@ export function PlaceSearchField({
     onChange(null);
   };
 
-  const hasGoogleResults = suggestions.some((item) => item.source === "google");
-
   return (
     <View>
       <SoftField
@@ -185,18 +182,14 @@ export function PlaceSearchField({
         >
           {suggestions.map((suggestion) => (
             <Pressable
-              key={`${suggestion.source}-${suggestion.id}`}
+              key={suggestion.id}
               accessibilityRole="button"
               accessibilityLabel={`${suggestion.name}, ${suggestion.address}`}
               onPress={() => selectSuggestion(suggestion)}
               style={({ pressed }) => [styles.row, pressed && styles.pressed]}
             >
               <View style={styles.rowIcon}>
-                {suggestion.source === "terminal" ? (
-                  <Building color={brandBlue} size={15} strokeWidth={2} />
-                ) : (
-                  <MapPin color={brandBlue} size={15} strokeWidth={2} />
-                )}
+                <MapPin color={brandBlue} size={15} strokeWidth={2} />
               </View>
               <View style={styles.rowText}>
                 <Text style={styles.rowTitle} numberOfLines={1}>
@@ -226,10 +219,10 @@ export function PlaceSearchField({
 
           {!searching && !!searchError && (
             <Text style={[styles.statusText, styles.errorText]}>
-              Google place search is unavailable. Showing terminals only.
+              Google place search is unavailable.
             </Text>
           )}
-          {hasGoogleResults && (
+          {suggestions.length > 0 && (
             <Text style={styles.attribution}>Powered by Google</Text>
           )}
         </Animated.View>

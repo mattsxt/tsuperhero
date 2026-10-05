@@ -4,7 +4,6 @@ import { Platform } from "react-native";
 import { getErrorMessage } from "@/api/v1/client";
 import { placesApi } from "@/api/v1/places/routes";
 import { failure, success, type Result } from "@/api/v1/result";
-import { terminals } from "@/api/v1/transit-routes/controllers";
 
 export type Place = {
   id: string;
@@ -16,7 +15,6 @@ export type Place = {
 
 export type PlaceSuggestion = {
   id: string;
-  source: "terminal" | "google";
   name: string;
   address: string;
 };
@@ -27,28 +25,11 @@ export function createPlacesSession() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
 
-function matchTerminals(query: string): PlaceSuggestion[] {
-  const needle = query.trim().toLowerCase();
-  return terminals
-    .filter(
-      (terminal) =>
-        terminal.name.toLowerCase().includes(needle) ||
-        terminal.city.toLowerCase().includes(needle),
-    )
-    .map((terminal) => ({
-      id: terminal.id,
-      source: "terminal",
-      name: terminal.name,
-      address: terminal.city,
-    }));
-}
-
 export async function searchPlaces(
   query: string,
   sessionToken: string,
 ): Promise<{ suggestions: PlaceSuggestion[]; error?: string }> {
-  const local = matchTerminals(query);
-  if (query.trim().length < minPlaceQueryLength) return { suggestions: local };
+  if (query.trim().length < minPlaceQueryLength) return { suggestions: [] };
 
   try {
     const response = await placesApi.autocomplete(query.trim(), sessionToken);
@@ -60,7 +41,6 @@ export async function searchPlaces(
           ? [
               {
                 id: placePrediction.placeId,
-                source: "google",
                 name:
                   placePrediction.structuredFormat?.mainText?.text ??
                   placePrediction.text?.text ??
@@ -71,9 +51,9 @@ export async function searchPlaces(
             ]
           : [],
     );
-    return { suggestions: [...local, ...remote] };
+    return { suggestions: remote };
   } catch (error) {
-    return { suggestions: local, error: getErrorMessage(error) };
+    return { suggestions: [], error: getErrorMessage(error) };
   }
 }
 
@@ -81,18 +61,6 @@ export async function resolvePlace(
   suggestion: PlaceSuggestion,
   sessionToken: string,
 ): Promise<Result<Place>> {
-  if (suggestion.source === "terminal") {
-    const terminal = terminals.find((item) => item.id === suggestion.id);
-    if (!terminal) return failure("That terminal is no longer available.");
-    return success({
-      id: terminal.id,
-      name: terminal.name,
-      address: terminal.city,
-      lat: terminal.lat,
-      lng: terminal.lng,
-    });
-  }
-
   try {
     const details = await placesApi.details(suggestion.id, sessionToken);
     if (details.error || !details.location) {
@@ -124,15 +92,17 @@ function describeAddress(address: Location.LocationGeocodedAddress) {
 const positionTimeoutMs = 10_000;
 
 async function getPosition() {
-  const timeout = new Promise<null>((resolve) =>
-    setTimeout(() => resolve(null), positionTimeoutMs),
-  );
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), positionTimeoutMs);
+  });
   const current = await Promise.race([
     Location.getCurrentPositionAsync({
       accuracy: Location.Accuracy.Balanced,
     }).catch(() => null),
     timeout,
   ]);
+  clearTimeout(timer);
   return current ?? (await Location.getLastKnownPositionAsync());
 }
 

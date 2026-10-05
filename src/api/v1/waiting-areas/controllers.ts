@@ -15,13 +15,13 @@ export type WaitingArea = {
   vicinity: string | null;
 };
 
-export type NearbyWaitingArea = WaitingArea & {
+type NearbyWaitingArea = WaitingArea & {
   distanceMeters: number;
   walkMinutes: number;
 };
 
-export const maxWalkMeters = 1000;
-export const onRouteMeters = 40;
+const maxWalkMeters = 1000;
+const onRouteMeters = 40;
 
 const walkMetersPerMinute = 80;
 
@@ -56,7 +56,7 @@ export function findWaitingAreasOnRoute(
   );
 }
 
-export function findNearestWaitingAreas(
+function findNearestWaitingAreas(
   origin: Coordinates,
   areas: WaitingArea[],
   routeId?: string | null,

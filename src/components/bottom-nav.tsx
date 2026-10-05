@@ -4,7 +4,7 @@ import Bell from "lucide-react-native/icons/bell";
 import House from "lucide-react-native/icons/house";
 import UserRound from "lucide-react-native/icons/user-round";
 import type { RefObject } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import Animated, {
   useAnimatedStyle,
   type SharedValue,
@@ -12,7 +12,6 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Routes, type AppRoute } from "@/constants/routes";
-import { useUnreadNotificationCount } from "@/hooks/use-notifications";
 
 const navBlue = "#1034A6";
 
@@ -39,7 +38,6 @@ export function BottomNav({
   hidden?: SharedValue<number>;
 }) {
   const insets = useSafeAreaInsets();
-  const unreadCount = useUnreadNotificationCount();
   const offscreen = navBarHeight + insets.bottom + navGap + 16;
   const slideStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: (hidden?.value ?? 0) * offscreen }],
@@ -93,11 +91,7 @@ export function BottomNav({
           <Pressable
             key={tab}
             accessibilityRole="button"
-            accessibilityLabel={
-              tab === "notifications" && unreadCount > 0
-                ? `${label}, ${unreadCount} unread`
-                : label
-            }
+            accessibilityLabel={label}
             accessibilityState={{ selected }}
             onPress={route ? () => goTo(tab, route) : undefined}
             style={({ pressed }) => [
@@ -111,13 +105,6 @@ export function BottomNav({
               size={34}
               strokeWidth={2}
             />
-            {tab === "notifications" && unreadCount > 0 && (
-              <View style={styles.badge} pointerEvents="none">
-                <Text style={styles.badgeText}>
-                  {unreadCount > 99 ? "99+" : unreadCount}
-                </Text>
-              </View>
-            )}
           </Pressable>
         );
       })}
@@ -156,24 +143,4 @@ const styles = StyleSheet.create({
   },
   tabSelected: { backgroundColor: "#ffffff" },
   tabPressed: { backgroundColor: "rgba(255, 255, 255, 0.15)" },
-  badge: {
-    position: "absolute",
-    top: 3,
-    right: 3,
-    minWidth: 18,
-    height: 18,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 4,
-    borderRadius: 9,
-    borderWidth: 1.5,
-    borderColor: "#ffffff",
-    backgroundColor: "#d93025",
-  },
-  badgeText: {
-    color: "#ffffff",
-    fontFamily: "SoraBold",
-    fontSize: 9,
-    lineHeight: 12,
-  },
 });

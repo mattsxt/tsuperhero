@@ -23,12 +23,8 @@ import {
 } from "@/components/home-ui";
 import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
-import { RatingsCard } from "@/pages/transit/home/ratings";
-import type { CommuterRating } from "@/pages/transit/types";
 
 const { brandBlue } = homeColors;
-
-const ratings: CommuterRating[] = [];
 
 export default function TransitHomeScreen() {
   const insets = useSafeAreaInsets();
@@ -98,15 +94,11 @@ export default function TransitHomeScreen() {
             </ActionRow>
 
             <SectionDivider />
-            <SectionHeader title="Ratings" showViewAll={ratings.length > 0} />
-            {ratings.length === 0 ? (
-              <EmptyState
-                icon={<Star color={brandBlue} size={32} strokeWidth={1.8} />}
-                message="Ratings from commuters will show up here after your trips."
-              />
-            ) : (
-              <RatingsCard ratings={ratings} />
-            )}
+            <SectionHeader title="Ratings" />
+            <EmptyState
+              icon={<Star color={brandBlue} size={32} strokeWidth={1.8} />}
+              message="Ratings from commuters will show up here after your trips."
+            />
           </View>
         </Animated.ScrollView>
 

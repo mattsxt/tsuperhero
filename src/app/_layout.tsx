@@ -57,7 +57,6 @@ export default function RootLayout() {
         />
         <Stack.Screen name="transit/rental-requests/index" />
         <Stack.Screen name="transit/trip-history/index" />
-        <Stack.Screen name="explore" />
       </Stack>
     </ThemeProvider>
   );

@@ -18,22 +18,11 @@ export type TransitMapState = {
     kind?: "stop" | "terminal";
   }[];
   vehicles: { id: string; lat: number; lng: number; type: string }[];
-  terminals: { id: string; name: string; lat: number; lng: number }[];
-  highlightedTerminalId: string | null;
-  selectedId: string | null;
   focus: { key: number; lat: number; lng: number; zoom?: number } | null;
   padTop: number;
   padBottom: number;
   pickups?: { id: string; lat: number; lng: number }[];
   pickupLine?: [number, number][] | null;
-  area?: { id: string; lat: number; lng: number; radius: number } | null;
-};
-
-export type TransitMapBounds = {
-  north: number;
-  south: number;
-  east: number;
-  west: number;
 };
 
 type FrameRef = {
@@ -77,24 +66,8 @@ const mapHtml = `<!DOCTYPE html>
   }
   .pin img { width: 14px; height: 14px; transform: rotate(45deg); filter: brightness(0); }
   .pin.selected { border-color: #1e9e45; border-width: 3px; transform: rotate(-45deg) scale(1.2); }
-  .terminal { display: flex; flex-direction: column; align-items: center; }
-  .terminal-icon {
-    width: 22px; height: 22px; box-sizing: border-box; border-radius: 6px;
-    display: flex; align-items: center; justify-content: center;
-    background: #193caf; border: 2px solid #ffffff;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35);
-  }
-  .terminal-label {
-    margin-top: 3px; padding: 2px 6px; border-radius: 6px;
-    background: rgba(255, 255, 255, 0.92); color: #193caf;
-    font: bold 10px sans-serif; white-space: nowrap;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
-  }
-  .terminal.highlighted .terminal-icon { width: 30px; height: 30px; background: #1e9e45; }
-  .terminal.highlighted .terminal-label { background: #1e9e45; color: #ffffff; font-size: 11px; }
-  .pin-wrap, .terminal, .waiting { transition: opacity 220ms ease-in-out; }
+  .pin-wrap, .waiting { transition: opacity 220ms ease-in-out; }
   body.pin-focused .pin-wrap:not(.focused),
-  body.pin-focused .terminal,
   body.pin-focused .waiting:not(.open) { opacity: 0.3; }
   .waiting { position: relative; cursor: pointer; }
   .waiting-icon {
@@ -136,7 +109,6 @@ const mapHtml = `<!DOCTYPE html>
   var routeLine = null;
   var alternativeLines = [];
   var vehicleMarkers = {};
-  var terminalMarkers = [];
   var waitingMarkers = [];
   var lastWaitingKey = "";
   var WAITING_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2"/><path d="M12 8v7M9 22l3-7 3 7M8 12h8"/></svg>';
@@ -145,8 +117,6 @@ const mapHtml = `<!DOCTYPE html>
   var lastFocusKey = null;
   var pickupMarkers = [];
   var pickupLine = null;
-  var areaCircle = null;
-  var lastAreaId = null;
 
   function send(message) {
     var text = JSON.stringify(message);
@@ -192,8 +162,6 @@ const mapHtml = `<!DOCTYPE html>
     }
     lastRouteId = routeKey;
 
-    applyArea(state);
-    applyTerminals(state);
     applyWaitingAreas(state);
     applyVehicles(state);
     applyPickups(state);
@@ -203,21 +171,6 @@ const mapHtml = `<!DOCTYPE html>
       if (state.focus.zoom) map.setZoom(state.focus.zoom);
     }
     lastFocusKey = state.focus ? state.focus.key : null;
-  }
-
-  function applyArea(state) {
-    var area = state.area || null;
-    var areaId = area ? area.id : null;
-    if (areaId === lastAreaId) return;
-    lastAreaId = areaId;
-    if (areaCircle) { areaCircle.setMap(null); areaCircle = null; }
-    if (!area) return;
-    areaCircle = new google.maps.Circle({
-      map: map, center: { lat: area.lat, lng: area.lng }, radius: area.radius,
-      strokeColor: "#193caf", strokeOpacity: 0.8, strokeWeight: 2,
-      fillColor: "#193caf", fillOpacity: 0.08, clickable: false
-    });
-    map.fitBounds(areaCircle.getBounds(), { top: state.padTop, bottom: state.padBottom, left: 20, right: 20 });
   }
 
   function applyPickups(state) {
@@ -289,24 +242,6 @@ const mapHtml = `<!DOCTYPE html>
     document.body.classList.toggle("pin-focused", focused);
   }
 
-  function applyTerminals(state) {
-    terminalMarkers.forEach(function (marker) { marker.map = null; });
-    terminalMarkers = [];
-    state.terminals.forEach(function (terminal) {
-      var highlighted = terminal.id === state.highlightedTerminalId;
-      var content = document.createElement("div");
-      content.className = "terminal" + (highlighted ? " highlighted" : "");
-      content.innerHTML = '<div class="terminal-icon">' + TERMINAL_SVG + '</div><div class="terminal-label"></div>';
-      content.lastChild.textContent = terminal.name;
-      terminalMarkers.push(new google.maps.marker.AdvancedMarkerElement({
-        map: map,
-        position: { lat: terminal.lat, lng: terminal.lng },
-        content: content,
-        zIndex: highlighted ? 900 : 500
-      }));
-    });
-  }
-
   function animateTo(entry, lat, lng) {
     var from = entry.position;
     var start = null;
@@ -326,7 +261,6 @@ const mapHtml = `<!DOCTYPE html>
     var seen = {};
     state.vehicles.forEach(function (vehicle) {
       seen[vehicle.id] = true;
-      var selected = vehicle.id === state.selectedId;
       var entry = vehicleMarkers[vehicle.id];
       if (!entry) {
         var content = document.createElement("div");
@@ -336,15 +270,11 @@ const mapHtml = `<!DOCTYPE html>
         var marker = new google.maps.marker.AdvancedMarkerElement({
           map: map, position: position, content: content
         });
-        marker.addListener("click", function () { send({ type: "select", id: vehicle.id }); });
-        entry = { marker: marker, pin: content.firstChild, position: position, frame: null };
+        entry = { marker: marker, position: position, frame: null };
         vehicleMarkers[vehicle.id] = entry;
       } else if (entry.position.lat !== vehicle.lat || entry.position.lng !== vehicle.lng) {
         animateTo(entry, vehicle.lat, vehicle.lng);
       }
-      entry.pin.className = "pin" + (selected ? " selected" : "");
-      entry.pin.parentNode.className = "pin-wrap" + (selected ? " focused" : "");
-      entry.marker.zIndex = selected ? 1000 : 0;
     });
     updatePinFocus();
     Object.keys(vehicleMarkers).forEach(function (id) {
@@ -353,17 +283,6 @@ const mapHtml = `<!DOCTYPE html>
       if (entry.frame) cancelAnimationFrame(entry.frame);
       entry.marker.map = null;
       delete vehicleMarkers[id];
-    });
-  }
-
-  function sendBounds() {
-    var bounds = map.getBounds();
-    if (!bounds) return;
-    var northEast = bounds.getNorthEast();
-    var southWest = bounds.getSouthWest();
-    send({
-      type: "bounds",
-      bounds: { north: northEast.lat(), east: northEast.lng(), south: southWest.lat(), west: southWest.lng() }
     });
   }
 
@@ -376,11 +295,7 @@ const mapHtml = `<!DOCTYPE html>
       clickableIcons: false,
       gestureHandling: "greedy"
     });
-    map.addListener("click", function () {
-      closeWaitingAreas();
-      send({ type: "select", id: null });
-    });
-    map.addListener("idle", sendBounds);
+    map.addListener("click", closeWaitingAreas);
     send({ type: "ready" });
   };
 
@@ -406,25 +321,19 @@ const mapHtml = `<!DOCTYPE html>
 </body>
 </html>`;
 
-export function TransitMap({
-  state,
-  onSelect,
-  onBoundsChange,
-}: {
-  state: TransitMapState;
-  onSelect: (id: string | null) => void;
-  onBoundsChange?: (bounds: TransitMapBounds) => void;
-}) {
+function isReadyMessage(raw: unknown) {
+  if (typeof raw !== "string") return false;
+  try {
+    return (JSON.parse(raw) as { type?: string }).type === "ready";
+  } catch {
+    return false;
+  }
+}
+
+export function TransitMap({ state }: { state: TransitMapState }) {
   const [ready, setReady] = useState(false);
   const webViewRef = useRef<WebView>(null);
   const frameRef = useRef<FrameRef | null>(null);
-  const onSelectRef = useRef(onSelect);
-  const onBoundsRef = useRef(onBoundsChange);
-
-  useEffect(() => {
-    onSelectRef.current = onSelect;
-    onBoundsRef.current = onBoundsChange;
-  }, [onSelect, onBoundsChange]);
 
   useEffect(() => {
     if (!ready) return;
@@ -440,33 +349,20 @@ export function TransitMap({
     }
   }, [ready, state]);
 
-  const handleMessage = (raw: unknown) => {
-    if (typeof raw !== "string") return;
-    try {
-      const message = JSON.parse(raw) as {
-        type: string;
-        id?: string | null;
-        bounds?: TransitMapBounds;
-      };
-      if (message.type === "ready") setReady(true);
-      if (message.type === "select") onSelectRef.current(message.id ?? null);
-      if (message.type === "bounds" && message.bounds) {
-        onBoundsRef.current?.(message.bounds);
-      }
-    } catch {}
-  };
-
   useEffect(() => {
     if (Platform.OS !== "web") return;
     const target = globalThis as unknown as WindowLike;
     const listener = (event: MessageEventLike) => {
-      if (event.source === frameRef.current?.contentWindow) {
-        handleMessage(event.data);
+      if (
+        event.source === frameRef.current?.contentWindow &&
+        isReadyMessage(event.data)
+      ) {
+        setReady(true);
       }
     };
     target.addEventListener("message", listener);
     return () => target.removeEventListener("message", listener);
-  });
+  }, []);
 
   if (Platform.OS === "web") {
     return (
@@ -487,7 +383,9 @@ export function TransitMap({
       style={StyleSheet.absoluteFill}
       originWhitelist={["*"]}
       source={{ html: mapHtml, baseUrl: "https://localhost" }}
-      onMessage={(event) => handleMessage(event.nativeEvent.data)}
+      onMessage={(event) => {
+        if (isReadyMessage(event.nativeEvent.data)) setReady(true);
+      }}
       javaScriptEnabled
       domStorageEnabled
       setSupportMultipleWindows={false}

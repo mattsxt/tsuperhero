@@ -1,7 +1,7 @@
 import { router } from "expo-router";
 import Eye from "lucide-react-native/icons/eye";
 import EyeOff from "lucide-react-native/icons/eye-off";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import {
   Animated,
   Easing,
@@ -26,7 +26,7 @@ export default function LoginScreen() {
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [loginError, setLoginError] = useState("");
   const [loggingIn, setLoggingIn] = useState(false);
-  const formProgress = useRef(new Animated.Value(0)).current;
+  const [formProgress] = useState(() => new Animated.Value(0));
 
   const showEmailLogin = () => {
     setEmailLoginVisible(true);
@@ -225,13 +225,6 @@ const styles = StyleSheet.create({
     color: "#d4d4d4",
     fontFamily: "Sora",
     fontSize: 8,
-  },
-  noAccountText: {
-    color: "#d4d4d4",
-    fontFamily: "Sora",
-    fontSize: 8,
-    marginTop: 7,
-    marginBottom: 11,
   },
   formReveal: {
     width: 320,

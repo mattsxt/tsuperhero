@@ -1,5 +1,5 @@
 export type Coordinates = { lat: number; lng: number };
-export type LatLngPair = [number, number];
+type LatLngPair = [number, number];
 
 const earthRadiusMeters = 6_371_000;
 const metersPerLatitude = 111_320;
@@ -27,7 +27,7 @@ export function getPairDistanceMeters(
   );
 }
 
-export function getSegmentDistanceMeters(
+function getSegmentDistanceMeters(
   point: Coordinates,
   [startLat, startLng]: LatLngPair,
   [endLat, endLng]: LatLngPair,

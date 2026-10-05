@@ -1,10 +1,12 @@
+export type MobileUserType = "commuter" | "transit_personnel";
+
 export type ProfileRow = {
-  id: string;
-  user_type: "commuter" | "transit_personnel";
+  profile_id: string;
+  user_id: string;
+  user_type: MobileUserType | "admin";
   first_name: string;
   last_name: string;
   birth_date: string;
-  gender: "male" | "female" | "prefer_not_to_say";
   contact_number: string;
   profile_picture: string | null;
 };

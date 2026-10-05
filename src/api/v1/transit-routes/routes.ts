@@ -7,7 +7,7 @@ type GooglePolyline = {
   geoJsonLinestring?: { coordinates: [number, number][] };
 };
 
-export type GoogleRoutesResponse = {
+type GoogleRoutesResponse = {
   routes?: {
     polyline?: GooglePolyline;
     legs?: { distanceMeters?: number; polyline?: GooglePolyline }[];
@@ -31,10 +31,10 @@ export type RouteRow = {
   vicinity?: unknown;
 };
 
-const routesTable = () => getSupabaseClient().from("routes");
+const routeTable = () => getSupabaseClient().from("route");
 
 export const routeTableRoutes = {
-  listRoutes: () => routesTable().select("*").order("route_name"),
+  listRoutes: () => routeTable().select("*").order("route_name"),
 };
 
 export const transitRouteApi = {

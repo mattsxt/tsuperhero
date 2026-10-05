@@ -23,8 +23,6 @@ import {
   HomeHeader,
   SectionDivider,
   SectionHeader,
-  TripList,
-  type TripSummary,
 } from "@/components/home-ui";
 import { PickupIcon } from "@/components/module-icons";
 import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
@@ -36,8 +34,6 @@ import {
 
 const { brandBlue } = homeColors;
 const searchLayerGap = 14;
-
-const trips: TripSummary[] = [];
 
 export default function CommuterHomeScreen() {
   const insets = useSafeAreaInsets();
@@ -133,20 +129,11 @@ export default function CommuterHomeScreen() {
                 </ActionRow>
 
                 <SectionDivider />
-                <SectionHeader
-                  title="Trip History"
-                  showViewAll={trips.length > 0}
+                <SectionHeader title="Trip History" />
+                <EmptyState
+                  icon={<Route color={brandBlue} size={32} strokeWidth={1.8} />}
+                  message="Your completed trips will appear here."
                 />
-                {trips.length === 0 ? (
-                  <EmptyState
-                    icon={
-                      <Route color={brandBlue} size={32} strokeWidth={1.8} />
-                    }
-                    message="Your completed trips will appear here."
-                  />
-                ) : (
-                  <TripList trips={trips} />
-                )}
               </Animated.View>
             )}
           </View>

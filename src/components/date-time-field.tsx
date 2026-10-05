@@ -29,7 +29,7 @@ function toIsoTime(date: Date) {
   return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-export function formatDate(date: Date) {
+function formatDate(date: Date) {
   return date.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
@@ -37,7 +37,7 @@ export function formatDate(date: Date) {
   });
 }
 
-export function formatTime(date: Date) {
+function formatTime(date: Date) {
   return date.toLocaleTimeString("en-US", {
     hour: "numeric",
     minute: "2-digit",

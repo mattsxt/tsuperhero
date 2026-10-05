@@ -11,5 +11,5 @@ export type PickupRequestRow = {
   request_status: RequestStatus;
   device_latitude: number;
   device_longitude: number;
-  pickups: PickupRow[] | PickupRow | null;
+  pickup: PickupRow[] | PickupRow | null;
 };

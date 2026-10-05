@@ -1,30 +1,33 @@
 import { getSupabaseClient } from "@/api/v1/client";
 
-const table = (name: string) => getSupabaseClient().from(name);
+const userTable = () => getSupabaseClient().from("user");
+const commuterTable = () => getSupabaseClient().from("commuter");
+const requestTable = () => getSupabaseClient().from("request");
+const pickupTable = () => getSupabaseClient().from("pickup");
 
 export const pickupRoutes = {
   findCommuter: (userId: string) =>
-    table("commuters")
+    commuterTable()
       .select("commuter_id")
       .eq("user_id", userId)
       .maybeSingle(),
 
   createUser: (userId: string, email: string) =>
-    table("users").upsert(
-      { user_id: userId, user_email: email, user_type: "Passenger" },
+    userTable().upsert(
+      { user_id: userId, user_email: email, user_type: "commuter" },
       { onConflict: "user_id", ignoreDuplicates: true },
     ),
 
   createCommuter: (userId: string) =>
-    table("commuters")
+    commuterTable()
       .insert({ user_id: userId })
       .select("commuter_id")
       .single(),
 
   findActiveRequest: (commuterId: string) =>
-    table("requests")
+    requestTable()
       .select(
-        "request_id, request_status, device_latitude, device_longitude, pickups(pickup_id, pickup_destination, number_of_passengers)",
+        "request_id, request_status, device_latitude, device_longitude, pickup(pickup_id, pickup_destination, number_of_passengers)",
       )
       .eq("commuter_id", commuterId)
       .eq("request_type", "Pickup")
@@ -34,7 +37,7 @@ export const pickupRoutes = {
       .maybeSingle(),
 
   createRequest: (commuterId: string, lat: number, lng: number) =>
-    table("requests")
+    requestTable()
       .insert({
         commuter_id: commuterId,
         request_type: "Pickup",
@@ -45,7 +48,7 @@ export const pickupRoutes = {
       .single(),
 
   createPickup: (requestId: string, destination: string, passengers: number) =>
-    table("pickups").insert({
+    pickupTable().insert({
       request_id: requestId,
       pickup_destination: destination,
       pickup_date: new Date().toISOString(),
@@ -53,8 +56,8 @@ export const pickupRoutes = {
     }),
 
   deletePickup: (requestId: string) =>
-    table("pickups").delete().eq("request_id", requestId),
+    pickupTable().delete().eq("request_id", requestId),
 
   deleteRequest: (requestId: string) =>
-    table("requests").delete().eq("request_id", requestId),
+    requestTable().delete().eq("request_id", requestId),
 };
