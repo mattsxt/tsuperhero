@@ -13,7 +13,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import Reanimated from "react-native-reanimated";
 
 import {
   codeLength,
@@ -23,6 +23,11 @@ import {
   requestSignUpCode,
   verifySignUpCode,
 } from "@/api/v1/auth/controllers";
+import {
+  AuthScreen,
+  authSpacingTransition,
+  useKeyboardVisible,
+} from "@/components/auth-screen";
 import { BrandHeader } from "@/components/brand-header";
 import { PasswordStrength } from "@/components/password-strength";
 import { Routes } from "@/constants/routes";
@@ -41,6 +46,7 @@ export default function RegisterScreen() {
   const [codeError, setCodeError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const codeInputs = useRef<(TextInput | null)[]>([]);
+  const keyboardVisible = useKeyboardVisible();
 
   const focusCodeInput = (index: number) => {
     codeInputs.current[Math.max(0, Math.min(index, codeLength - 1))]?.focus();
@@ -93,136 +99,137 @@ export default function RegisterScreen() {
     setStep((currentStep) => Math.max(currentStep - 1, 1));
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
-        <BrandHeader variant="badge" />
+    <AuthScreen compact={keyboardVisible}>
+      <BrandHeader variant="badge" compact={keyboardVisible} />
 
-        {step < 4 && <Text style={styles.heading}>SIGN UP</Text>}
+      {step < 4 && (
+        <Reanimated.Text
+          style={[
+            styles.heading,
+            keyboardVisible && styles.headingCompact,
+            authSpacingTransition,
+          ]}
+        >
+          SIGN UP
+        </Reanimated.Text>
+      )}
 
-        {step === 4 ? (
-          <CompletionState />
-        ) : (
-          <>
-            {step === 1 && (
-              <View style={styles.stepContent}>
-                <Text style={styles.stepTitle}>Input your email address</Text>
-                <StepNavigation step={step} onBack={goToPreviousStep} />
-                <FieldLabel label="EMAIL ADDRESS" />
-                <TextInput
-                  value={email}
-                  onChangeText={(value) => {
-                    setEmail(value);
-                    if (emailError) setEmailError("");
-                  }}
-                  placeholder="Email address"
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                  style={[styles.input, emailError && styles.inputError]}
-                />
-                {!!emailError && (
-                  <Text style={styles.errorText}>{emailError}</Text>
-                )}
-              </View>
-            )}
-
-            {step === 2 && (
-              <View style={styles.stepContent}>
-                <Text style={styles.stepTitle}>Verify your email address</Text>
-                <StepNavigation step={step} onBack={goToPreviousStep} />
-                <Text style={styles.description}>
-                  We just sent a {codeLength}-digit code to{"\n"}
-                  {email || "your email"}, enter it below
-                </Text>
-                <View style={styles.fieldHeading}>
-                  <FieldLabel label="CODE" />
-                  <Pressable onPress={resendCode} style={styles.resendButton}>
-                    <RefreshCcw color="#171717" size={10} strokeWidth={2} />
-                    <Text style={styles.resendText}>RESEND CODE</Text>
-                  </Pressable>
-                </View>
-                <View style={styles.codeRow}>
-                  {Array.from({ length: codeLength }, (_, index) => (
-                    <TextInput
-                      key={index}
-                      ref={(input) => {
-                        codeInputs.current[index] = input;
-                      }}
-                      value={(code[index] || "").trim()}
-                      onChangeText={(value) => {
-                        const digits = value.replace(/\D/g, "");
-                        const nextCode = code.padEnd(codeLength, " ").split("");
-                        if (digits.length > 1) {
-                          const pasted = digits.slice(0, codeLength - index);
-                          pasted.split("").forEach((digit, offset) => {
-                            nextCode[index + offset] = digit;
-                          });
-                          focusCodeInput(index + pasted.length);
-                        } else {
-                          nextCode[index] = digits || " ";
-                          if (digits) focusCodeInput(index + 1);
-                        }
-                        setCode(nextCode.join("").trimEnd());
-                        if (codeError) setCodeError("");
-                      }}
-                      onKeyPress={({ nativeEvent }) => {
-                        if (
-                          nativeEvent.key === "Backspace" &&
-                          !code[index]?.trim() &&
-                          index > 0
-                        ) {
-                          const nextCode = code
-                            .padEnd(codeLength, " ")
-                            .split("");
-                          nextCode[index - 1] = " ";
-                          setCode(nextCode.join("").trimEnd());
-                          focusCodeInput(index - 1);
-                        }
-                      }}
-                      selectTextOnFocus
-                      autoFocus={index === 0}
-                      keyboardType="number-pad"
-                      autoComplete="one-time-code"
-                      textContentType="oneTimeCode"
-                      maxLength={codeLength}
-                      style={styles.codeInput}
-                    />
-                  ))}
-                </View>
-                {!!codeError && (
-                  <Text style={styles.errorText}>{codeError}</Text>
-                )}
-              </View>
-            )}
-
-            {step === 3 && (
-              <PasswordStep
-                password={password}
-                passwordVisible={passwordVisible}
-                setPassword={setPassword}
-                passwordError={passwordError}
-                setPasswordError={setPasswordError}
-                setPasswordVisible={setPasswordVisible}
-                onBack={goToPreviousStep}
+      {step === 4 ? (
+        <CompletionState />
+      ) : (
+        <>
+          {step === 1 && (
+            <View style={styles.stepContent}>
+              <Text style={styles.stepTitle}>Input your email address</Text>
+              <StepNavigation step={step} onBack={goToPreviousStep} />
+              <FieldLabel label="EMAIL ADDRESS" />
+              <TextInput
+                value={email}
+                onChangeText={(value) => {
+                  setEmail(value);
+                  if (emailError) setEmailError("");
+                }}
+                placeholder="Email address"
+                autoCapitalize="none"
+                keyboardType="email-address"
+                style={[styles.input, emailError && styles.inputError]}
               />
-            )}
+              {!!emailError && (
+                <Text style={styles.errorText}>{emailError}</Text>
+              )}
+            </View>
+          )}
 
-            <Pressable
-              style={[
-                styles.primaryButton,
-                submitting && styles.buttonDisabled,
-              ]}
-              disabled={submitting}
-              onPress={continueToNextStep}
-            >
-              <Text style={styles.primaryButtonText}>
-                {submitting ? "PLEASE WAIT..." : "CONTINUE"}
+          {step === 2 && (
+            <View style={styles.stepContent}>
+              <Text style={styles.stepTitle}>Verify your email address</Text>
+              <StepNavigation step={step} onBack={goToPreviousStep} />
+              <Text style={styles.description}>
+                We just sent a {codeLength}-digit code to{"\n"}
+                {email || "your email"}, enter it below
               </Text>
-            </Pressable>
-            <AccountLink />
-          </>
-        )}
-      </View>
-    </SafeAreaView>
+              <View style={styles.fieldHeading}>
+                <FieldLabel label="CODE" />
+                <Pressable onPress={resendCode} style={styles.resendButton}>
+                  <RefreshCcw color="#171717" size={10} strokeWidth={2} />
+                  <Text style={styles.resendText}>RESEND CODE</Text>
+                </Pressable>
+              </View>
+              <View style={styles.codeRow}>
+                {Array.from({ length: codeLength }, (_, index) => (
+                  <TextInput
+                    key={index}
+                    ref={(input) => {
+                      codeInputs.current[index] = input;
+                    }}
+                    value={(code[index] || "").trim()}
+                    onChangeText={(value) => {
+                      const digits = value.replace(/\D/g, "");
+                      const nextCode = code.padEnd(codeLength, " ").split("");
+                      if (digits.length > 1) {
+                        const pasted = digits.slice(0, codeLength - index);
+                        pasted.split("").forEach((digit, offset) => {
+                          nextCode[index + offset] = digit;
+                        });
+                        focusCodeInput(index + pasted.length);
+                      } else {
+                        nextCode[index] = digits || " ";
+                        if (digits) focusCodeInput(index + 1);
+                      }
+                      setCode(nextCode.join("").trimEnd());
+                      if (codeError) setCodeError("");
+                    }}
+                    onKeyPress={({ nativeEvent }) => {
+                      if (
+                        nativeEvent.key === "Backspace" &&
+                        !code[index]?.trim() &&
+                        index > 0
+                      ) {
+                        const nextCode = code.padEnd(codeLength, " ").split("");
+                        nextCode[index - 1] = " ";
+                        setCode(nextCode.join("").trimEnd());
+                        focusCodeInput(index - 1);
+                      }
+                    }}
+                    selectTextOnFocus
+                    autoFocus={index === 0}
+                    keyboardType="number-pad"
+                    autoComplete="one-time-code"
+                    textContentType="oneTimeCode"
+                    maxLength={codeLength}
+                    style={styles.codeInput}
+                  />
+                ))}
+              </View>
+              {!!codeError && <Text style={styles.errorText}>{codeError}</Text>}
+            </View>
+          )}
+
+          {step === 3 && (
+            <PasswordStep
+              password={password}
+              passwordVisible={passwordVisible}
+              setPassword={setPassword}
+              passwordError={passwordError}
+              setPasswordError={setPasswordError}
+              setPasswordVisible={setPasswordVisible}
+              onBack={goToPreviousStep}
+            />
+          )}
+
+          <Pressable
+            style={[styles.primaryButton, submitting && styles.buttonDisabled]}
+            disabled={submitting}
+            onPress={continueToNextStep}
+          >
+            <Text style={styles.primaryButtonText}>
+              {submitting ? "PLEASE WAIT..." : "CONTINUE"}
+            </Text>
+          </Pressable>
+          <AccountLink />
+        </>
+      )}
+    </AuthScreen>
   );
 }
 
@@ -384,13 +391,6 @@ function CompletionState() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#ffffff" },
-  container: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 10,
-  },
   heading: {
     color: "#050505",
     fontFamily: "SoraBold",
@@ -398,6 +398,7 @@ const styles = StyleSheet.create({
     lineHeight: 28,
     marginTop: 18,
   },
+  headingCompact: { marginTop: 8 },
   stepHeader: {
     width: inputWidth,
     flexDirection: "row",

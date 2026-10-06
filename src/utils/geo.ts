@@ -44,6 +44,18 @@ function getSegmentDistanceMeters(
   return Math.hypot(pointX - endX * along, pointY - endY * along);
 }
 
+export function distanceToPath(point: Coordinates, path: LatLngPair[]) {
+  if (path.length === 1)
+    return getPairDistanceMeters([point.lat, point.lng], path[0]);
+  return path
+    .slice(1)
+    .reduce(
+      (closest, end, index) =>
+        Math.min(closest, getSegmentDistanceMeters(point, path[index], end)),
+      Infinity,
+    );
+}
+
 export function isNearPath(
   point: Coordinates,
   path: LatLngPair[],

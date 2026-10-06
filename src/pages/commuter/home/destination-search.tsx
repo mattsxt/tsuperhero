@@ -1,4 +1,5 @@
 import { router } from "expo-router";
+import ArrowLeft from "lucide-react-native/icons/arrow-left";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
 import MapPin from "lucide-react-native/icons/map-pin";
 import MapPinSearch from "lucide-react-native/icons/map-pin-search";
@@ -21,9 +22,22 @@ import Animated, { FadeIn } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
+  createPlacesSession,
+  minPlaceQueryLength,
+  resolvePlace,
+  searchPlaces,
+  type Place,
+  type PlaceSuggestion,
+} from "@/api/v1/places/controllers";
+import {
+  findRoutesNear,
+  nearDestinationMeters,
   searchDestinations,
+  type RouteNearPlace,
   type TransitRoute,
 } from "@/api/v1/transit-routes/controllers";
+import { formatDistance } from "@/api/v1/waiting-areas/controllers";
+import { LoadingSprite } from "@/components/brand-logo";
 import { Routes } from "@/constants/routes";
 import { useTransitRoutes } from "@/hooks/use-transit-routes";
 
@@ -37,6 +51,9 @@ const searchCardHeight = 60;
 const cardGap = 8;
 const bottomMargin = 16;
 const borderAllowance = 3;
+const placeSearchDelayMs = 300;
+
+type ChosenPlace = { place: Place; routes: RouteNearPlace[] };
 
 function useKeyboardHeight() {
   const [height, setHeight] = useState(0);
@@ -96,6 +113,35 @@ export function DestinationSearchPanel({
   const keyboardHeight = useKeyboardHeight();
   const [query, setQuery] = useState("");
   const [popularHeight, setPopularHeight] = useState<number | null>(null);
+  const [places, setPlaces] = useState<PlaceSuggestion[]>([]);
+  const [searchingPlaces, setSearchingPlaces] = useState(false);
+  const [resolvingId, setResolvingId] = useState<string | null>(null);
+  const [chosen, setChosen] = useState<ChosenPlace | null>(null);
+  const [placeProblem, setPlaceProblem] = useState("");
+  // One Places session per search, renewed after a place is picked.
+  const [session, setSession] = useState(createPlacesSession);
+
+  // Google place suggestions, debounced while typing.
+  useEffect(() => {
+    const trimmed = query.trim();
+    let active = true;
+    const timer = setTimeout(async () => {
+      if (trimmed.length < minPlaceQueryLength) {
+        setPlaces([]);
+        setSearchingPlaces(false);
+        return;
+      }
+      setSearchingPlaces(true);
+      const result = await searchPlaces(trimmed, session);
+      if (!active) return;
+      setPlaces(result.suggestions);
+      setSearchingPlaces(false);
+    }, placeSearchDelayMs);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [query, session]);
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener(
@@ -125,17 +171,51 @@ export function DestinationSearchPanel({
     120,
   );
 
-  const openRoute = (route: TransitRoute) => {
+  const openRoute = (route: TransitRoute, place?: Place) => {
     Keyboard.dismiss();
     onClose();
     router.push({
       pathname: Routes.commuterRoutes,
-      params: { routeId: route.id },
+      params: place
+        ? {
+            routeId: route.id,
+            destLat: String(place.lat),
+            destLng: String(place.lng),
+          }
+        : { routeId: route.id },
     });
   };
 
+  const choosePlace = async (suggestion: PlaceSuggestion) => {
+    if (resolvingId) return;
+    setResolvingId(suggestion.id);
+    setPlaceProblem("");
+    const result = await resolvePlace(suggestion, session);
+    setSession(createPlacesSession());
+    setResolvingId(null);
+    if (!result.ok) {
+      setPlaceProblem(result.error);
+      return;
+    }
+    const nearby = findRoutesNear(result.data);
+    if (nearby.length === 1) {
+      openRoute(nearby[0].route, result.data);
+      return;
+    }
+    Keyboard.dismiss();
+    setChosen({ place: result.data, routes: nearby });
+  };
+
+  const changeQuery = (next: string) => {
+    setQuery(next);
+    setChosen(null);
+    setPlaceProblem("");
+  };
+
   const openBestMatch = () => {
-    if (query.trim() && routes[0]) openRoute(routes[0]);
+    if (!query.trim()) return;
+    if (routes[0]) openRoute(routes[0]);
+    else if (places[0]) choosePlace(places[0]);
   };
 
   const close = () => {
@@ -143,7 +223,18 @@ export function DestinationSearchPanel({
     onClose();
   };
 
-  const { items, stickyIndices } = buildResultItems(query, routes, openRoute);
+  const { items, stickyIndices } = chosen
+    ? buildChosenItems(chosen, openRoute, () => setChosen(null))
+    : buildResultItems({
+        query,
+        routes,
+        places,
+        searchingPlaces,
+        resolvingId,
+        placeProblem,
+        onOpenRoute: openRoute,
+        onChoosePlace: choosePlace,
+      });
 
   return (
     <View style={styles.wrap}>
@@ -153,7 +244,7 @@ export function DestinationSearchPanel({
           <Text style={styles.searchTitle}>Where to?</Text>
           <TextInput
             value={query}
-            onChangeText={setQuery}
+            onChangeText={changeQuery}
             onSubmitEditing={openBestMatch}
             autoFocus
             returnKeyType="search"
@@ -198,7 +289,8 @@ export function DestinationSearchPanel({
           stickyHeaderIndices={stickyIndices}
           contentContainerStyle={styles.results}
           onContentSizeChange={(_width, height) => {
-            if (!query.trim()) setPopularHeight(height + borderAllowance);
+            if (!query.trim() && !chosen)
+              setPopularHeight(height + borderAllowance);
           }}
         >
           {items}
@@ -208,48 +300,194 @@ export function DestinationSearchPanel({
   );
 }
 
-function buildResultItems(
-  query: string,
-  routes: TransitRoute[],
-  onOpenRoute: (route: TransitRoute) => void,
-): { items: ReactElement[]; stickyIndices: number[] } {
-  if (routes.length === 0) {
-    return {
-      items: [
-        <Text key="empty" style={styles.empty}>
-          No routes match “{query.trim()}”.
-        </Text>,
-      ],
-      stickyIndices: [],
-    };
+function SectionLabel({ label }: { label: string }) {
+  return (
+    <View style={styles.sectionLabelWrap}>
+      <Text style={styles.sectionLabel}>{label}</Text>
+    </View>
+  );
+}
+
+function RouteRow({
+  route,
+  detail,
+  onPress,
+}: {
+  route: TransitRoute;
+  detail?: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`View ${route.name} route`}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.rowMain,
+        styles.routeRow,
+        pressed && styles.pressed,
+      ]}
+    >
+      <View style={styles.rowIcon}>
+        <MapPinSearch color={brandBlue} size={16} strokeWidth={2} />
+      </View>
+      <View style={styles.rowText}>
+        <Text style={styles.rowTitle}>{route.name}</Text>
+        {!!detail && <Text style={styles.rowDetail}>{detail}</Text>}
+      </View>
+      <ChevronRight color={brandBlue} size={16} strokeWidth={2.5} />
+    </Pressable>
+  );
+}
+
+function buildResultItems({
+  query,
+  routes,
+  places,
+  searchingPlaces,
+  resolvingId,
+  placeProblem,
+  onOpenRoute,
+  onChoosePlace,
+}: {
+  query: string;
+  routes: TransitRoute[];
+  places: PlaceSuggestion[];
+  searchingPlaces: boolean;
+  resolvingId: string | null;
+  placeProblem: string;
+  onOpenRoute: (route: TransitRoute) => void;
+  onChoosePlace: (place: PlaceSuggestion) => void;
+}): { items: ReactElement[]; stickyIndices: number[] } {
+  const items: ReactElement[] = [];
+  const stickyIndices: number[] = [];
+
+  if (routes.length > 0) {
+    stickyIndices.push(items.length);
+    items.push(<SectionLabel key="routes-label" label="ROUTES" />);
+    routes.forEach((route) =>
+      items.push(
+        <RouteRow
+          key={route.id}
+          route={route}
+          onPress={() => onOpenRoute(route)}
+        />,
+      ),
+    );
   }
 
+  const placesActive = query.trim().length >= minPlaceQueryLength;
+  if (placesActive && (places.length > 0 || searchingPlaces || placeProblem)) {
+    stickyIndices.push(items.length);
+    items.push(<SectionLabel key="places-label" label="PLACES" />);
+    if (placeProblem) {
+      items.push(
+        <Text key="places-problem" style={styles.problem}>
+          {placeProblem}
+        </Text>,
+      );
+    }
+    if (searchingPlaces && places.length === 0) {
+      items.push(
+        <View key="places-loading" style={styles.loadingRow}>
+          <LoadingSprite size={18} />
+        </View>,
+      );
+    }
+    places.forEach((place) =>
+      items.push(
+        <Pressable
+          key={place.id}
+          accessibilityRole="button"
+          accessibilityLabel={`Find routes to ${place.name}`}
+          disabled={!!resolvingId}
+          onPress={() => onChoosePlace(place)}
+          style={({ pressed }) => [
+            styles.rowMain,
+            styles.routeRow,
+            pressed && styles.pressed,
+          ]}
+        >
+          <View style={[styles.rowIcon, styles.placeIcon]}>
+            <MapPin color="#ffffff" size={15} strokeWidth={2} />
+          </View>
+          <View style={styles.rowText}>
+            <Text style={styles.rowTitle} numberOfLines={1}>
+              {place.name}
+            </Text>
+            {!!place.address && (
+              <Text style={styles.rowDetail} numberOfLines={1}>
+                {place.address}
+              </Text>
+            )}
+          </View>
+          {resolvingId === place.id ? (
+            <LoadingSprite size={16} />
+          ) : (
+            <ChevronRight color={brandBlue} size={16} strokeWidth={2.5} />
+          )}
+        </Pressable>,
+      ),
+    );
+  }
+
+  if (items.length === 0) {
+    items.push(
+      <Text key="empty" style={styles.empty}>
+        {placesActive
+          ? `No routes or places match “${query.trim()}”.`
+          : "Keep typing to search places."}
+      </Text>,
+    );
+  }
+
+  return { items, stickyIndices };
+}
+
+function buildChosenItems(
+  { place, routes }: ChosenPlace,
+  onOpenRoute: (route: TransitRoute, place: Place) => void,
+  onBack: () => void,
+): { items: ReactElement[]; stickyIndices: number[] } {
   const items: ReactElement[] = [
-    <View key="routes-label" style={styles.sectionLabelWrap}>
-      <Text style={styles.sectionLabel}>ROUTES</Text>
+    <View key="chosen-label" style={styles.sectionLabelWrap}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Back to search results"
+        hitSlop={8}
+        onPress={onBack}
+        style={styles.chosenHeader}
+      >
+        <ArrowLeft color={brandBlue} size={14} strokeWidth={2.5} />
+        <Text style={styles.sectionLabel} numberOfLines={1}>
+          ROUTES NEAR {place.name.toUpperCase()}
+        </Text>
+      </Pressable>
     </View>,
   ];
-  routes.forEach((route) => {
+
+  if (routes.length === 0) {
     items.push(
-      <Pressable
-        key={route.id}
-        accessibilityRole="button"
-        accessibilityLabel={`View ${route.name} route`}
-        onPress={() => onOpenRoute(route)}
-        style={({ pressed }) => [
-          styles.rowMain,
-          styles.routeRow,
-          pressed && styles.pressed,
-        ]}
-      >
-        <View style={styles.rowIcon}>
-          <MapPinSearch color={brandBlue} size={16} strokeWidth={2} />
-        </View>
-        <Text style={[styles.rowTitle, styles.rowText]}>{route.name}</Text>
-        <ChevronRight color={brandBlue} size={16} strokeWidth={2.5} />
-      </Pressable>,
+      <Text key="none" style={styles.empty}>
+        No routes pass within {formatDistance(nearDestinationMeters)} of{" "}
+        {place.name} yet.
+      </Text>,
     );
-  });
+  }
+  routes.forEach(({ route, distanceMeters }) =>
+    items.push(
+      <RouteRow
+        key={route.id}
+        route={route}
+        detail={
+          distanceMeters < 25
+            ? "Passes right by your destination"
+            : `${formatDistance(distanceMeters)} walk from your destination`
+        }
+        onPress={() => onOpenRoute(route, place)}
+      />,
+    ),
+  );
 
   return { items, stickyIndices: [0] };
 }
@@ -322,4 +560,19 @@ const styles = StyleSheet.create({
   },
   rowText: { flex: 1 },
   rowTitle: { color: brandBlue, fontFamily: "SoraBold", fontSize: 11 },
+  rowDetail: {
+    color: mutedText,
+    fontFamily: "Sora",
+    fontSize: 9,
+    marginTop: 1,
+  },
+  placeIcon: { backgroundColor: "#c81e1e" },
+  loadingRow: { paddingVertical: 10 },
+  problem: {
+    color: "#d93025",
+    fontFamily: "Sora",
+    fontSize: 10,
+    paddingVertical: 8,
+  },
+  chosenHeader: { flexDirection: "row", alignItems: "center", gap: 6 },
 });

@@ -6,7 +6,7 @@ import Handshake from "lucide-react-native/icons/handshake";
 import Lock from "lucide-react-native/icons/lock";
 import Route from "lucide-react-native/icons/route";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -16,6 +16,7 @@ import {
   type AssignmentDetails,
 } from "@/api/v1/operator/controllers";
 import { EmptyState } from "@/components/empty-state";
+import { LoadingSprite } from "@/components/brand-logo";
 import {
   ModuleHeader,
   moduleColors,
@@ -61,7 +62,7 @@ export default function VehiclesScreen() {
         showsVerticalScrollIndicator={false}
       >
         {loading ? (
-          <ActivityIndicator color={brandBlue} style={styles.loading} />
+          <LoadingSprite color={brandBlue} style={styles.loading} />
         ) : details ? (
           <AssignmentView details={details} />
         ) : (

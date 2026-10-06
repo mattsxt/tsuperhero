@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Animated from "react-native-reanimated";
 
+import { BrandLogo } from "@/components/brand-logo";
 import {
   ExpandedOnly,
   headerLayoutTransition,
@@ -55,15 +56,15 @@ export function HomeHeader({
             <Text style={styles.subGreeting}>{subtitle}</Text>
           </ExpandedOnly>
         </View>
-        <Animated.Image
-          source={require("@/assets/images/tsuperhero_icon.png")}
+        <Animated.View
           style={[
             styles.headerLogo,
             collapsed && styles.headerLogoCollapsed,
             headerLogoTransition,
           ]}
-          resizeMode="contain"
-        />
+        >
+          <BrandLogo />
+        </Animated.View>
       </View>
     </Animated.View>
   );

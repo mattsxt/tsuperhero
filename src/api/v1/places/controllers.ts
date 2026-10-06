@@ -3,7 +3,7 @@ import { Platform } from "react-native";
 
 import { getErrorMessage } from "@/api/v1/client";
 import { placesApi } from "@/api/v1/places/routes";
-import { failure, success, type Result } from "@/api/v1/result";
+import { attempt, failure, success, type Result } from "@/api/v1/result";
 
 export type Place = {
   id: string;
@@ -145,4 +145,28 @@ export async function getCurrentPlace(): Promise<Result<Place>> {
   } catch (error) {
     return failure(getErrorMessage(error));
   }
+}
+
+export async function watchLocation(
+  onFix: (location: Location.LocationObject) => void,
+): Promise<Result<Location.LocationSubscription>> {
+  const permission = await Location.requestForegroundPermissionsAsync().catch(
+    () => null,
+  );
+  if (!permission?.granted) {
+    return failure("Allow location access to show where you are.");
+  }
+  if (!(await Location.hasServicesEnabledAsync().catch(() => false))) {
+    return failure("Turn on Location in your device settings.");
+  }
+  return attempt(() =>
+    Location.watchPositionAsync(
+      {
+        accuracy: Location.Accuracy.High,
+        timeInterval: 1_000,
+        distanceInterval: 0,
+      },
+      onFix,
+    ),
+  );
 }

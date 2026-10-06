@@ -2,14 +2,7 @@ import LocateFixed from "lucide-react-native/icons/locate-fixed";
 import MapPin from "lucide-react-native/icons/map-pin";
 import X from "lucide-react-native/icons/x";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import {
-  ActivityIndicator,
-  Keyboard,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Keyboard, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 
 import {
@@ -22,6 +15,7 @@ import {
   type PlaceSuggestion,
 } from "@/api/v1/places/controllers";
 import { moduleColors, SoftField } from "@/components/module-ui";
+import { LoadingSprite } from "@/components/brand-logo";
 
 const { brandBlue, error: errorRed, mutedText, softBlue, text } = moduleColors;
 
@@ -140,7 +134,7 @@ export function PlaceSearchField({
         trailing={
           <View style={styles.trailing}>
             {busy ? (
-              <ActivityIndicator color={brandBlue} size="small" />
+              <LoadingSprite color={brandBlue} size={18} />
             ) : (
               query.length > 0 && (
                 <Pressable
@@ -206,7 +200,7 @@ export function PlaceSearchField({
 
           {searching ? (
             <View style={styles.status}>
-              <ActivityIndicator color={brandBlue} size="small" />
+              <LoadingSprite color={brandBlue} size={18} />
               <Text style={styles.statusText}>Searching places...</Text>
             </View>
           ) : suggestions.length === 0 ? (

@@ -25,8 +25,12 @@ const onRouteMeters = 40;
 
 const walkMetersPerMinute = 80;
 
+// Last loaded list, so screens can render right away and refresh quietly.
+let knownWaitingAreas: WaitingArea[] = [];
+export const getKnownWaitingAreas = () => knownWaitingAreas;
+
 export async function loadWaitingAreas(): Promise<Result<WaitingArea[]>> {
-  return attempt(async () => {
+  const result = await attempt(async (): Promise<WaitingArea[]> => {
     const rows: WaitingAreaRow[] =
       (await unwrap(waitingAreaRoutes.listActive())) ?? [];
     return rows.map(({ id, name, lat, lng, route_id, vicinity, type }) => ({
@@ -39,6 +43,8 @@ export async function loadWaitingAreas(): Promise<Result<WaitingArea[]>> {
       vicinity: vicinity?.trim() || null,
     }));
   });
+  if (result.ok) knownWaitingAreas = result.data;
+  return result;
 }
 
 export function findWaitingAreasOnRoute(

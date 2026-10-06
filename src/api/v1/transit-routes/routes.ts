@@ -10,6 +10,9 @@ type GooglePolyline = {
 type GoogleRoutesResponse = {
   routes?: {
     polyline?: GooglePolyline;
+    distanceMeters?: number;
+    // Seconds, formatted like "245s".
+    duration?: string;
     legs?: { distanceMeters?: number; polyline?: GooglePolyline }[];
   }[];
   error?: { message: string };
@@ -55,6 +58,29 @@ export const transitRouteApi = {
         destination: toWaypoint(points[points.length - 1]),
         intermediates: points.slice(1, -1).map(toWaypoint),
         travelMode: "DRIVE",
+        polylineEncoding: "GEO_JSON_LINESTRING",
+      }),
+    }).then((response) => response.json());
+  },
+
+  // Traffic-aware road route with travel time, for live ETAs.
+  etaRoute: (from: LatLng, to: LatLng): Promise<GoogleRoutesResponse> => {
+    if (!googleMapsApiKey) {
+      return Promise.reject(new Error("Missing Google Maps API key."));
+    }
+    return fetch(routesApiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": googleMapsApiKey,
+        "X-Goog-FieldMask":
+          "routes.duration,routes.distanceMeters,routes.polyline.geoJsonLinestring",
+      },
+      body: JSON.stringify({
+        origin: toWaypoint(from),
+        destination: toWaypoint(to),
+        travelMode: "DRIVE",
+        routingPreference: "TRAFFIC_AWARE",
         polylineEncoding: "GEO_JSON_LINESTRING",
       }),
     }).then((response) => response.json());

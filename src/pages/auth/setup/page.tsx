@@ -5,19 +5,7 @@ import { router } from "expo-router";
 import Calendar1 from "lucide-react-native/icons/calendar-1";
 import ChevronLeft from "lucide-react-native/icons/chevron-left";
 import { createElement, useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  BackHandler,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { BackHandler, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
@@ -32,6 +20,7 @@ import {
   type ProfileFormField,
 } from "@/api/v1/profile/controllers";
 import { BrandHeader } from "@/components/brand-header";
+import { LoadingSprite } from "@/components/brand-logo";
 import { MiniToast, type MiniToastMessage } from "@/components/mini-toast";
 import { Routes } from "@/constants/routes";
 
@@ -125,7 +114,7 @@ export default function SetupScreen() {
   if (checking) {
     return (
       <View style={styles.loadingScreen}>
-        <ActivityIndicator color="#ffffff" />
+        <LoadingSprite color="#ffffff" />
       </View>
     );
   }

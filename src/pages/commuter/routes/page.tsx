@@ -9,7 +9,6 @@ import Search from "lucide-react-native/icons/search";
 import X from "lucide-react-native/icons/x";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
-  ActivityIndicator,
   Keyboard,
   Pressable,
   ScrollView,
@@ -34,14 +33,12 @@ import {
   loadWaitingAreas,
   type WaitingArea,
 } from "@/api/v1/waiting-areas/controllers";
-import {
-  ModuleHeader,
-  moduleColors,
-} from "@/components/module-ui";
+import { ModuleHeader, moduleColors } from "@/components/module-ui";
 import { TransitMap, type TransitMapState } from "@/components/transit-map";
 import { Routes } from "@/constants/routes";
 import { useTransitRoutes } from "@/hooks/use-transit-routes";
 import { goBackOr } from "@/utils/navigation";
+import { LoadingSprite } from "@/components/brand-logo";
 
 const { brandBlue, headerBlue, mutedText, softBlue, text } = moduleColors;
 const cardNavy = "#0f2a5c";
@@ -71,9 +68,17 @@ export default function RoutesScreen() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{
     routeId?: string;
+    destLat?: string;
+    destLng?: string;
   }>();
   const transitRoutes = useTransitRoutes();
   const initialRoute = findRoute(params.routeId);
+  // Destination picked in "Where to?", shown as a pin along the route.
+  const destination = useMemo(() => {
+    const lat = Number.parseFloat(params.destLat ?? "");
+    const lng = Number.parseFloat(params.destLng ?? "");
+    return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+  }, [params.destLat, params.destLng]);
 
   const [headerHeight, setHeaderHeight] = useState(140);
   const [panelHeight, setPanelHeight] = useState(insets.bottom + 84);
@@ -148,11 +153,13 @@ export default function RoutesScreen() {
           kind: type,
         })),
       vehicles: [],
+      pickups: destination ? [{ id: "destination", ...destination }] : [],
       focus: null,
       padTop: headerHeight + 30,
       padBottom: panelHeight + 70,
     }),
     [
+      destination,
       routeId,
       path,
       alternativePaths,
@@ -266,7 +273,7 @@ export default function RoutesScreen() {
             <View style={styles.chipGroup}>
               {loadingRoute && (
                 <View style={styles.chip}>
-                  <ActivityIndicator color="#ffffff" size="small" />
+                  <LoadingSprite color="#ffffff" size={18} />
                   <Text style={styles.chipText}>Loading route...</Text>
                 </View>
               )}

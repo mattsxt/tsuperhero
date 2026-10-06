@@ -8,16 +8,7 @@ import Mail from "lucide-react-native/icons/mail";
 import Phone from "lucide-react-native/icons/phone";
 import UserRoundPen from "lucide-react-native/icons/user-round-pen";
 import { useEffect, useState, type ReactNode } from "react";
-import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Alert, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -34,6 +25,7 @@ import {
   type ProfileEditField,
 } from "@/api/v1/profile/controllers";
 import { DateTimeField } from "@/components/date-time-field";
+import { LoadingSprite } from "@/components/brand-logo";
 import { MiniToast, type MiniToastMessage } from "@/components/mini-toast";
 import {
   FieldLabel,
@@ -111,7 +103,7 @@ export default function EditProfileScreen() {
   if (!profile) {
     return (
       <View style={styles.loadingScreen}>
-        <ActivityIndicator color={brandBlue} />
+        <LoadingSprite color={brandBlue} />
       </View>
     );
   }

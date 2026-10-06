@@ -1,7 +1,19 @@
 import { authRoutes } from "@/api/v1/auth/routes";
+import { getSupabaseClient } from "@/api/v1/client";
 import { pickupRoutes } from "@/api/v1/pickups/routes";
-import type { PickupRequestRow, RequestStatus } from "@/api/v1/pickups/types";
+import type {
+  BookingRow,
+  PickupDriverRow,
+  PickupRequestRow,
+  RequestStatus,
+} from "@/api/v1/pickups/types";
 import { attempt, failure, unwrap, type Result } from "@/api/v1/result";
+import {
+  getOccupancyLevel,
+  toVehicleType,
+  type OccupancyLevel,
+  type VehicleType,
+} from "@/api/v1/transit-routes/controllers";
 
 export type PickupVehicle = "jeep" | "tricy";
 
@@ -42,9 +54,36 @@ async function getCommuterId() {
   return created.commuter_id;
 }
 
+// Last known active request, so the Pickup screen can open without waiting.
+// Cleared whenever the signed-in account changes so it never leaks between
+// accounts on the same device.
+let knownActivePickup: PickupRequest | null = null;
+let knownUserId: string | null = null;
+let watchingAuth = false;
+export const getKnownActivePickup = () => knownActivePickup;
+
+function watchAuthChanges() {
+  if (watchingAuth) return;
+  watchingAuth = true;
+  getSupabaseClient().auth.onAuthStateChange((_event, session) => {
+    const userId = session?.user.id ?? null;
+    if (userId !== knownUserId) {
+      knownUserId = userId;
+      knownActivePickup = null;
+    }
+  });
+}
+
 export async function loadActivePickup(): Promise<
   Result<PickupRequest | null>
 > {
+  watchAuthChanges();
+  const result = await fetchActivePickup();
+  if (result.ok) knownActivePickup = result.data;
+  return result;
+}
+
+function fetchActivePickup(): Promise<Result<PickupRequest | null>> {
   return attempt(async () => {
     const commuterId = await getCommuterId();
     const row: PickupRequestRow | null = await unwrap(
@@ -112,7 +151,7 @@ export async function requestPickup(
       throw error;
     }
 
-    return {
+    knownActivePickup = {
       id: request.request_id,
       pickupName: point.name,
       lat: point.lat,
@@ -120,20 +159,111 @@ export async function requestPickup(
       passengers,
       status: request.request_status,
     };
+    return knownActivePickup;
   });
 }
 
 export const canCancelPickup = (request: PickupRequest) =>
-  request.status === "accepted";
+  request.status === "pending";
 
 export async function cancelPickup(
   request: PickupRequest,
 ): Promise<Result<void>> {
   if (!canCancelPickup(request)) {
-    return failure("You can cancel once a driver accepts your request.");
+    return failure("A driver already accepted this request.");
   }
   return attempt(async () => {
     await unwrap(pickupRoutes.deletePickup(request.id));
     await unwrap(pickupRoutes.deleteRequest(request.id));
+    knownActivePickup = null;
+  });
+}
+
+const vehicleStatusLabels: Record<string, string> = {
+  "on-trip": "In Transit",
+  loading: "Loading/Unloading",
+  idle: "Idle",
+  offline: "Offline",
+};
+
+export type PickupDriver = {
+  requestId: string;
+  plateNumber: string;
+  vehicleType: VehicleType;
+  status: string;
+  maxCapacity: number;
+  currentCapacity: number;
+  occupancy: OccupancyLevel;
+  location: { lat: number; lng: number; speedKmh: number } | null;
+};
+
+// The vehicle coming for the commuter's accepted request, if any.
+export function loadPickupDriver(): Promise<Result<PickupDriver | null>> {
+  return attempt(async () => {
+    const row: PickupDriverRow | null = await unwrap(
+      pickupRoutes.findMyDriver(),
+    );
+    if (!row) return null;
+    return {
+      requestId: row.request_id,
+      plateNumber: row.plate_number,
+      vehicleType: toVehicleType(row.vehicle_type),
+      status: vehicleStatusLabels[row.vehicle_status] ?? row.vehicle_status,
+      maxCapacity: row.max_capacity,
+      currentCapacity: row.current_capacity,
+      occupancy: getOccupancyLevel(row.current_capacity, row.max_capacity),
+      location: row.location
+        ? {
+            lat: row.location.latitude,
+            lng: row.location.longitude,
+            speedKmh: row.location.speed_kmh,
+          }
+        : null,
+    };
+  });
+}
+
+export function formatEta(seconds: number) {
+  if (seconds < 60) return "in less than a minute";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `in about ${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return `in about ${hours} hr${rest ? ` ${rest} min` : ""}`;
+}
+
+export type BookingKind = "pickup" | "rental";
+
+export type Booking = {
+  id: string;
+  kind: BookingKind;
+  requestedAt: Date;
+  destination: string;
+  passengers: number | null;
+  rentalDate: string | null;
+  purpose: string | null;
+  plateNumber: string | null;
+  // As stored: "Jeepney", "Tricycle", "Van" or "Bus".
+  vehicleType: string | null;
+  driverName: string | null;
+};
+
+// Completed pickups and rentals only; cancelled requests are never kept.
+export function loadBookings(): Promise<Result<Booking[]>> {
+  return attempt(async () => {
+    const rows: BookingRow[] =
+      (await unwrap(pickupRoutes.findMyBookings())) ?? [];
+    return rows.map((row) => ({
+      id: row.request_id,
+      kind: row.request_type === "Charter_Rental" ? "rental" : "pickup",
+      requestedAt: new Date(row.request_date),
+      destination: row.destination ?? "Unknown destination",
+      passengers: row.passengers,
+      rentalDate: row.rental_date,
+      purpose: row.purpose,
+      plateNumber: row.plate_number,
+      vehicleType: row.vehicle_type,
+      driverName: row.driver_name,
+    }));
   });
 }

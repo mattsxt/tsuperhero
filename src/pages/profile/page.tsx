@@ -8,14 +8,7 @@ import FileText from "lucide-react-native/icons/file-text";
 import LogOut from "lucide-react-native/icons/log-out";
 import ShieldCog from "lucide-react-native/icons/shield-cog";
 import { useCallback, useRef, useState, type ReactNode } from "react";
-import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -25,6 +18,7 @@ import {
   type ProfileSummary,
 } from "@/api/v1/profile/controllers";
 import { BottomNav, bottomNavHeight } from "@/components/bottom-nav";
+import { LoadingSprite } from "@/components/brand-logo";
 import {
   ExpandedOnly,
   headerLayoutTransition,
@@ -83,7 +77,7 @@ export default function ProfileScreen() {
   if (!summary) {
     return (
       <View style={styles.loadingScreen}>
-        <ActivityIndicator color={brandBlue} />
+        <LoadingSprite color={brandBlue} />
       </View>
     );
   }

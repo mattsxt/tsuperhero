@@ -1,15 +1,18 @@
-import { Image } from "expo-image";
 import { StatusBar } from "expo-status-bar";
 import CircleAlert from "lucide-react-native/icons/circle-alert";
 import BusFront from "lucide-react-native/icons/bus-front";
+import Check from "lucide-react-native/icons/check";
+import LocateFixed from "lucide-react-native/icons/locate-fixed";
 import MapPin from "lucide-react-native/icons/map-pin";
 import Minus from "lucide-react-native/icons/minus";
 import Plus from "lucide-react-native/icons/plus";
+import Users from "lucide-react-native/icons/users";
 import X from "lucide-react-native/icons/x";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import type { LocationObject, LocationObjectCoords } from "expo-location";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  ActivityIndicator,
   BackHandler,
+  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -18,29 +21,63 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
+  acceptPickup,
   describeAssignment,
+  endTrip,
+  loadNearbyPickups,
   loadOperatorAssignment,
+  pickupDetectionMeters,
+  saveTripState,
+  shareLocation,
+  startTrip,
+  tripStatusLabels,
   type AssignmentDetails,
+  type NearbyPickup,
+  type TripStatus,
 } from "@/api/v1/operator/controllers";
 import {
   getOccupancyLevel,
   loadRouteGeometry,
-  pointAlong,
   type LatLng,
 } from "@/api/v1/transit-routes/controllers";
+import { watchLocation } from "@/api/v1/places/controllers";
 import { EmptyState } from "@/components/empty-state";
-import { ModuleHeader, vehicleOptions } from "@/components/module-ui";
+import { LoadingSprite } from "@/components/brand-logo";
+import { VehicleIcon } from "@/components/module-icons";
+import { ModuleHeader, moduleColors } from "@/components/module-ui";
 import { TransitMap, type TransitMapState } from "@/components/transit-map";
 import { Routes } from "@/constants/routes";
+import { getDistanceMeters, getPairDistanceMeters } from "@/utils/geo";
 import { goBackOr } from "@/utils/navigation";
 
 const panelNavy = "#1d3354";
 const routeCyan = "#7fd4f7";
 const counterBlue = "#7dd3f5";
 const circleNavy = "#1034A6";
+const modalBlue = "#d6ecf8";
+const { brandBlue } = moduleColors;
+const chipBlue = "#a8dcf7";
+const locateBlue = "rgba(168, 220, 247, 0.85)";
+const declineRed = "#b91c1c";
+const maxPickupCards = 3;
 
-const routeLoopSeconds = 300;
 const toastMs = 4_000;
+const stationaryMs = 5_000;
+const pingMs = 3_000;
+// GPS drifts a few meters while parked, so smaller changes don't count as moving.
+const movedMeters = 15;
+const movingSpeedMps = 1.5;
+const myVehicleZoom = 16;
+const pickupPollMs = 5_000;
+
+const pathLengthMeters = (path: LatLng[]) =>
+  path
+    .slice(1)
+    .reduce(
+      (total, point, index) =>
+        total + getPairDistanceMeters(path[index], point),
+      0,
+    );
 
 type ToastTone = "danger" | "success" | "info";
 
@@ -48,21 +85,14 @@ type Toast = {
   id: number;
   text: string;
   tone: ToastTone;
-  side: "left" | "right";
   dismissible: boolean;
 };
 
-function nextToast(
-  text: string,
-  tone: ToastTone,
-  side: Toast["side"],
-  dismissible = true,
-) {
+function nextToast(text: string, tone: ToastTone, dismissible = true) {
   return (current: Toast | null): Toast => ({
     id: (current?.id ?? 0) + 1,
     text,
     tone,
-    side,
     dismissible,
   });
 }
@@ -86,7 +116,7 @@ export default function TripScreen() {
   if (loading) {
     return (
       <View style={styles.loadingScreen}>
-        <ActivityIndicator color={circleNavy} />
+        <LoadingSprite color={circleNavy} />
       </View>
     );
   }
@@ -118,29 +148,45 @@ function Trip({ details }: { details: AssignmentDetails }) {
   const { assignment, route, vehicleLabel, coverageTitle } = details;
   const { vehicle } = assignment;
   const capacity = vehicle.max_capacity;
-  const vehicleIcon = vehicleOptions.find(
-    (option) => option.value === vehicle.vehicle_type,
-  )?.icon;
 
   const [headerHeight, setHeaderHeight] = useState(140);
   const [panelHeight, setPanelHeight] = useState(240);
   const [routePath, setRoutePath] = useState<LatLng[] | null>(null);
-  const [inTransit, setInTransit] = useState(false);
-  const [progress, setProgress] = useState(0);
+  const [status, setStatus] = useState<TripStatus>("idle");
+  const [starting, setStarting] = useState(false);
+  const [fix, setFix] = useState<LocationObject | null>(null);
+  const [locationError, setLocationError] = useState<string | null>(null);
+  const [watchAttempt, setWatchAttempt] = useState(0);
+  // While following, the map stays centered on the driver; dragging the map
+  // stops it and the locate button turns it back on.
+  const [following, setFollowing] = useState(true);
+  const [recenters, setRecenters] = useState(0);
+  const [zoomAt, setZoomAt] = useState<number | null>(null);
   const [count, setCount] = useState(0);
   const [markedFull, setMarkedFull] = useState(false);
   const [toast, setToast] = useState<Toast | null>(null);
+  const [confirmingStop, setConfirmingStop] = useState(false);
+  const [finalizing, setFinalizing] = useState(false);
+  const [pickups, setPickups] = useState<NearbyPickup[]>([]);
+  // Accepted requests keep their pin until the driver is out of range.
+  const [accepted, setAccepted] = useState<NearbyPickup[]>([]);
+  const [acceptingId, setAcceptingId] = useState<string | null>(null);
 
+  const latestCoords = useRef<LocationObjectCoords | null>(null);
+  const anchor = useRef<LocationObjectCoords | null>(null);
+  const lastMovedAt = useRef(0);
+  const savedState = useRef<string | null>(null);
+  const shareFailing = useRef(false);
+  const tripActive = useRef(false);
+  const distanceDone = useRef(0);
+  // Requests the driver has already been pinged about, and ones they have
+  // driven past (left the detection radius) that stay hidden this trip.
+  const seenPickups = useRef(new Set<string>());
+  const passedPickups = useRef(new Set<string>());
+
+  const onTrip = status !== "idle";
   const full = markedFull || count >= capacity;
-  const path = useMemo(
-    () => (route ? (routePath ?? route.waypoints) : []),
-    [route, routePath],
-  );
-  const fraction = progress <= 1 ? progress : 2 - progress;
-  const position = useMemo<LatLng | null>(
-    () => (path.length > 1 ? pointAlong(path, fraction) : null),
-    [path, fraction],
-  );
+  const occupancy = markedFull ? "Full" : getOccupancyLevel(count, capacity);
 
   useEffect(() => {
     if (!route) return;
@@ -153,13 +199,140 @@ function Trip({ details }: { details: AssignmentDetails }) {
     };
   }, [route]);
 
+  // The driver always sees their own position; it only leaves the device
+  // once a trip is started (see the ping effect below).
   useEffect(() => {
-    if (!inTransit) return;
+    let active = true;
+    let subscription: { remove: () => void } | null = null;
+    watchLocation((location) => {
+      const next = location.coords;
+      latestCoords.current = next;
+      const moved =
+        !anchor.current ||
+        (next.speed ?? 0) >= movingSpeedMps ||
+        getDistanceMeters(
+          { lat: anchor.current.latitude, lng: anchor.current.longitude },
+          { lat: next.latitude, lng: next.longitude },
+        ) >= movedMeters;
+      if (moved) {
+        if (anchor.current && tripActive.current) {
+          distanceDone.current += getDistanceMeters(
+            { lat: anchor.current.latitude, lng: anchor.current.longitude },
+            { lat: next.latitude, lng: next.longitude },
+          );
+        }
+        anchor.current = next;
+        lastMovedAt.current = Date.now();
+      }
+      setFix(location);
+      setZoomAt((current) => current ?? location.timestamp);
+      setAccepted((current) => {
+        const here = { lat: next.latitude, lng: next.longitude };
+        const kept = current.filter(
+          (pickup) => getDistanceMeters(here, pickup) <= pickupDetectionMeters,
+        );
+        return kept.length === current.length ? current : kept;
+      });
+    }).then((result) => {
+      if (!result.ok) {
+        if (!active) return;
+        setLocationError(result.error);
+        setToast(nextToast(result.error, "danger"));
+        return;
+      }
+      if (active) subscription = result.data;
+      else result.data.remove();
+    });
+    return () => {
+      active = false;
+      subscription?.remove();
+    };
+  }, [watchAttempt]);
+
+  useEffect(() => {
+    if (!onTrip || finalizing) return;
     const timer = setInterval(() => {
-      setProgress((current) => (current + 1 / routeLoopSeconds) % 2);
+      const still = Date.now() - lastMovedAt.current >= stationaryMs;
+      setStatus(still ? "loading" : "in-transit");
     }, 1000);
     return () => clearInterval(timer);
-  }, [inTransit]);
+  }, [onTrip, finalizing]);
+
+  useEffect(() => {
+    if (!onTrip) return;
+    const ping = async () => {
+      if (!latestCoords.current) return;
+      const result = await shareLocation(latestCoords.current);
+      if (result.ok) {
+        shareFailing.current = false;
+      } else if (tripActive.current && !shareFailing.current) {
+        shareFailing.current = true;
+        setToast(nextToast("Couldn't share your location.", "danger"));
+      }
+    };
+    ping();
+    const timer = setInterval(ping, pingMs);
+    return () => clearInterval(timer);
+  }, [onTrip]);
+
+  // The server only returns requests within the detection radius of the
+  // location this vehicle last shared.
+  useEffect(() => {
+    if (!onTrip) return;
+    const poll = async () => {
+      const result = await loadNearbyPickups();
+      if (!result.ok || !tripActive.current) return;
+      const nearby = new Set(result.data.map((pickup) => pickup.id));
+      seenPickups.current.forEach((id) => {
+        if (!nearby.has(id)) passedPickups.current.add(id);
+      });
+      const visible = result.data.filter(
+        (pickup) => !passedPickups.current.has(pickup.id),
+      );
+      const fresh = visible.filter(
+        (pickup) => !seenPickups.current.has(pickup.id),
+      );
+      visible.forEach((pickup) => seenPickups.current.add(pickup.id));
+      setPickups(visible);
+      if (fresh.length > 0) {
+        const passengers = fresh.reduce(
+          (total, pickup) => total + pickup.passengers,
+          0,
+        );
+        setToast(
+          nextToast(
+            `Pickup request nearby: ${passengers} passenger${passengers === 1 ? "" : "s"}`,
+            "success",
+          ),
+        );
+      }
+    };
+    const timer = setInterval(poll, pickupPollMs);
+    return () => clearInterval(timer);
+  }, [onTrip]);
+
+  // Going idle also withdraws the shared location on the server.
+  useEffect(() => {
+    if (starting || finalizing) return;
+    const key = `${status}:${count}`;
+    if (key === savedState.current) return;
+    savedState.current = key;
+    saveTripState(status, count).then((result) => {
+      if (!result.ok)
+        setToast(
+          nextToast(`Couldn't update your trip: ${result.error}`, "danger"),
+        );
+    });
+  }, [starting, finalizing, status, count]);
+
+  useEffect(
+    () => () => {
+      if (tripActive.current) endTrip(distanceDone.current);
+      else if (!savedState.current?.startsWith("idle:"))
+        saveTripState("idle", 0);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!toast) return;
@@ -168,8 +341,8 @@ function Trip({ details }: { details: AssignmentDetails }) {
   }, [toast]);
 
   const leave = () => {
-    if (inTransit) {
-      setToast(nextToast("Stop the trip before leaving.", "danger", "left"));
+    if (onTrip) {
+      setToast(nextToast("Stop the trip before leaving.", "danger"));
       return;
     }
     goBackOr(Routes.transitHome);
@@ -179,85 +352,193 @@ function Trip({ details }: { details: AssignmentDetails }) {
     const subscription = BackHandler.addEventListener(
       "hardwareBackPress",
       () => {
-        if (!inTransit) return false;
-        setToast(nextToast("Stop the trip before leaving.", "danger", "left"));
+        if (!onTrip) return false;
+        setToast(nextToast("Stop the trip before leaving.", "danger"));
         return true;
       },
     );
     return () => subscription.remove();
-  }, [inTransit]);
+  }, [onTrip]);
 
   const addPassenger = () => {
-    if (count >= capacity) return;
+    if (!onTrip || count >= capacity) return;
     const next = count + 1;
     setCount(next);
-    if (next >= capacity)
-      setToast(nextToast("Vehicle is Full!", "danger", "left"));
+    if (next >= capacity) setToast(nextToast("Vehicle is Full!", "danger"));
   };
 
   const removePassenger = () => {
-    if (count > 0) setCount(count - 1);
+    if (onTrip && count > 0) setCount(count - 1);
   };
 
-  const start = () => {
-    setInTransit(true);
+  // The server only accepts locations from a vehicle that is on a trip,
+  // so the status is saved before the first ping goes out.
+  const start = async () => {
+    if (starting) return;
+    if (locationError) {
+      setToast(nextToast("Allow location access to start a trip.", "danger"));
+      return;
+    }
+    setStarting(true);
     setToast(null);
-  };
-
-  const stop = () => {
-    setInTransit(false);
-    setProgress(0);
+    const path = routePath ?? route?.waypoints ?? [];
+    const result = await startTrip(pathLengthMeters(path));
+    setStarting(false);
+    if (!result.ok) {
+      setToast(nextToast(result.error || "Couldn't start the trip.", "danger"));
+      return;
+    }
+    savedState.current = "in-transit:0";
+    lastMovedAt.current = Date.now();
+    shareFailing.current = false;
+    tripActive.current = true;
+    distanceDone.current = 0;
+    seenPickups.current = new Set();
+    passedPickups.current = new Set();
+    setAccepted([]);
     setCount(0);
     setMarkedFull(false);
-    setToast(nextToast("Trip Ended!", "info", "left"));
+    setStatus("in-transit");
+  };
+
+  // Saves the trip record (arrival time, distance driven) and goes idle,
+  // which also stops sharing the location.
+  const finalizeTrip = async () => {
+    if (finalizing) return;
+    setFinalizing(true);
+    const result = await endTrip(distanceDone.current);
+    setFinalizing(false);
+    setConfirmingStop(false);
+    if (!result.ok) {
+      setToast(nextToast("Couldn't finalize the trip. Try again.", "danger"));
+      return;
+    }
+    tripActive.current = false;
+    setPickups([]);
+    setAccepted([]);
+    setStatus("idle");
+    setCount(0);
+    setMarkedFull(false);
+    setToast(nextToast("Trip Ended!", "info"));
+  };
+
+  const seatsLeft = markedFull ? 0 : capacity - count;
+
+  // Declining only hides the request for this driver; other drivers nearby
+  // can still accept it.
+  const declineRequest = (pickup: NearbyPickup) => {
+    passedPickups.current.add(pickup.id);
+    setPickups((current) => current.filter((item) => item.id !== pickup.id));
+  };
+
+  const acceptRequest = async (pickup: NearbyPickup) => {
+    if (acceptingId) return;
+    if (pickup.passengers > seatsLeft) {
+      setToast(nextToast("Not enough seats for this request.", "danger"));
+      return;
+    }
+    setAcceptingId(pickup.id);
+    const result = await acceptPickup(pickup.id);
+    setAcceptingId(null);
+    declineRequest(pickup);
+    if (!result.ok) {
+      setToast(nextToast(result.error, "danger"));
+      return;
+    }
+    if (!tripActive.current) return;
+    const boarding = result.data;
+    const next = Math.min(capacity, count + boarding);
+    setCount((current) => Math.min(capacity, current + boarding));
+    setAccepted((current) => [...current, pickup]);
+    setToast(
+      next >= capacity
+        ? nextToast("Vehicle is Full!", "danger")
+        : nextToast(
+            `Accepted ${boarding} passenger${boarding === 1 ? "" : "s"}`,
+            "success",
+          ),
+    );
   };
 
   const toggleFull = () => {
     if (count >= capacity) return;
     if (markedFull) {
       setMarkedFull(false);
-      setToast(nextToast("Accepting Passengers Again", "info", "left"));
+      setToast(nextToast("Accepting Passengers Again", "info"));
     } else {
       setMarkedFull(true);
-      setToast(nextToast("Marked as Full!", "danger", "left"));
+      setToast(nextToast("Marked as Full!", "danger"));
     }
   };
 
+  const locate = () => {
+    if (locationError) {
+      setLocationError(null);
+      setToast(null);
+      setWatchAttempt((attempt) => attempt + 1);
+    }
+    setFollowing(true);
+    setRecenters((count) => count + 1);
+    setZoomAt(fix?.timestamp ?? null);
+  };
+
+  const coords = fix?.coords ?? null;
   const mapState = useMemo<TransitMapState>(
     () => ({
       routeId: route?.id ?? null,
       route: route ? routePath : null,
-      vehicles: position
+      vehicles: coords
         ? [
             {
               id: "my-vehicle",
-              lat: position[0],
-              lng: position[1],
+              lat: coords.latitude,
+              lng: coords.longitude,
               type: vehicle.vehicle_type,
             },
           ]
         : [],
-      focus: null,
+      focus:
+        following && fix
+          ? {
+              key: `${recenters}:${fix.timestamp}`,
+              lat: fix.coords.latitude,
+              lng: fix.coords.longitude,
+              zoom: fix.timestamp === zoomAt ? myVehicleZoom : undefined,
+            }
+          : null,
+      pickups: [...pickups, ...accepted].map(
+        ({ id, lat, lng, passengers }) => ({
+          id,
+          lat,
+          lng,
+          passengers,
+        }),
+      ),
       padTop: headerHeight + 30,
       padBottom: panelHeight + 30,
     }),
     [
+      pickups,
+      accepted,
       route,
       routePath,
-      position,
+      coords,
+      fix,
+      following,
+      recenters,
+      zoomAt,
       vehicle,
       headerHeight,
       panelHeight,
     ],
   );
 
-  const occupancy = markedFull ? "Full" : getOccupancyLevel(count, capacity);
   const overlayBottom = panelHeight + 10;
 
   return (
     <View style={styles.screen}>
       <StatusBar style="light" />
-      <TransitMap state={mapState} />
+      <TransitMap state={mapState} onDrag={() => setFollowing(false)} />
 
       <View
         style={styles.headerWrap}
@@ -271,76 +552,120 @@ function Trip({ details }: { details: AssignmentDetails }) {
         />
       </View>
 
-      {toast && (
-        <View
-          style={[
-            styles.toast,
-            toastTones[toast.tone].container,
-            toast.side === "left" ? styles.toastLeft : styles.toastRight,
-            { bottom: overlayBottom },
-          ]}
-        >
-          <CircleAlert
-            color={toastTones[toast.tone].color}
-            size={13}
-            strokeWidth={2.5}
-          />
-          <Text
-            style={[styles.toastText, { color: toastTones[toast.tone].color }]}
-          >
-            {toast.text}
-          </Text>
-          {toast.dismissible && (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Dismiss message"
-              hitSlop={10}
-              onPress={() => setToast(null)}
+      <View
+        pointerEvents="box-none"
+        style={[styles.overlayStack, { bottom: overlayBottom }]}
+      >
+        {toast && (
+          <View style={[styles.toast, toastTones[toast.tone].container]}>
+            <CircleAlert
+              color={toastTones[toast.tone].color}
+              size={12}
+              strokeWidth={2.5}
+            />
+            <Text
+              style={[
+                styles.toastText,
+                { color: toastTones[toast.tone].color },
+              ]}
+              numberOfLines={2}
             >
-              <X
-                color={toastTones[toast.tone].color}
-                size={13}
-                strokeWidth={3}
-              />
-            </Pressable>
-          )}
-        </View>
-      )}
+              {toast.text}
+            </Text>
+            {toast.dismissible && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Dismiss message"
+                hitSlop={10}
+                onPress={() => setToast(null)}
+              >
+                <X
+                  color={toastTones[toast.tone].color}
+                  size={12}
+                  strokeWidth={3}
+                />
+              </Pressable>
+            )}
+          </View>
+        )}
+        {pickups.slice(0, maxPickupCards).map((pickup) => (
+          <PickupCard
+            key={pickup.id}
+            pickup={pickup}
+            distanceMeters={
+              coords
+                ? getDistanceMeters(
+                    { lat: coords.latitude, lng: coords.longitude },
+                    pickup,
+                  )
+                : pickup.distanceMeters
+            }
+            fits={pickup.passengers <= seatsLeft}
+            busy={acceptingId === pickup.id}
+            onAccept={() => acceptRequest(pickup)}
+            onDecline={() => declineRequest(pickup)}
+          />
+        ))}
+      </View>
+
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Center the map on your location"
+        accessibilityState={{ selected: following }}
+        onPress={locate}
+        style={({ pressed }) => [
+          styles.locateButton,
+          { top: headerHeight + 12 },
+          pressed && styles.pressed,
+        ]}
+      >
+        <LocateFixed
+          color={brandBlue}
+          size={20}
+          strokeWidth={2.2}
+          style={!following && styles.locateIdle}
+        />
+      </Pressable>
 
       <View
         style={[styles.panel, { paddingBottom: insets.bottom + 16 }]}
         onLayout={(event) => setPanelHeight(event.nativeEvent.layout.height)}
       >
-        <Text style={styles.coverage} numberOfLines={1}>
-          {coverageTitle.toUpperCase().replace(" – ", " - ")}
-        </Text>
+        <View style={styles.coverageRow}>
+          <Text style={styles.coverage} numberOfLines={1}>
+            {coverageTitle.toUpperCase().replace(" – ", " - ")}
+          </Text>
+          <View style={[styles.sharing, onTrip && styles.sharingOn]}>
+            <View style={[styles.sharingDot, onTrip && styles.sharingDotOn]} />
+            <Text style={styles.sharingText}>
+              {onTrip ? "Location Shared" : "Location Not Shared"}
+            </Text>
+          </View>
+        </View>
 
         <View style={styles.infoRow}>
-          {vehicleIcon && (
-            <View style={styles.vehicleIconBackdrop}>
-              <Image
-                source={vehicleIcon}
-                style={styles.vehicleIcon}
-                tintColor="#ffffff"
-                contentFit="contain"
-              />
-            </View>
-          )}
+          <View style={styles.vehicleIconBackdrop}>
+            <VehicleIcon
+              type={vehicle.vehicle_type}
+              color="#ffffff"
+              size={28}
+            />
+          </View>
           <View style={styles.plateBlock}>
             <Text style={styles.plate} numberOfLines={1}>
               {vehicle.plate_number}
             </Text>
-            <Text style={styles.infoText}>{vehicleLabel}</Text>
+            <Text style={styles.infoLabel}>{vehicleLabel}</Text>
           </View>
-          <View style={styles.infoColumn}>
-            <Text style={styles.infoText}>Max Capacity: {capacity}</Text>
-            <Text style={styles.infoText}>Current Capacity: {count}</Text>
-          </View>
-          <View style={styles.infoColumn}>
-            <Text style={styles.infoText}>Occupancy Level: {occupancy}</Text>
-            <Text style={styles.infoText}>
-              Status: {inTransit ? "In Transit" : "Loading"}
-            </Text>
+          <View style={styles.stats}>
+            <View style={styles.statsRow}>
+              <Stat label="Max Capacity" value={capacity} />
+              <Stat label="Occupancy Level" value={occupancy} />
+            </View>
+            <View style={styles.statsRow}>
+              <Stat label="Current Capacity" value={count} />
+              <Stat label="Status" value={tripStatusLabels[status]} />
+            </View>
           </View>
         </View>
 
@@ -348,7 +673,7 @@ function Trip({ details }: { details: AssignmentDetails }) {
           <View style={styles.counter}>
             <CounterButton
               label="Remove a passenger"
-              disabled={count === 0}
+              disabled={!onTrip || count === 0}
               onPress={removePassenger}
             >
               <Minus color="#ffffff" size={30} strokeWidth={3} />
@@ -356,7 +681,7 @@ function Trip({ details }: { details: AssignmentDetails }) {
             <Text style={styles.count}>{count}</Text>
             <CounterButton
               label="Add a passenger"
-              disabled={count >= capacity}
+              disabled={!onTrip || count >= capacity}
               onPress={addPassenger}
             >
               <Plus color="#ffffff" size={30} strokeWidth={3} />
@@ -364,9 +689,13 @@ function Trip({ details }: { details: AssignmentDetails }) {
           </View>
 
           <View style={styles.actions}>
-            {inTransit ? (
+            {onTrip ? (
               <>
-                <TripButton label="STOP" tone="stop" onPress={stop} />
+                <TripButton
+                  label="STOP"
+                  tone="stop"
+                  onPress={() => setConfirmingStop(true)}
+                />
                 <TripButton
                   label="FULL"
                   tone={full ? "full" : "fullOff"}
@@ -374,11 +703,170 @@ function Trip({ details }: { details: AssignmentDetails }) {
                 />
               </>
             ) : (
-              <TripButton label="START" tone="start" onPress={start} />
+              <TripButton
+                label="START"
+                tone="start"
+                disabled={starting}
+                onPress={start}
+              />
             )}
           </View>
         </View>
       </View>
+
+      <FinalizeTripModal
+        visible={confirmingStop}
+        busy={finalizing}
+        onCancel={() => setConfirmingStop(false)}
+        onConfirm={finalizeTrip}
+      />
+    </View>
+  );
+}
+
+function PickupCard({
+  pickup,
+  distanceMeters,
+  fits,
+  busy,
+  onAccept,
+  onDecline,
+}: {
+  pickup: NearbyPickup;
+  distanceMeters: number;
+  fits: boolean;
+  busy: boolean;
+  onAccept: () => void;
+  onDecline: () => void;
+}) {
+  const label = `${pickup.passengers} ${pickup.passengers === 1 ? "Passenger" : "Passengers"}`;
+  return (
+    <View
+      style={styles.pickupCard}
+      accessibilityLabel={`Pickup request, ${label}`}
+    >
+      <View style={styles.pickupIcon}>
+        <Users color={brandBlue} size={15} strokeWidth={2.4} />
+      </View>
+      <View>
+        <Text style={styles.pickupTitle}>{label}</Text>
+        <Text style={[styles.pickupMeta, !fits && styles.pickupWarn]}>
+          {fits ? `${Math.round(distanceMeters)} m away` : "Not enough seats"}
+        </Text>
+      </View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Decline pickup request"
+        disabled={busy}
+        hitSlop={4}
+        onPress={onDecline}
+        style={({ pressed }) => [
+          styles.pickupButton,
+          styles.pickupDecline,
+          pressed && styles.pressed,
+        ]}
+      >
+        <X color={declineRed} size={15} strokeWidth={3} />
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Accept pickup request"
+        accessibilityState={{ disabled: !fits, busy }}
+        disabled={!fits || busy}
+        hitSlop={4}
+        onPress={onAccept}
+        style={({ pressed }) => [
+          styles.pickupButton,
+          styles.pickupAccept,
+          (pressed || !fits) && styles.pressed,
+        ]}
+      >
+        {busy ? (
+          <LoadingSprite color="#ffffff" size={18} />
+        ) : (
+          <Check color="#ffffff" size={15} strokeWidth={3} />
+        )}
+      </Pressable>
+    </View>
+  );
+}
+
+function FinalizeTripModal({
+  visible,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  visible: boolean;
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      statusBarTranslucent
+      onRequestClose={busy ? undefined : onCancel}
+    >
+      <View style={styles.modalRoot}>
+        <View style={styles.modalCard}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Finalize Trip?</Text>
+          </View>
+          <View style={styles.modalBody}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Cancel"
+              disabled={busy}
+              onPress={onCancel}
+              style={({ pressed }) => [
+                styles.modalButton,
+                styles.modalCancel,
+                (pressed || busy) && styles.pressed,
+              ]}
+            >
+              <Text style={[styles.modalButtonText, styles.modalCancelText]}>
+                CANCEL
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Confirm and finalize the trip"
+              accessibilityState={{ busy }}
+              disabled={busy}
+              onPress={onConfirm}
+              style={({ pressed }) => [
+                styles.modalButton,
+                styles.modalConfirm,
+                pressed && styles.pressed,
+              ]}
+            >
+              {busy ? (
+                <LoadingSprite color="#ffffff" size={22} />
+              ) : (
+                <Text style={[styles.modalButtonText, styles.modalConfirmText]}>
+                  CONFIRM
+                </Text>
+              )}
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string | number }) {
+  return (
+    <View style={styles.stat}>
+      <Text style={styles.infoLabel} numberOfLines={1}>
+        {label}
+      </Text>
+      <Text style={styles.infoValue} numberOfLines={1}>
+        {value}
+      </Text>
     </View>
   );
 }
@@ -421,10 +909,12 @@ const tripButtonTones = {
 function TripButton({
   label,
   tone,
+  disabled = false,
   onPress,
 }: {
   label: string;
   tone: keyof typeof tripButtonTones;
+  disabled?: boolean;
   onPress: () => void;
 }) {
   const colors = tripButtonTones[tone];
@@ -432,11 +922,13 @@ function TripButton({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => [
         styles.tripButton,
         { backgroundColor: colors.backgroundColor },
-        pressed && styles.pressed,
+        (pressed || disabled) && styles.pressed,
       ]}
     >
       <Text style={[styles.tripButtonText, { color: colors.color }]}>
@@ -464,19 +956,84 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#e8eaed" },
   headerWrap: { position: "absolute", top: 0, left: 0, right: 0 },
   pressed: { opacity: 0.7 },
-  toast: {
+  overlayStack: {
     position: "absolute",
+    left: 12,
+    right: 12,
+    alignItems: "flex-end",
+    gap: 6,
+  },
+  locateButton: {
+    position: "absolute",
+    right: 12,
+    width: 34,
+    height: 34,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 9,
+    backgroundColor: locateBlue,
+  },
+  locateIdle: { opacity: 0.5 },
+  pickupCard: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingVertical: 6,
-    paddingHorizontal: 9,
+    gap: 8,
+    padding: 5,
+    paddingLeft: 6,
+    borderRadius: 10,
+    backgroundColor: chipBlue,
+    elevation: 3,
+    shadowColor: "#000000",
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
+  },
+  pickupIcon: {
+    width: 26,
+    height: 26,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 6,
+    backgroundColor: "#ffffff",
+  },
+  pickupTitle: {
+    color: brandBlue,
+    fontFamily: "SoraBold",
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  pickupMeta: {
+    color: panelNavy,
+    fontFamily: "Sora",
+    fontSize: 9,
+    lineHeight: 12,
+  },
+  pickupWarn: { color: declineRed, fontFamily: "SoraBold" },
+  pickupButton: {
+    width: 28,
+    height: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 7,
+  },
+  pickupDecline: { backgroundColor: "#ffffff" },
+  pickupAccept: { backgroundColor: brandBlue },
+  toast: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    maxWidth: "100%",
+    paddingVertical: 5,
+    paddingHorizontal: 8,
     borderRadius: 6,
     elevation: 4,
   },
-  toastLeft: { left: 12 },
-  toastRight: { right: 12 },
-  toastText: { fontFamily: "SoraBold", fontSize: 10 },
+  toastText: {
+    flexShrink: 1,
+    fontFamily: "SoraBold",
+    fontSize: 10,
+    lineHeight: 13,
+  },
   panel: {
     position: "absolute",
     left: 0,
@@ -488,17 +1045,41 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 24,
     backgroundColor: panelNavy,
   },
-  coverage: {
-    color: routeCyan,
-    fontFamily: "SoraBold",
-    fontSize: 12,
-    marginLeft: 6,
-  },
-  infoRow: {
+  coverageRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    marginTop: 10,
+    marginHorizontal: 6,
+  },
+  coverage: {
+    flex: 1,
+    color: routeCyan,
+    fontFamily: "SoraBold",
+    fontSize: 12,
+  },
+  sharing: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 999,
+    backgroundColor: "rgba(255, 255, 255, 0.12)",
+  },
+  sharingOn: { backgroundColor: "rgba(74, 222, 128, 0.22)" },
+  sharingDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#9ca3af",
+  },
+  sharingDotOn: { backgroundColor: "#4ade80" },
+  sharingText: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 8 },
+  infoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 12,
     marginHorizontal: 6,
   },
   vehicleIconBackdrop: {
@@ -506,15 +1087,28 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: "rgba(255, 255, 255, 0.18)",
   },
-  vehicleIcon: { width: 28, height: 28 },
-  plateBlock: { maxWidth: 76 },
+  plateBlock: { width: 76, gap: 2 },
   plate: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 12 },
-  infoColumn: { flex: 1 },
-  infoText: {
-    color: "#ffffff",
+  stats: {
+    flex: 1,
+    gap: 8,
+    paddingLeft: 10,
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderLeftColor: "rgba(255, 255, 255, 0.3)",
+  },
+  statsRow: { flexDirection: "row", gap: 8 },
+  stat: { flex: 1, gap: 1 },
+  infoLabel: {
+    color: "rgba(255, 255, 255, 0.65)",
     fontFamily: "Sora",
     fontSize: 8,
-    lineHeight: 12,
+    lineHeight: 11,
+  },
+  infoValue: {
+    color: "#ffffff",
+    fontFamily: "SoraBold",
+    fontSize: 10,
+    lineHeight: 14,
   },
   controls: {
     flexDirection: "row",
@@ -554,4 +1148,43 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   tripButtonText: { fontFamily: "SoraBold", fontSize: 15 },
+  modalRoot: {
+    flex: 1,
+    justifyContent: "center",
+    padding: 24,
+    backgroundColor: "rgba(0, 0, 0, 0.45)",
+  },
+  modalCard: {
+    overflow: "hidden",
+    borderRadius: 14,
+    backgroundColor: modalBlue,
+  },
+  modalHeader: {
+    paddingVertical: 14,
+    alignItems: "center",
+    backgroundColor: circleNavy,
+  },
+  modalTitle: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 15 },
+  modalBody: {
+    flexDirection: "row",
+    gap: 12,
+    paddingVertical: 18,
+    paddingHorizontal: 12,
+  },
+  modalButton: {
+    flex: 1,
+    height: 46,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 8,
+  },
+  modalCancel: {
+    borderWidth: 1.5,
+    borderColor: circleNavy,
+    backgroundColor: "#ffffff",
+  },
+  modalConfirm: { backgroundColor: circleNavy },
+  modalButtonText: { fontFamily: "SoraBold", fontSize: 14 },
+  modalCancelText: { color: circleNavy },
+  modalConfirmText: { color: "#ffffff" },
 });

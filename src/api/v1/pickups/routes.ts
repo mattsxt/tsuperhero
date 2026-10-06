@@ -7,10 +7,7 @@ const pickupTable = () => getSupabaseClient().from("pickup");
 
 export const pickupRoutes = {
   findCommuter: (userId: string) =>
-    commuterTable()
-      .select("commuter_id")
-      .eq("user_id", userId)
-      .maybeSingle(),
+    commuterTable().select("commuter_id").eq("user_id", userId).maybeSingle(),
 
   createUser: (userId: string, email: string) =>
     userTable().upsert(
@@ -19,10 +16,7 @@ export const pickupRoutes = {
     ),
 
   createCommuter: (userId: string) =>
-    commuterTable()
-      .insert({ user_id: userId })
-      .select("commuter_id")
-      .single(),
+    commuterTable().insert({ user_id: userId }).select("commuter_id").single(),
 
   findActiveRequest: (commuterId: string) =>
     requestTable()
@@ -60,4 +54,8 @@ export const pickupRoutes = {
 
   deleteRequest: (requestId: string) =>
     requestTable().delete().eq("request_id", requestId),
+
+  findMyDriver: () => getSupabaseClient().rpc("get_my_pickup_driver"),
+
+  findMyBookings: () => getSupabaseClient().rpc("get_my_bookings"),
 };

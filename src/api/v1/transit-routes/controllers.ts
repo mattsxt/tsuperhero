@@ -7,7 +7,7 @@ import {
   type LatLng,
   type RouteRow,
 } from "@/api/v1/transit-routes/routes";
-import { getPairDistanceMeters } from "@/utils/geo";
+import { distanceToPath, getPairDistanceMeters } from "@/utils/geo";
 
 export type { LatLng };
 
@@ -21,6 +21,9 @@ export type TransitRoute = {
   alternativePaths: LatLng[][];
   vicinity: string[];
 };
+
+export const toVehicleType = (type: string): VehicleType =>
+  type === "Tricycle" ? "tricy" : "jeep";
 
 export const vehicleTypeLabels: Record<VehicleType, string> = {
   jeep: "Jeepney",
@@ -89,14 +92,51 @@ export function findRoute(id: string | null | undefined) {
   return transitRoutes.find((route) => route.id === id) ?? null;
 }
 
+// Matches route names and the places (vicinity) each route passes.
 export function searchDestinations(query: string) {
   const needle = query.trim().toLowerCase();
-  return transitRoutes.filter((route) =>
-    route.name.toLowerCase().includes(needle),
+  return transitRoutes.filter(
+    (route) =>
+      route.name.toLowerCase().includes(needle) ||
+      route.vicinity.some((place) => place.toLowerCase().includes(needle)),
   );
 }
 
-export function getOccupancyLevel(current: number, max: number) {
+// A destination counts as served when a route passes within a short walk.
+export const nearDestinationMeters = 500;
+
+export type RouteNearPlace = { route: TransitRoute; distanceMeters: number };
+
+export function findRoutesNear(point: {
+  lat: number;
+  lng: number;
+}): RouteNearPlace[] {
+  return transitRoutes
+    .map((route) => ({
+      route,
+      distanceMeters: Math.min(
+        ...[route.waypoints, ...route.alternativePaths]
+          .filter((path) => path.length > 0)
+          .map((path) => distanceToPath(point, path)),
+      ),
+    }))
+    .filter(({ distanceMeters }) => distanceMeters <= nearDestinationMeters)
+    .sort((a, b) => a.distanceMeters - b.distanceMeters);
+}
+
+export const occupancyLevels = [
+  "Available",
+  "Moderate",
+  "Almost Full",
+  "Full",
+] as const;
+
+export type OccupancyLevel = (typeof occupancyLevels)[number];
+
+export function getOccupancyLevel(
+  current: number,
+  max: number,
+): OccupancyLevel {
   const ratio = current / max;
   if (ratio >= 1) return "Full";
   if (ratio >= 0.8) return "Almost Full";
@@ -195,4 +235,30 @@ export function pointAlong(path: LatLng[], fraction: number): LatLng {
     remaining -= lengths[index];
   }
   return path[0];
+}
+
+export type EtaRoute = {
+  path: LatLng[];
+  durationSeconds: number;
+  distanceMeters: number;
+};
+
+export async function loadEtaRoute(
+  from: LatLng,
+  to: LatLng,
+): Promise<Result<EtaRoute>> {
+  return attempt(async () => {
+    const response = await transitRouteApi.etaRoute(from, to);
+    const route = response.routes?.[0];
+    const seconds = Number.parseFloat(route?.duration ?? "");
+    const coordinates = route?.polyline?.geoJsonLinestring?.coordinates;
+    if (!route || !Number.isFinite(seconds) || !coordinates?.length) {
+      throw new Error(response.error?.message ?? "No route found.");
+    }
+    return {
+      path: coordinates.map(([lng, lat]): LatLng => [lat, lng]),
+      durationSeconds: seconds,
+      distanceMeters: route.distanceMeters ?? 0,
+    };
+  });
 }

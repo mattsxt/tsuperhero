@@ -11,9 +11,14 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import Reanimated from "react-native-reanimated";
 
 import { login } from "@/api/v1/auth/controllers";
+import {
+  AuthScreen,
+  authSpacingTransition,
+  useKeyboardVisible,
+} from "@/components/auth-screen";
 import { BrandHeader } from "@/components/brand-header";
 import { Routes } from "@/constants/routes";
 
@@ -27,6 +32,7 @@ export default function LoginScreen() {
   const [loginError, setLoginError] = useState("");
   const [loggingIn, setLoggingIn] = useState(false);
   const [formProgress] = useState(() => new Animated.Value(0));
+  const keyboardVisible = useKeyboardVisible();
 
   const showEmailLogin = () => {
     setEmailLoginVisible(true);
@@ -65,92 +71,98 @@ export default function LoginScreen() {
   });
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
-        <BrandHeader variant="badge" />
+    <AuthScreen compact={keyboardVisible}>
+      <BrandHeader variant="badge" compact={keyboardVisible} />
 
-        <Text style={styles.title}>SIGN IN</Text>
+      <Reanimated.Text
+        style={[
+          styles.title,
+          keyboardVisible && styles.titleCompact,
+          authSpacingTransition,
+        ]}
+      >
+        SIGN IN
+      </Reanimated.Text>
 
-        <Animated.View
-          style={[
-            styles.formReveal,
-            { height: formHeight, opacity: formOpacity },
-          ]}
-        >
-          <View style={styles.fieldGroup}>
-            <Text style={styles.fieldLabel}>EMAIL ADDRESS</Text>
+      <Animated.View
+        style={[
+          styles.formReveal,
+          { height: formHeight, opacity: formOpacity },
+        ]}
+      >
+        <View style={styles.fieldGroup}>
+          <Text style={styles.fieldLabel}>EMAIL ADDRESS</Text>
+          <TextInput
+            value={email}
+            onChangeText={setEmail}
+            placeholder="Email address"
+            placeholderTextColor="#929292"
+            autoCapitalize="none"
+            autoComplete="email"
+            keyboardType="email-address"
+            style={styles.input}
+          />
+        </View>
+        <View style={styles.fieldGroup}>
+          <Text style={styles.fieldLabel}>PASSWORD</Text>
+          <View style={styles.passwordInputWrap}>
             <TextInput
-              value={email}
-              onChangeText={setEmail}
-              placeholder="Email address"
+              value={password}
+              onChangeText={setPassword}
+              placeholder="Password"
               placeholderTextColor="#929292"
-              autoCapitalize="none"
-              autoComplete="email"
-              keyboardType="email-address"
-              style={styles.input}
+              autoComplete="password"
+              secureTextEntry={!passwordVisible}
+              style={styles.passwordInput}
             />
-          </View>
-          <View style={styles.fieldGroup}>
-            <Text style={styles.fieldLabel}>PASSWORD</Text>
-            <View style={styles.passwordInputWrap}>
-              <TextInput
-                value={password}
-                onChangeText={setPassword}
-                placeholder="Password"
-                placeholderTextColor="#929292"
-                autoComplete="password"
-                secureTextEntry={!passwordVisible}
-                style={styles.passwordInput}
-              />
-              <Pressable
-                accessibilityLabel={
-                  passwordVisible ? "Hide password" : "Show password"
-                }
-                accessibilityRole="button"
-                hitSlop={10}
-                onPress={() => setPasswordVisible((visible) => !visible)}
-                style={styles.eyeButton}
-              >
-                {passwordVisible ? (
-                  <Eye color={brandBlue} size={17} />
-                ) : (
-                  <EyeOff color={brandBlue} size={17} />
-                )}
-              </Pressable>
-            </View>
-          </View>
-        </Animated.View>
-
-        {!!loginError && <Text style={styles.errorText}>{loginError}</Text>}
-
-        {!emailLoginVisible ? (
-          <Animated.View style={{ opacity: introOpacity }}>
-            <Pressable style={styles.primaryButton} onPress={showEmailLogin}>
-              <Text style={styles.primaryButtonText}>CONTINUE WITH EMAIL</Text>
+            <Pressable
+              accessibilityLabel={
+                passwordVisible ? "Hide password" : "Show password"
+              }
+              accessibilityRole="button"
+              hitSlop={10}
+              onPress={() => setPasswordVisible((visible) => !visible)}
+              style={styles.eyeButton}
+            >
+              {passwordVisible ? (
+                <Eye color={brandBlue} size={17} />
+              ) : (
+                <EyeOff color={brandBlue} size={17} />
+              )}
             </Pressable>
-          </Animated.View>
-        ) : (
-          <Pressable
-            style={[styles.primaryButton, loggingIn && styles.buttonDisabled]}
-            disabled={loggingIn}
-            onPress={signIn}
-          >
-            <Text style={styles.primaryButtonText}>
-              {loggingIn ? "LOGGING IN..." : "LOGIN"}
-            </Text>
+          </View>
+        </View>
+      </Animated.View>
+
+      {!!loginError && <Text style={styles.errorText}>{loginError}</Text>}
+
+      {!emailLoginVisible ? (
+        <Animated.View style={{ opacity: introOpacity }}>
+          <Pressable style={styles.primaryButton} onPress={showEmailLogin}>
+            <Text style={styles.primaryButtonText}>CONTINUE WITH EMAIL</Text>
           </Pressable>
-        )}
-
-        <Divider label="OR" />
-
+        </Animated.View>
+      ) : (
         <Pressable
-          style={styles.primaryButton}
-          onPress={() => router.push(Routes.register)}
+          style={[styles.primaryButton, loggingIn && styles.buttonDisabled]}
+          disabled={loggingIn}
+          onPress={signIn}
         >
-          <Text style={styles.primaryButtonText}>SIGN UP NOW</Text>
+          <Text style={styles.primaryButtonText}>
+            {loggingIn ? "LOGGING IN..." : "LOGIN"}
+          </Text>
         </Pressable>
-      </View>
-    </SafeAreaView>
+      )}
+
+      <Divider label="OR" />
+
+      <Pressable
+        style={styles.primaryButton}
+        onPress={() => router.push(Routes.register)}
+      >
+        <Text style={styles.primaryButtonText}>SIGN UP NOW</Text>
+      </Pressable>
+    </AuthScreen>
   );
 }
 
@@ -165,16 +177,6 @@ function Divider({ label }: { label: string }) {
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#ffffff",
-  },
-  container: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 10,
-  },
   title: {
     color: "#050505",
     fontFamily: "SoraBold",
@@ -184,6 +186,7 @@ const styles = StyleSheet.create({
     marginTop: 43,
     marginBottom: 32,
   },
+  titleCompact: { marginTop: 14, marginBottom: 16 },
   primaryButton: {
     width: 320,
     height: 35,

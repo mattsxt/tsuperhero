@@ -5,7 +5,7 @@ import Bus from "lucide-react-native/icons/bus";
 import MapPinSearch from "lucide-react-native/icons/map-pin-search";
 import Route from "lucide-react-native/icons/route";
 import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import Animated, {
   FadeIn,
   FadeOut,
@@ -13,9 +13,12 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { loadActivePickup } from "@/api/v1/pickups/controllers";
 import { loadHome } from "@/api/v1/profile/controllers";
+import { loadWaitingAreas } from "@/api/v1/waiting-areas/controllers";
 import { BottomNav, bottomNavHeight } from "@/components/bottom-nav";
 import { EmptyState } from "@/components/empty-state";
+import { LoadingSprite } from "@/components/brand-logo";
 import {
   ActionCard,
   ActionRow,
@@ -61,6 +64,9 @@ export default function CommuterHomeScreen() {
         return;
       }
       if (active) setFirstName(home.firstName);
+      // Warm the Pickup module so it opens without a loading screen.
+      loadActivePickup();
+      loadWaitingAreas();
     };
 
     load();
@@ -72,7 +78,7 @@ export default function CommuterHomeScreen() {
   if (firstName === null) {
     return (
       <View style={styles.loadingScreen}>
-        <ActivityIndicator color={brandBlue} />
+        <LoadingSprite color={brandBlue} />
       </View>
     );
   }

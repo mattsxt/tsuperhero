@@ -1,6 +1,5 @@
 import { StatusBar } from "expo-status-bar";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
-import CircleCheckBig from "lucide-react-native/icons/circle-check-big";
 import MapPin from "lucide-react-native/icons/map-pin";
 import PersonStanding from "lucide-react-native/icons/person-standing";
 import Search from "lucide-react-native/icons/search";
@@ -9,24 +8,16 @@ import Users from "lucide-react-native/icons/users";
 import UsersRound from "lucide-react-native/icons/users-round";
 import X from "lucide-react-native/icons/x";
 import { useEffect, useMemo, useState } from "react";
-import {
-  ActivityIndicator,
-  Modal,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
-  canCancelPickup,
   cancelPickup,
+  getKnownActivePickup,
   loadActivePickup,
   maxPickupPassengers,
   minPickupPassengers,
-  pickupStatusLabels,
   requestPickup,
   type PickupRequest,
   type PickupVehicle,
@@ -34,6 +25,7 @@ import {
 import type { Place } from "@/api/v1/places/controllers";
 import {
   formatDistance,
+  getKnownWaitingAreas,
   loadWaitingAreas,
   recommendWaitingArea,
   type WaitingArea,
@@ -53,14 +45,20 @@ import { TransitMap, type TransitMapState } from "@/components/transit-map";
 import { Routes } from "@/constants/routes";
 import { goBackOr } from "@/utils/navigation";
 
+import { ActivePickup } from "./active-pickup";
+
 const { brandBlue, softBlue, mutedText, text, error } = moduleColors;
 
 export default function PickupScreen() {
   const insets = useSafeAreaInsets();
   const chrome = useScrollChrome();
-  const [loading, setLoading] = useState(true);
-  const [active, setActive] = useState<PickupRequest | null>(null);
-  const [waitingAreas, setWaitingAreas] = useState<WaitingArea[]>([]);
+  // Start from what's already known (prefetched on the home screen) and
+  // refresh in the background, so the screen opens without a loading state.
+  const [active, setActive] = useState<PickupRequest | null>(
+    getKnownActivePickup,
+  );
+  const [waitingAreas, setWaitingAreas] =
+    useState<WaitingArea[]>(getKnownWaitingAreas);
   const [place, setPlace] = useState<Place | null>(null);
   const [vehicle, setVehicle] = useState<PickupVehicle>("jeep");
   const [shareQuery, setShareQuery] = useState("");
@@ -76,7 +74,6 @@ export default function PickupScreen() {
         if (!mounted) return;
         if (pickup.ok) setActive(pickup.data);
         if (areas.ok) setWaitingAreas(areas.data);
-        setLoading(false);
       },
     );
     return () => {
@@ -98,12 +95,12 @@ export default function PickupScreen() {
   const activeId = active?.id;
   const activeStatus = active?.status;
   useEffect(() => {
-    if (!activeId || activeStatus !== "pending") return;
+    if (!activeId) return;
     let mounted = true;
     const timer = setInterval(async () => {
       const latest = await loadActivePickup();
       if (mounted && latest.ok) setActive(latest.data);
-    }, 10_000);
+    }, 5_000);
     return () => {
       mounted = false;
       clearInterval(timer);
@@ -139,6 +136,18 @@ export default function PickupScreen() {
     setActive(null);
   };
 
+  if (active) {
+    return (
+      <ActivePickup
+        request={active}
+        busy={busy}
+        problem={problem}
+        onCancel={cancel}
+        onBack={goBack}
+      />
+    );
+  }
+
   return (
     <View style={styles.screen}>
       <StatusBar style="light" />
@@ -152,206 +161,132 @@ export default function PickupScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {loading ? (
-          <ActivityIndicator color={brandBlue} style={styles.loading} />
-        ) : active ? (
-          <View style={[styles.body, styles.activeBody]}>
-            <View style={styles.successIcon}>
-              <CircleCheckBig color="#ffffff" size={44} strokeWidth={2} />
-            </View>
-            <Text style={styles.activeTitle}>Pickup requested!</Text>
-            <View style={styles.statusBadge}>
-              <Text style={styles.statusText}>
-                {pickupStatusLabels[active.status]}
+        <View style={styles.body}>
+          <PlaceSearchField
+            value={place}
+            onChange={(next) => {
+              setProblem("");
+              setMapOpen(false);
+              setPlace(next);
+            }}
+            onProblem={setProblem}
+            placeholder="Search places..."
+            icon={<Search color={brandBlue} size={20} strokeWidth={2} />}
+            allowCurrentLocation
+          />
+
+          {place && vehicle === "jeep" && !stop && (
+            <View style={styles.recommendCard}>
+              <View style={styles.recommendIcon}>
+                <PersonStanding color="#ffffff" size={18} strokeWidth={2} />
+              </View>
+              <Text style={[styles.recommendMeta, styles.flex]}>
+                There’s no waiting area within walking distance of this place.
+                Try another location or choose a tricycle.
               </Text>
             </View>
-
-            <View style={styles.summaryCard}>
+          )}
+          {place && (vehicle === "tricy" || stop) && (
+            <>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={`Show ${active.pickupName} on the map`}
+                accessibilityLabel="Show the pickup point on the map"
                 onPress={() => setMapOpen(true)}
+                style={({ pressed }) => [
+                  styles.recommendCard,
+                  pressed && styles.pressed,
+                ]}
               >
-                <SummaryRow label="Pickup point" value={active.pickupName} />
-                <Text style={styles.mapHint}>
-                  Tap to see the exact location
-                </Text>
+                <View
+                  style={[
+                    styles.recommendIcon,
+                    !stop && styles.recommendIconPlace,
+                  ]}
+                >
+                  {stop ? (
+                    <PersonStanding color="#ffffff" size={18} strokeWidth={2} />
+                  ) : (
+                    <MapPin color="#ffffff" size={18} strokeWidth={2} />
+                  )}
+                </View>
+                <View style={styles.flex}>
+                  <Text style={styles.recommendLabel}>
+                    {stop ? "NEAREST WAITING AREA" : "PICKUP POINT"}
+                  </Text>
+                  <Text style={styles.recommendName}>
+                    {stop ? stop.name : place.name}
+                  </Text>
+                  <Text style={styles.recommendMeta}>
+                    {stop
+                      ? `${formatDistance(stop.distanceMeters)} away · about ${stop.walkMinutes} min walk${stop.vicinity ? ` · ${stop.vicinity}` : ""}`
+                      : "Tricycles pick you up right where you are."}
+                  </Text>
+                  <Text style={styles.mapHint}>
+                    Tap to see the exact location
+                  </Text>
+                </View>
               </Pressable>
               {mapOpen && (
                 <LocationMap
-                  target={{
-                    name: active.pickupName,
-                    lat: active.lat,
-                    lng: active.lng,
-                  }}
-                  kind="place"
+                  target={stop ?? place}
+                  kind={stop ? "stop" : "place"}
+                  origin={stop ? place : undefined}
                   onClose={() => setMapOpen(false)}
                 />
               )}
-              <SummaryRow
-                label="Passengers"
-                value={String(active.passengers)}
-                last
+            </>
+          )}
+
+          <SectionTitle
+            icon={<UsersRound color="#ffffff" size={18} strokeWidth={2} />}
+            title="Choose which vehicle to ride!"
+          />
+          <VehiclePicker
+            value={vehicle}
+            onChange={(next) => {
+              setProblem("");
+              setVehicle(next);
+            }}
+          />
+
+          <SectionTitle
+            icon={<UserRound color="#ffffff" size={18} strokeWidth={2} />}
+            title="Share a Ride?"
+          />
+          <SoftField
+            value={shareQuery}
+            onChangeText={setShareQuery}
+            placeholder="Search a user..."
+            accessibilityLabel="Search a user to share the ride with"
+            icon={<UserRound color={brandBlue} size={20} strokeWidth={2} />}
+            trailing={
+              <ChevronRight color={brandBlue} size={20} strokeWidth={2.5} />
+            }
+            style={styles.shareField}
+          />
+
+          <View style={styles.passengerSection}>
+            <View style={styles.passengerIcon}>
+              <Users color={brandBlue} size={18} strokeWidth={2} />
+            </View>
+            <View>
+              <Text style={styles.passengerLabel}>Number of Passengers</Text>
+              <PassengerStepper
+                value={passengers}
+                onChange={setPassengers}
+                min={minPickupPassengers}
+                max={maxPickupPassengers}
               />
             </View>
-            <Text style={styles.helper}>
-              Head to your pickup point and stay there so the driver can find
-              you.
-            </Text>
-
-            {!!problem && <Text style={styles.problem}>{problem}</Text>}
-            {canCancelPickup(active) ? (
-              <Pressable
-                accessibilityRole="button"
-                disabled={busy}
-                onPress={cancel}
-                style={({ pressed }) => [
-                  styles.cancelButton,
-                  (pressed || busy) && styles.pressed,
-                ]}
-              >
-                <Text style={styles.cancelText}>
-                  {busy ? "CANCELLING..." : "CANCEL REQUEST"}
-                </Text>
-              </Pressable>
-            ) : (
-              <Text style={styles.cancelNote}>
-                You can cancel once a driver accepts your request.
-              </Text>
-            )}
           </View>
-        ) : (
-          <View style={styles.body}>
-            <PlaceSearchField
-              value={place}
-              onChange={(next) => {
-                setProblem("");
-                setMapOpen(false);
-                setPlace(next);
-              }}
-              onProblem={setProblem}
-              placeholder="Search places..."
-              icon={<Search color={brandBlue} size={20} strokeWidth={2} />}
-              allowCurrentLocation
-            />
 
-            {place && vehicle === "jeep" && !stop && (
-              <View style={styles.recommendCard}>
-                <View style={styles.recommendIcon}>
-                  <PersonStanding color="#ffffff" size={18} strokeWidth={2} />
-                </View>
-                <Text style={[styles.recommendMeta, styles.flex]}>
-                  There’s no waiting area within walking distance of this place.
-                  Try another location or choose a tricycle.
-                </Text>
-              </View>
-            )}
-            {place && (vehicle === "tricy" || stop) && (
-              <>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Show the pickup point on the map"
-                  onPress={() => setMapOpen(true)}
-                  style={({ pressed }) => [
-                    styles.recommendCard,
-                    pressed && styles.pressed,
-                  ]}
-                >
-                  <View
-                    style={[
-                      styles.recommendIcon,
-                      !stop && styles.recommendIconPlace,
-                    ]}
-                  >
-                    {stop ? (
-                      <PersonStanding
-                        color="#ffffff"
-                        size={18}
-                        strokeWidth={2}
-                      />
-                    ) : (
-                      <MapPin color="#ffffff" size={18} strokeWidth={2} />
-                    )}
-                  </View>
-                  <View style={styles.flex}>
-                    <Text style={styles.recommendLabel}>
-                      {stop ? "NEAREST WAITING AREA" : "PICKUP POINT"}
-                    </Text>
-                    <Text style={styles.recommendName}>
-                      {stop ? stop.name : place.name}
-                    </Text>
-                    <Text style={styles.recommendMeta}>
-                      {stop
-                        ? `${formatDistance(stop.distanceMeters)} away · about ${stop.walkMinutes} min walk${stop.vicinity ? ` · ${stop.vicinity}` : ""}`
-                        : "Tricycles pick you up right where you are."}
-                    </Text>
-                    <Text style={styles.mapHint}>
-                      Tap to see the exact location
-                    </Text>
-                  </View>
-                </Pressable>
-                {mapOpen && (
-                  <LocationMap
-                    target={stop ?? place}
-                    kind={stop ? "stop" : "place"}
-                    origin={stop ? place : undefined}
-                    onClose={() => setMapOpen(false)}
-                  />
-                )}
-              </>
-            )}
-
-            <SectionTitle
-              icon={<UsersRound color="#ffffff" size={18} strokeWidth={2} />}
-              title="Choose which vehicle to ride!"
-            />
-            <VehiclePicker
-              value={vehicle}
-              onChange={(next) => {
-                setProblem("");
-                setVehicle(next);
-              }}
-            />
-
-            <SectionTitle
-              icon={<UserRound color="#ffffff" size={18} strokeWidth={2} />}
-              title="Share a Ride?"
-            />
-            <SoftField
-              value={shareQuery}
-              onChangeText={setShareQuery}
-              placeholder="Search a user..."
-              accessibilityLabel="Search a user to share the ride with"
-              icon={<UserRound color={brandBlue} size={20} strokeWidth={2} />}
-              trailing={
-                <ChevronRight color={brandBlue} size={20} strokeWidth={2.5} />
-              }
-              style={styles.shareField}
-            />
-
-            <View style={styles.passengerSection}>
-              <View style={styles.passengerIcon}>
-                <Users color={brandBlue} size={18} strokeWidth={2} />
-              </View>
-              <View>
-                <Text style={styles.passengerLabel}>Number of Passengers</Text>
-                <PassengerStepper
-                  value={passengers}
-                  onChange={setPassengers}
-                  min={minPickupPassengers}
-                  max={maxPickupPassengers}
-                />
-              </View>
-            </View>
-
-            {!!problem && <Text style={styles.problem}>{problem}</Text>}
-            <ModuleButton
-              label={busy ? "REQUESTING..." : "CONFIRM"}
-              disabled={busy}
-              onPress={confirm}
-            />
-          </View>
-        )}
+          {!!problem && <Text style={styles.problem}>{problem}</Text>}
+          <ModuleButton
+            label={busy ? "REQUESTING..." : "CONFIRM"}
+            disabled={busy}
+            onPress={confirm}
+          />
+        </View>
       </Animated.ScrollView>
 
       <StickyHeader chrome={chrome}>
@@ -461,27 +396,9 @@ function LocationMap({
   );
 }
 
-function SummaryRow({
-  label,
-  value,
-  last,
-}: {
-  label: string;
-  value: string;
-  last?: boolean;
-}) {
-  return (
-    <View style={[styles.summaryRow, !last && styles.summaryDivider]}>
-      <Text style={styles.summaryLabel}>{label}</Text>
-      <Text style={styles.summaryValue}>{value}</Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#ffffff" },
   flex: { flex: 1 },
-  loading: { marginTop: 48 },
   body: { paddingHorizontal: 12, paddingTop: 18 },
   pressed: { opacity: 0.8 },
   problem: {
@@ -569,13 +486,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     backgroundColor: softBlue,
   },
-  cancelNote: {
-    color: mutedText,
-    fontFamily: "Sora",
-    fontSize: 10,
-    marginTop: 24,
-    textAlign: "center",
-  },
   shareField: { gap: 14, paddingHorizontal: 16 },
   passengerSection: {
     flexDirection: "row",
@@ -596,64 +506,5 @@ const styles = StyleSheet.create({
     fontFamily: "SoraBold",
     fontSize: 11,
     marginBottom: 8,
-  },
-  activeBody: { alignItems: "center", paddingTop: 36 },
-  successIcon: {
-    width: 84,
-    height: 84,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 42,
-    backgroundColor: brandBlue,
-  },
-  activeTitle: {
-    color: brandBlue,
-    fontFamily: "SoraBold",
-    fontSize: 20,
-    marginTop: 18,
-  },
-  statusBadge: {
-    marginTop: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 999,
-    backgroundColor: softBlue,
-  },
-  statusText: { color: brandBlue, fontFamily: "SoraBold", fontSize: 11 },
-  summaryCard: {
-    alignSelf: "stretch",
-    marginTop: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderWidth: 1.5,
-    borderColor: brandBlue,
-    borderRightWidth: 5,
-    borderRightColor: "#1a2f8f",
-    borderRadius: 10,
-  },
-  summaryRow: { flexDirection: "row", gap: 12, paddingVertical: 10 },
-  summaryDivider: { borderBottomWidth: 1, borderBottomColor: "#eef1f7" },
-  summaryLabel: {
-    width: 90,
-    color: mutedText,
-    fontFamily: "Sora",
-    fontSize: 10,
-  },
-  summaryValue: { flex: 1, color: text, fontFamily: "SoraBold", fontSize: 11 },
-  cancelButton: {
-    alignSelf: "stretch",
-    height: 52,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 24,
-    borderWidth: 1.5,
-    borderColor: error,
-    borderRadius: 14,
-  },
-  cancelText: {
-    color: error,
-    fontFamily: "SoraBold",
-    fontSize: 14,
-    letterSpacing: 1,
   },
 });

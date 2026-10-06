@@ -6,13 +6,14 @@ import Inbox from "lucide-react-native/icons/inbox";
 import Route from "lucide-react-native/icons/route";
 import Star from "lucide-react-native/icons/star";
 import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { loadHome } from "@/api/v1/profile/controllers";
 import { BottomNav, bottomNavHeight } from "@/components/bottom-nav";
 import { EmptyState } from "@/components/empty-state";
+import { LoadingSprite } from "@/components/brand-logo";
 import {
   ActionCard,
   ActionRow,
@@ -53,7 +54,7 @@ export default function TransitHomeScreen() {
   if (firstName === null) {
     return (
       <View style={styles.loadingScreen}>
-        <ActivityIndicator color={brandBlue} />
+        <LoadingSprite color={brandBlue} />
       </View>
     );
   }

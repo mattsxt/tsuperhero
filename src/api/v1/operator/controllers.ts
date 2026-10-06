@@ -1,8 +1,16 @@
-import { operatorRoutes, type AssignmentRow } from "@/api/v1/operator/routes";
-import { unwrap } from "@/api/v1/result";
+import type { LocationObjectCoords } from "expo-location";
+
+import {
+  operatorRoutes,
+  type AssignmentRow,
+  type NearbyPickupRow,
+  type VehicleStatus,
+} from "@/api/v1/operator/routes";
+import { attempt, unwrap, type Result } from "@/api/v1/result";
 import {
   findRoute,
   loadTransitRoutes,
+  toVehicleType,
   vehicleTypeLabels,
   type VehicleType,
 } from "@/api/v1/transit-routes/controllers";
@@ -21,9 +29,6 @@ export type OperatorAssignment = {
   vehicle: OperatorVehicle;
   routeId: string | null;
 };
-
-const toVehicleType = (type: AssignmentRow["vehicle"]["vehicle_type"]) =>
-  type === "Tricycle" ? "tricy" : "jeep";
 
 export async function loadOperatorAssignment(): Promise<OperatorAssignment | null> {
   try {
@@ -68,4 +73,95 @@ export function describeAssignment(
     coverageTitle: route?.name ?? "Unassigned",
     route,
   };
+}
+
+export type TripStatus = "idle" | "in-transit" | "loading";
+
+export const tripStatusLabels: Record<TripStatus, string> = {
+  idle: "Idle",
+  "in-transit": "In Transit",
+  loading: "Loading/Unloading",
+};
+
+const vehicleStatuses: Record<TripStatus, VehicleStatus> = {
+  idle: "idle",
+  "in-transit": "on-trip",
+  loading: "loading",
+};
+
+export function saveTripState(
+  status: TripStatus,
+  passengers: number,
+): Promise<Result<unknown>> {
+  return attempt(() =>
+    unwrap(
+      operatorRoutes.setMyTripState({
+        p_status: vehicleStatuses[status],
+        p_current_capacity: passengers,
+      }),
+    ),
+  );
+}
+
+export function shareLocation({
+  latitude,
+  longitude,
+  speed,
+  heading,
+}: LocationObjectCoords): Promise<Result<unknown>> {
+  return attempt(() =>
+    unwrap(
+      operatorRoutes.shareMyLocation({
+        p_latitude: latitude,
+        p_longitude: longitude,
+        p_speed_kmh: Math.max(speed ?? 0, 0) * 3.6,
+        p_heading: heading != null && heading >= 0 ? heading : 0,
+      }),
+    ),
+  );
+}
+
+const metersPerKm = 1_000;
+
+export function startTrip(
+  distanceTotalMeters: number,
+): Promise<Result<string>> {
+  return attempt(() =>
+    unwrap(operatorRoutes.startMyTrip(distanceTotalMeters / metersPerKm)),
+  );
+}
+
+export function endTrip(distanceDoneMeters: number): Promise<Result<unknown>> {
+  return attempt(() =>
+    unwrap(operatorRoutes.endMyTrip(distanceDoneMeters / metersPerKm)),
+  );
+}
+
+// Matches the radius in get_my_nearby_pickups(); the server does the filtering.
+export const pickupDetectionMeters = 300;
+
+export type NearbyPickup = {
+  id: string;
+  lat: number;
+  lng: number;
+  passengers: number;
+  distanceMeters: number;
+};
+
+export function loadNearbyPickups(): Promise<Result<NearbyPickup[]>> {
+  return attempt(async () => {
+    const rows: NearbyPickupRow[] =
+      (await unwrap(operatorRoutes.findNearbyPickups())) ?? [];
+    return rows.map((row) => ({
+      id: row.request_id,
+      lat: row.latitude,
+      lng: row.longitude,
+      passengers: row.passengers,
+      distanceMeters: row.distance_m,
+    }));
+  });
+}
+
+export function acceptPickup(requestId: string): Promise<Result<number>> {
+  return attempt(() => unwrap(operatorRoutes.acceptPickup(requestId)));
 }
