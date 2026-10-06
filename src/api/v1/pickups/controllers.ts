@@ -11,6 +11,7 @@ import { attempt, failure, unwrap, type Result } from "@/api/v1/result";
 import {
   getOccupancyLevel,
   toVehicleType,
+  vehicleStatusLabels,
   type OccupancyLevel,
   type VehicleType,
 } from "@/api/v1/transit-routes/controllers";
@@ -28,13 +29,6 @@ export type PickupRequest = {
 
 export const minPickupPassengers = 1;
 export const maxPickupPassengers = 10;
-
-export const pickupStatusLabels: Record<RequestStatus, string> = {
-  pending: "Waiting for a driver",
-  accepted: "Driver on the way",
-  rejected: "Rejected",
-  completed: "Completed",
-};
 
 async function getCommuterId() {
   const { session } = await unwrap(authRoutes.getSession());
@@ -54,9 +48,6 @@ async function getCommuterId() {
   return created.commuter_id;
 }
 
-// Last known active request, so the Pickup screen can open without waiting.
-// Cleared whenever the signed-in account changes so it never leaks between
-// accounts on the same device.
 let knownActivePickup: PickupRequest | null = null;
 let knownUserId: string | null = null;
 let watchingAuth = false;
@@ -179,13 +170,6 @@ export async function cancelPickup(
   });
 }
 
-const vehicleStatusLabels: Record<string, string> = {
-  "on-trip": "In Transit",
-  loading: "Loading/Unloading",
-  idle: "Idle",
-  offline: "Offline",
-};
-
 export type PickupDriver = {
   requestId: string;
   plateNumber: string;
@@ -197,7 +181,6 @@ export type PickupDriver = {
   location: { lat: number; lng: number; speedKmh: number } | null;
 };
 
-// The vehicle coming for the commuter's accepted request, if any.
 export function loadPickupDriver(): Promise<Result<PickupDriver | null>> {
   return attempt(async () => {
     const row: PickupDriverRow | null = await unwrap(
@@ -243,12 +226,10 @@ export type Booking = {
   rentalDate: string | null;
   purpose: string | null;
   plateNumber: string | null;
-  // As stored: "Jeepney", "Tricycle", "Van" or "Bus".
   vehicleType: string | null;
   driverName: string | null;
 };
 
-// Completed pickups and rentals only; cancelled requests are never kept.
 export function loadBookings(): Promise<Result<Booking[]>> {
   return attempt(async () => {
     const rows: BookingRow[] =
@@ -261,6 +242,53 @@ export function loadBookings(): Promise<Result<Booking[]>> {
       passengers: row.passengers,
       rentalDate: row.rental_date,
       purpose: row.purpose,
+      plateNumber: row.plate_number,
+      vehicleType: row.vehicle_type,
+      driverName: row.driver_name,
+    }));
+  });
+}
+
+export function loadRequestStatus(
+  requestId: string,
+): Promise<Result<RequestStatus | null>> {
+  return attempt(async () => {
+    const row: { request_status: RequestStatus } | null = await unwrap(
+      pickupRoutes.findRequestStatus(requestId),
+    );
+    return row?.request_status ?? null;
+  });
+}
+
+export type TripRide = {
+  id: string;
+  onBoard: boolean;
+  departedAt: Date | null;
+  arrivedAt: Date | null;
+  routeName: string;
+  plateNumber: string | null;
+  vehicleType: string | null;
+  driverName: string | null;
+};
+
+export function loadTripHistory(): Promise<Result<TripRide[]>> {
+  return attempt(async () => {
+    const rows: {
+      history_id: string;
+      trip_status: string;
+      departure_time: string | null;
+      arrival_time: string | null;
+      route_name: string | null;
+      plate_number: string | null;
+      vehicle_type: string | null;
+      driver_name: string | null;
+    }[] = (await unwrap(pickupRoutes.findMyTripHistory())) ?? [];
+    return rows.map((row) => ({
+      id: row.history_id,
+      onBoard: row.trip_status === "active",
+      departedAt: row.departure_time ? new Date(row.departure_time) : null,
+      arrivedAt: row.arrival_time ? new Date(row.arrival_time) : null,
+      routeName: row.route_name ?? "Unknown route",
       plateNumber: row.plate_number,
       vehicleType: row.vehicle_type,
       driverName: row.driver_name,

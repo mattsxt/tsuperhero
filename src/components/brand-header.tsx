@@ -26,7 +26,6 @@ export function BrandHeader({
   compact = false,
 }: {
   variant: Variant;
-  // Smaller logo and wordmark, used while the keyboard is open.
   compact?: boolean;
 }) {
   const logo = (

@@ -22,6 +22,7 @@ import {
 import { VehicleIcon } from "@/components/module-icons";
 import { ModuleHeader } from "@/components/module-ui";
 import { TransitMap, type TransitMapState } from "@/components/transit-map";
+import { usePolling } from "@/hooks/use-polling";
 import { getDistanceMeters } from "@/utils/geo";
 import { BrandLogo, LoadingSprite } from "@/components/brand-logo";
 
@@ -30,12 +31,9 @@ const routeCyan = "#7fd4f7";
 const cancelRed = "#e5383b";
 
 const driverPollMs = 3_000;
-// Google routing is billed per call, so the route is only refreshed once the
-// driver has moved a bit or some time has passed.
 const rerouteMeters = 40;
 const rerouteMs = 30_000;
 const arrivingMeters = 30;
-// Straight-line fallback when Google routing is unavailable.
 const roadFactor = 1.3;
 const fallbackKmh = 15;
 
@@ -90,20 +88,14 @@ export function ActivePickup({
     };
   }, []);
 
-  useEffect(() => {
-    if (!matched) return;
-    let active = true;
-    const poll = async () => {
+  usePolling(
+    async () => {
       const result = await loadPickupDriver();
-      if (active && result.ok) setDriver(result.data);
-    };
-    poll();
-    const timer = setInterval(poll, driverPollMs);
-    return () => {
-      active = false;
-      clearInterval(timer);
-    };
-  }, [matched]);
+      if (result.ok) setDriver(result.data);
+    },
+    driverPollMs,
+    matched,
+  );
 
   useEffect(() => {
     if (!driverLocation) return;
@@ -161,7 +153,6 @@ export function ActivePickup({
         : null,
       userLocation: me,
       focus: null,
-      // Reframe when the user's location or the driver first shows up.
       fit: {
         key: `${request.id}:${me ? 1 : 0}:${driverLocation ? 1 : 0}`,
         points,

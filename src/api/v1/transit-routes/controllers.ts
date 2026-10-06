@@ -5,6 +5,7 @@ import {
   routeTableRoutes,
   transitRouteApi,
   type LatLng,
+  type LiveVehicleRow,
   type RouteRow,
 } from "@/api/v1/transit-routes/routes";
 import { distanceToPath, getPairDistanceMeters } from "@/utils/geo";
@@ -92,7 +93,6 @@ export function findRoute(id: string | null | undefined) {
   return transitRoutes.find((route) => route.id === id) ?? null;
 }
 
-// Matches route names and the places (vicinity) each route passes.
 export function searchDestinations(query: string) {
   const needle = query.trim().toLowerCase();
   return transitRoutes.filter(
@@ -102,7 +102,6 @@ export function searchDestinations(query: string) {
   );
 }
 
-// A destination counts as served when a route passes within a short walk.
 export const nearDestinationMeters = 500;
 
 export type RouteNearPlace = { route: TransitRoute; distanceMeters: number };
@@ -214,29 +213,6 @@ export function loadAlternativeGeometry(
   return Promise.all(route.alternativePaths.map(followRoads));
 }
 
-export function pointAlong(path: LatLng[], fraction: number): LatLng {
-  const lengths = path.slice(1).map(([lat, lng], index) => {
-    const [prevLat, prevLng] = path[index];
-    const x = (lng - prevLng) * Math.cos((lat * Math.PI) / 180);
-    return Math.hypot(x, lat - prevLat);
-  });
-  let remaining = lengths.reduce((sum, length) => sum + length, 0) * fraction;
-
-  for (let index = 0; index < lengths.length; index++) {
-    if (remaining <= lengths[index] || index === lengths.length - 1) {
-      const t = lengths[index] ? Math.min(remaining / lengths[index], 1) : 0;
-      const [startLat, startLng] = path[index];
-      const [endLat, endLng] = path[index + 1];
-      return [
-        startLat + (endLat - startLat) * t,
-        startLng + (endLng - startLng) * t,
-      ];
-    }
-    remaining -= lengths[index];
-  }
-  return path[0];
-}
-
 export type EtaRoute = {
   path: LatLng[];
   durationSeconds: number;
@@ -260,5 +236,48 @@ export async function loadEtaRoute(
       durationSeconds: seconds,
       distanceMeters: route.distanceMeters ?? 0,
     };
+  });
+}
+
+export const vehicleStatusLabels: Record<string, string> = {
+  "on-trip": "In Transit",
+  loading: "Loading/Unloading",
+  idle: "Idle",
+  offline: "Offline",
+};
+
+export type LiveVehicle = {
+  id: string;
+  type: VehicleType;
+  typeLabel: string;
+  plateNumber: string;
+  status: string;
+  maxCapacity: number;
+  currentCapacity: number;
+  occupancy: OccupancyLevel;
+  lat: number;
+  lng: number;
+  routeId: string | null;
+  routeName: string | null;
+};
+
+export function loadLiveVehicles(): Promise<Result<LiveVehicle[]>> {
+  return attempt(async () => {
+    const rows: LiveVehicleRow[] =
+      (await unwrap(routeTableRoutes.listLiveVehicles())) ?? [];
+    return rows.map((row) => ({
+      id: row.vehicle_id,
+      type: toVehicleType(row.vehicle_type),
+      typeLabel: row.vehicle_type,
+      plateNumber: row.plate_number,
+      status: vehicleStatusLabels[row.vehicle_status] ?? row.vehicle_status,
+      maxCapacity: row.max_capacity,
+      currentCapacity: row.current_capacity,
+      occupancy: getOccupancyLevel(row.current_capacity, row.max_capacity),
+      lat: row.latitude,
+      lng: row.longitude,
+      routeId: row.route_id,
+      routeName: row.route_name,
+    }));
   });
 }

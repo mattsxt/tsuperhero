@@ -4,6 +4,7 @@ import {
   operatorRoutes,
   type AssignmentRow,
   type NearbyPickupRow,
+  type TripRow,
   type VehicleStatus,
 } from "@/api/v1/operator/routes";
 import { attempt, unwrap, type Result } from "@/api/v1/result";
@@ -137,9 +138,6 @@ export function endTrip(distanceDoneMeters: number): Promise<Result<unknown>> {
   );
 }
 
-// Matches the radius in get_my_nearby_pickups(); the server does the filtering.
-export const pickupDetectionMeters = 300;
-
 export type NearbyPickup = {
   id: string;
   lat: number;
@@ -164,4 +162,64 @@ export function loadNearbyPickups(): Promise<Result<NearbyPickup[]>> {
 
 export function acceptPickup(requestId: string): Promise<Result<number>> {
   return attempt(() => unwrap(operatorRoutes.acceptPickup(requestId)));
+}
+
+export function boardPickup(requestId: string): Promise<Result<number>> {
+  return attempt(() => unwrap(operatorRoutes.boardPickup(requestId)));
+}
+
+export type TripRecord = {
+  id: string;
+  code: string;
+  inProgress: boolean;
+  departedAt: Date | null;
+  arrivedAt: Date | null;
+  durationMinutes: number | null;
+  distanceKm: number;
+  routeName: string;
+  plateNumber: string | null;
+  vehicleType: string | null;
+  pickups: number;
+};
+
+const toNumber = (value: number | string | null) => Number(value ?? 0) || 0;
+
+export function loadMyTrips(): Promise<Result<TripRecord[]>> {
+  return attempt(async () => {
+    const rows: TripRow[] = (await unwrap(operatorRoutes.findMyTrips())) ?? [];
+    return rows.map((row) => {
+      const departedAt = row.departure_time
+        ? new Date(row.departure_time)
+        : null;
+      const arrivedAt = row.arrival_time ? new Date(row.arrival_time) : null;
+      const inProgress = row.trip_status === "active";
+      const end = arrivedAt ?? (inProgress ? new Date() : null);
+      return {
+        id: row.trip_id,
+        code: row.trip_code,
+        inProgress,
+        departedAt,
+        arrivedAt,
+        durationMinutes:
+          departedAt && end
+            ? Math.max(
+                0,
+                Math.round((end.getTime() - departedAt.getTime()) / 60_000),
+              )
+            : null,
+        distanceKm: toNumber(row.distance_done_km),
+        routeName: row.route_name ?? "Unknown route",
+        plateNumber: row.plate_number,
+        vehicleType: row.vehicle_type,
+        pickups: Number(row.pickups) || 0,
+      };
+    });
+  });
+}
+
+export function formatDuration(minutes: number) {
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest ? `${hours} hr ${rest} min` : `${hours} hr`;
 }

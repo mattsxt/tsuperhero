@@ -57,4 +57,21 @@ export const operatorRoutes = {
     getSupabaseClient().rpc("accept_pickup_request", {
       p_request_id: requestId,
     }),
+  boardPickup: (requestId: string) =>
+    getSupabaseClient().rpc("board_pickup", { p_request_id: requestId }),
+  findMyTrips: () => getSupabaseClient().rpc("get_my_trips"),
+};
+
+export type TripRow = {
+  trip_id: string;
+  trip_code: string;
+  trip_status: "active" | "completed";
+  departure_time: string | null;
+  arrival_time: string | null;
+  distance_done_km: number | string | null;
+  distance_total_km: number | string | null;
+  route_name: string | null;
+  plate_number: string | null;
+  vehicle_type: string | null;
+  pickups: number;
 };

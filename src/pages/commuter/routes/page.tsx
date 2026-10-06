@@ -15,6 +15,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import Animated, {
@@ -25,8 +26,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   findRoute,
   loadAlternativeGeometry,
+  loadLiveVehicles,
   loadRouteGeometry,
   type LatLng,
+  type LiveVehicle,
 } from "@/api/v1/transit-routes/controllers";
 import {
   findWaitingAreasOnRoute,
@@ -35,14 +38,24 @@ import {
 } from "@/api/v1/waiting-areas/controllers";
 import { ModuleHeader, moduleColors } from "@/components/module-ui";
 import { TransitMap, type TransitMapState } from "@/components/transit-map";
+import {
+  VehicleCard,
+  VehicleDetailsModal,
+} from "@/components/vehicle-details-modal";
 import { Routes } from "@/constants/routes";
+import { usePolling } from "@/hooks/use-polling";
 import { useTransitRoutes } from "@/hooks/use-transit-routes";
+import { isNearPath } from "@/utils/geo";
 import { goBackOr } from "@/utils/navigation";
 import { LoadingSprite } from "@/components/brand-logo";
 
 const { brandBlue, headerBlue, mutedText, softBlue, text } = moduleColors;
 const cardNavy = "#0f2a5c";
 const lightBlue = "#a8dcf7";
+const livePollMs = 5_000;
+const onRouteMeters = 60;
+const panelPadding = 20;
+const vehicleCardGap = 10;
 
 const chipTransition: CSSTransitionProperties = {
   transitionProperty: ["backgroundColor", "transform", "opacity"],
@@ -66,6 +79,11 @@ function findVicinity(routeVicinity: string[], vicinity: string | null) {
 
 export default function RoutesScreen() {
   const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
+  const vehicleCardWidth = Math.min(
+    (windowWidth - panelPadding * 2) * 0.82,
+    300,
+  );
   const params = useLocalSearchParams<{
     routeId?: string;
     destLat?: string;
@@ -73,7 +91,6 @@ export default function RoutesScreen() {
   }>();
   const transitRoutes = useTransitRoutes();
   const initialRoute = findRoute(params.routeId);
-  // Destination picked in "Where to?", shown as a pin along the route.
   const destination = useMemo(() => {
     const lat = Number.parseFloat(params.destLat ?? "");
     const lng = Number.parseFloat(params.destLng ?? "");
@@ -94,6 +111,19 @@ export default function RoutesScreen() {
   const [showWaitingAreas, setShowWaitingAreas] = useState(true);
 
   const route = findRoute(routeId);
+  const [liveVehicles, setLiveVehicles] = useState<LiveVehicle[]>([]);
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(
+    null,
+  );
+
+  usePolling(
+    async () => {
+      const result = await loadLiveVehicles();
+      if (result.ok) setLiveVehicles(result.data);
+    },
+    livePollMs,
+    !!routeId,
+  );
 
   useEffect(() => {
     if (!route) return;
@@ -135,6 +165,20 @@ export default function RoutesScreen() {
     [waitingAreas, routeId, path, alternativePaths, route],
   );
 
+  const vehiclesOnRoute = useMemo(
+    () =>
+      routeId && path
+        ? liveVehicles.filter((vehicle) =>
+            [path, ...alternativePaths].some((line) =>
+              isNearPath(vehicle, line, onRouteMeters),
+            ),
+          )
+        : [],
+    [liveVehicles, routeId, path, alternativePaths],
+  );
+  const selectedVehicle =
+    vehiclesOnRoute.find((vehicle) => vehicle.id === selectedVehicleId) ?? null;
+
   const mapState = useMemo<TransitMapState>(
     () => ({
       routeId,
@@ -152,13 +196,21 @@ export default function RoutesScreen() {
           tag: findVicinity(route?.vicinity ?? [], vicinity),
           kind: type,
         })),
-      vehicles: [],
+      vehicles: vehiclesOnRoute.map((vehicle) => ({
+        id: vehicle.id,
+        lat: vehicle.lat,
+        lng: vehicle.lng,
+        type: vehicle.type,
+        label: vehicle.routeName,
+        muted: !!routeId && vehicle.routeId !== routeId,
+      })),
       pickups: destination ? [{ id: "destination", ...destination }] : [],
       focus: null,
       padTop: headerHeight + 30,
       padBottom: panelHeight + 70,
     }),
     [
+      vehiclesOnRoute,
       destination,
       routeId,
       path,
@@ -202,7 +254,7 @@ export default function RoutesScreen() {
   return (
     <View style={styles.screen}>
       <StatusBar style="light" />
-      <TransitMap state={mapState} />
+      <TransitMap state={mapState} onVehiclePress={setSelectedVehicleId} />
 
       <View
         style={styles.headerWrap}
@@ -319,11 +371,38 @@ export default function RoutesScreen() {
             >
               <View style={styles.vehicleSectionHeader}>
                 <Text style={styles.vehicleSectionTitle}>Vehicles in view</Text>
+                {vehiclesOnRoute.length > 0 && (
+                  <View style={styles.vehicleCount}>
+                    <Text style={styles.vehicleCountText}>
+                      {vehiclesOnRoute.length}
+                    </Text>
+                  </View>
+                )}
               </View>
-              <Text style={styles.vehicleEmpty}>
-                Nothing to see here yet. Active vehicles on this route will show
-                up here.
-              </Text>
+              {vehiclesOnRoute.length === 0 ? (
+                <Text style={styles.vehicleEmpty}>
+                  Nothing to see here yet. Active vehicles on this route will
+                  show up here.
+                </Text>
+              ) : (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  snapToInterval={vehicleCardWidth + vehicleCardGap}
+                  snapToAlignment="start"
+                  decelerationRate="fast"
+                  contentContainerStyle={styles.vehicleCarousel}
+                >
+                  {vehiclesOnRoute.map((vehicle) => (
+                    <VehicleCard
+                      key={vehicle.id}
+                      vehicle={vehicle}
+                      width={vehicleCardWidth}
+                      onPress={() => setSelectedVehicleId(vehicle.id)}
+                    />
+                  ))}
+                </ScrollView>
+              )}
             </Animated.View>
           )}
 
@@ -353,6 +432,11 @@ export default function RoutesScreen() {
           </View>
         </View>
       </View>
+
+      <VehicleDetailsModal
+        vehicle={selectedVehicle}
+        onClose={() => setSelectedVehicleId(null)}
+      />
     </View>
   );
 }
@@ -473,30 +557,42 @@ const styles = StyleSheet.create({
   },
   bottomPanel: {
     paddingTop: 16,
-    paddingHorizontal: 20,
+    paddingHorizontal: panelPadding,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     backgroundColor: headerBlue,
   },
-  vehicleSection: { overflow: "hidden" },
+  vehicleSection: { overflow: "hidden", marginHorizontal: -panelPadding },
   vehicleSectionOpen: { maxHeight: 240, opacity: 1, marginBottom: 14 },
   vehicleSectionClosed: { maxHeight: 0, opacity: 0, marginBottom: 0 },
   vehicleSectionHeader: {
     flexDirection: "row",
-    alignItems: "baseline",
+    alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 10,
+    paddingHorizontal: panelPadding,
   },
   vehicleSectionTitle: {
     color: "#ffffff",
     fontFamily: "SoraBold",
     fontSize: 13,
   },
+  vehicleCount: {
+    minWidth: 22,
+    alignItems: "center",
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 999,
+    backgroundColor: lightBlue,
+  },
+  vehicleCountText: { color: headerBlue, fontFamily: "SoraBold", fontSize: 10 },
+  vehicleCarousel: { gap: vehicleCardGap, paddingHorizontal: panelPadding },
   vehicleEmpty: {
     color: "rgba(255, 255, 255, 0.85)",
     fontFamily: "Sora",
     fontSize: 10,
     paddingVertical: 18,
+    paddingHorizontal: panelPadding,
     textAlign: "center",
   },
   searchPill: {

@@ -8,7 +8,15 @@ import Mail from "lucide-react-native/icons/mail";
 import Phone from "lucide-react-native/icons/phone";
 import UserRoundPen from "lucide-react-native/icons/user-round-pen";
 import { useEffect, useState, type ReactNode } from "react";
-import { Alert, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 

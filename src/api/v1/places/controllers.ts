@@ -126,25 +126,45 @@ export async function getCurrentPlace(): Promise<Result<Place>> {
       );
     }
     const { latitude: lat, longitude: lng } = position.coords;
-
-    let name = "Current location";
-    let address = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-    if (Platform.OS !== "web") {
-      const [match] = await Location.reverseGeocodeAsync({
-        latitude: lat,
-        longitude: lng,
-      }).catch(() => []);
-      if (match) {
-        const described = describeAddress(match);
-        name = described.name;
-        address = described.area || address;
-      }
-    }
-
-    return success({ id: `current-${lat},${lng}`, name, address, lat, lng });
+    return success(await describePoint(lat, lng, "Current location"));
   } catch (error) {
     return failure(getErrorMessage(error));
   }
+}
+
+export async function describePoint(
+  lat: number,
+  lng: number,
+  fallbackName = "Pinned location",
+): Promise<Place> {
+  let name = fallbackName;
+  let address = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  if (Platform.OS !== "web") {
+    const [match] = await Location.reverseGeocodeAsync({
+      latitude: lat,
+      longitude: lng,
+    }).catch(() => []);
+    if (match) {
+      const described = describeAddress(match);
+      name = described.name;
+      address = described.area || address;
+    }
+  }
+  return { id: `point-${lat},${lng}`, name, address, lat, lng };
+}
+
+export async function getLastKnownPoint(): Promise<{
+  lat: number;
+  lng: number;
+} | null> {
+  const permission = await Location.getForegroundPermissionsAsync().catch(
+    () => null,
+  );
+  if (!permission?.granted) return null;
+  const position = await Location.getLastKnownPositionAsync().catch(() => null);
+  return position
+    ? { lat: position.coords.latitude, lng: position.coords.longitude }
+    : null;
 }
 
 export async function watchLocation(

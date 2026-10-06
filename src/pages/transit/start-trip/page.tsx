@@ -22,11 +22,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
   acceptPickup,
+  boardPickup,
   describeAssignment,
   endTrip,
   loadNearbyPickups,
   loadOperatorAssignment,
-  pickupDetectionMeters,
   saveTripState,
   shareLocation,
   startTrip,
@@ -64,11 +64,12 @@ const maxPickupCards = 3;
 const toastMs = 4_000;
 const stationaryMs = 5_000;
 const pingMs = 3_000;
-// GPS drifts a few meters while parked, so smaller changes don't count as moving.
 const movedMeters = 15;
 const movingSpeedMps = 1.5;
 const myVehicleZoom = 16;
 const pickupPollMs = 5_000;
+const boardMeters = 40;
+const boardRetryMs = 3_000;
 
 const pathLengthMeters = (path: LatLng[]) =>
   path
@@ -157,8 +158,6 @@ function Trip({ details }: { details: AssignmentDetails }) {
   const [fix, setFix] = useState<LocationObject | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [watchAttempt, setWatchAttempt] = useState(0);
-  // While following, the map stays centered on the driver; dragging the map
-  // stops it and the locate button turns it back on.
   const [following, setFollowing] = useState(true);
   const [recenters, setRecenters] = useState(0);
   const [zoomAt, setZoomAt] = useState<number | null>(null);
@@ -168,7 +167,6 @@ function Trip({ details }: { details: AssignmentDetails }) {
   const [confirmingStop, setConfirmingStop] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
   const [pickups, setPickups] = useState<NearbyPickup[]>([]);
-  // Accepted requests keep their pin until the driver is out of range.
   const [accepted, setAccepted] = useState<NearbyPickup[]>([]);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
 
@@ -179,8 +177,6 @@ function Trip({ details }: { details: AssignmentDetails }) {
   const shareFailing = useRef(false);
   const tripActive = useRef(false);
   const distanceDone = useRef(0);
-  // Requests the driver has already been pinged about, and ones they have
-  // driven past (left the detection radius) that stay hidden this trip.
   const seenPickups = useRef(new Set<string>());
   const passedPickups = useRef(new Set<string>());
 
@@ -199,8 +195,6 @@ function Trip({ details }: { details: AssignmentDetails }) {
     };
   }, [route]);
 
-  // The driver always sees their own position; it only leaves the device
-  // once a trip is started (see the ping effect below).
   useEffect(() => {
     let active = true;
     let subscription: { remove: () => void } | null = null;
@@ -226,13 +220,6 @@ function Trip({ details }: { details: AssignmentDetails }) {
       }
       setFix(location);
       setZoomAt((current) => current ?? location.timestamp);
-      setAccepted((current) => {
-        const here = { lat: next.latitude, lng: next.longitude };
-        const kept = current.filter(
-          (pickup) => getDistanceMeters(here, pickup) <= pickupDetectionMeters,
-        );
-        return kept.length === current.length ? current : kept;
-      });
     }).then((result) => {
       if (!result.ok) {
         if (!active) return;
@@ -275,8 +262,6 @@ function Trip({ details }: { details: AssignmentDetails }) {
     return () => clearInterval(timer);
   }, [onTrip]);
 
-  // The server only returns requests within the detection radius of the
-  // location this vehicle last shared.
   useEffect(() => {
     if (!onTrip) return;
     const poll = async () => {
@@ -311,7 +296,43 @@ function Trip({ details }: { details: AssignmentDetails }) {
     return () => clearInterval(timer);
   }, [onTrip]);
 
-  // Going idle also withdraws the shared location on the server.
+  const boardingAttempts = useRef(new Map<string, number>());
+  useEffect(() => {
+    if (!fix || accepted.length === 0) return;
+    const here = { lat: fix.coords.latitude, lng: fix.coords.longitude };
+    const now = Date.now();
+    accepted.forEach((pickup) => {
+      if (getDistanceMeters(here, pickup) > boardMeters) return;
+      const lastTry = boardingAttempts.current.get(pickup.id);
+      if (lastTry !== undefined && now - lastTry < boardRetryMs) return;
+      boardingAttempts.current.set(pickup.id, now);
+      boardPickup(pickup.id).then((result) => {
+        if (!tripActive.current) return;
+        if (!result.ok) {
+          if (/no longer|another vehicle/i.test(result.error)) {
+            boardingAttempts.current.delete(pickup.id);
+            setAccepted((current) =>
+              current.filter((item) => item.id !== pickup.id),
+            );
+          }
+          return;
+        }
+        boardingAttempts.current.delete(pickup.id);
+        const boarded = result.data;
+        setAccepted((current) =>
+          current.filter((item) => item.id !== pickup.id),
+        );
+        setCount((current) => Math.min(capacity, current + boarded));
+        setToast(
+          nextToast(
+            `${boarded} passenger${boarded === 1 ? "" : "s"} boarded`,
+            "success",
+          ),
+        );
+      });
+    });
+  }, [fix, accepted, capacity]);
+
   useEffect(() => {
     if (starting || finalizing) return;
     const key = `${status}:${count}`;
@@ -371,8 +392,6 @@ function Trip({ details }: { details: AssignmentDetails }) {
     if (onTrip && count > 0) setCount(count - 1);
   };
 
-  // The server only accepts locations from a vehicle that is on a trip,
-  // so the status is saved before the first ping goes out.
   const start = async () => {
     if (starting) return;
     if (locationError) {
@@ -393,6 +412,7 @@ function Trip({ details }: { details: AssignmentDetails }) {
     shareFailing.current = false;
     tripActive.current = true;
     distanceDone.current = 0;
+    boardingAttempts.current.clear();
     seenPickups.current = new Set();
     passedPickups.current = new Set();
     setAccepted([]);
@@ -401,8 +421,6 @@ function Trip({ details }: { details: AssignmentDetails }) {
     setStatus("in-transit");
   };
 
-  // Saves the trip record (arrival time, distance driven) and goes idle,
-  // which also stops sharing the location.
   const finalizeTrip = async () => {
     if (finalizing) return;
     setFinalizing(true);
@@ -414,6 +432,7 @@ function Trip({ details }: { details: AssignmentDetails }) {
       return;
     }
     tripActive.current = false;
+    boardingAttempts.current.clear();
     setPickups([]);
     setAccepted([]);
     setStatus("idle");
@@ -422,10 +441,12 @@ function Trip({ details }: { details: AssignmentDetails }) {
     setToast(nextToast("Trip Ended!", "info"));
   };
 
-  const seatsLeft = markedFull ? 0 : capacity - count;
+  const reserved = accepted.reduce(
+    (total, pickup) => total + pickup.passengers,
+    0,
+  );
+  const seatsLeft = markedFull ? 0 : capacity - count - reserved;
 
-  // Declining only hides the request for this driver; other drivers nearby
-  // can still accept it.
   const declineRequest = (pickup: NearbyPickup) => {
     passedPickups.current.add(pickup.id);
     setPickups((current) => current.filter((item) => item.id !== pickup.id));
@@ -446,17 +467,13 @@ function Trip({ details }: { details: AssignmentDetails }) {
       return;
     }
     if (!tripActive.current) return;
-    const boarding = result.data;
-    const next = Math.min(capacity, count + boarding);
-    setCount((current) => Math.min(capacity, current + boarding));
+    const waiting = result.data;
     setAccepted((current) => [...current, pickup]);
     setToast(
-      next >= capacity
-        ? nextToast("Vehicle is Full!", "danger")
-        : nextToast(
-            `Accepted ${boarding} passenger${boarding === 1 ? "" : "s"}`,
-            "success",
-          ),
+      nextToast(
+        `Accepted ${waiting} passenger${waiting === 1 ? "" : "s"}. Head to the pickup point.`,
+        "success",
+      ),
     );
   };
 

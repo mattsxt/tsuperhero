@@ -25,7 +25,6 @@ const onRouteMeters = 40;
 
 const walkMetersPerMinute = 80;
 
-// Last loaded list, so screens can render right away and refresh quietly.
 let knownWaitingAreas: WaitingArea[] = [];
 export const getKnownWaitingAreas = () => knownWaitingAreas;
 

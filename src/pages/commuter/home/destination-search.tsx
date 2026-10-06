@@ -118,10 +118,8 @@ export function DestinationSearchPanel({
   const [resolvingId, setResolvingId] = useState<string | null>(null);
   const [chosen, setChosen] = useState<ChosenPlace | null>(null);
   const [placeProblem, setPlaceProblem] = useState("");
-  // One Places session per search, renewed after a place is picked.
   const [session, setSession] = useState(createPlacesSession);
 
-  // Google place suggestions, debounced while typing.
   useEffect(() => {
     const trimmed = query.trim();
     let active = true;

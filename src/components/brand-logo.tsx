@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
 import Animated, {
+  cancelAnimation,
   Easing,
   interpolate,
   useAnimatedStyle,
@@ -12,7 +13,6 @@ import Animated, {
 } from "react-native-reanimated";
 import Svg, { ClipPath, Defs, G, Path, Rect } from "react-native-svg";
 
-// Drawn from assets/images/tsuperhero_icon.svg so the color can change.
 export function BrandLogo({
   size,
   color = "#ffffff",
@@ -67,8 +67,6 @@ export function BrandLogo({
   );
 }
 
-// Layers of assets/images/tsuperhero_loading.svg, revealed like a route
-// being traced: origin circle, then the road, then the destination circle.
 const loadingLayers = {
   origin: {
     d: "M10.7879 4.45455C11.7418 4.45455 12.5152 3.68122 12.5152 2.72727C12.5152 1.77333 11.7418 1 10.7879 1C9.83393 1 9.06061 1.77333 9.06061 2.72727C9.06061 3.68122 9.83393 4.45455 10.7879 4.45455Z",
@@ -85,8 +83,6 @@ const loadingLayers = {
 };
 
 const loadingCycleMs = 1_800;
-// [fade in start, fade in end] as fractions of the cycle; all layers fade
-// out together at the end so the loop restarts from nothing.
 const revealWindows = {
   origin: [0, 0.16],
   road: [0.14, 0.38],
@@ -162,6 +158,7 @@ export function LoadingSprite({
       }),
       -1,
     );
+    return () => cancelAnimation(progress);
   }, [progress, reduceMotion]);
 
   return (
@@ -187,6 +184,5 @@ export function LoadingSprite({
 }
 
 const styles = StyleSheet.create({
-  // Centers itself like ActivityIndicator did in column layouts.
   sprite: { alignSelf: "center" },
 });

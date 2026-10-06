@@ -15,7 +15,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { brandCompactDuration } from "@/components/brand-header";
 
-// For titles that tighten their spacing alongside the brand header.
 export const authSpacingTransition: CSSTransitionProperties<TextStyle> = {
   transitionProperty: ["marginTop", "marginBottom"],
   transitionDuration: brandCompactDuration,
@@ -39,9 +38,6 @@ export function useKeyboardVisible() {
   return visible;
 }
 
-// Centered auth layout. While the keyboard is open (compact), the content
-// glides to the top so the fields sit above the keyboard; it stays
-// scrollable for small screens.
 export function AuthScreen({
   compact = false,
   children,

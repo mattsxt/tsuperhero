@@ -58,4 +58,12 @@ export const pickupRoutes = {
   findMyDriver: () => getSupabaseClient().rpc("get_my_pickup_driver"),
 
   findMyBookings: () => getSupabaseClient().rpc("get_my_bookings"),
+
+  findMyTripHistory: () => getSupabaseClient().rpc("get_my_trip_history"),
+
+  findRequestStatus: (requestId: string) =>
+    requestTable()
+      .select("request_status")
+      .eq("request_id", requestId)
+      .maybeSingle(),
 };

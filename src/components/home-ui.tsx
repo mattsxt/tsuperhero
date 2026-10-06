@@ -110,10 +110,27 @@ export function SectionDivider() {
   return <View style={styles.sectionDivider} />;
 }
 
-export function SectionHeader({ title }: { title: string }) {
+export function SectionHeader({
+  title,
+  action,
+}: {
+  title: string;
+  action?: { label: string; onPress: () => void };
+}) {
   return (
     <View style={styles.sectionHeader}>
       <Text style={styles.sectionTitle}>{title}</Text>
+      {action && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${action.label}: ${title}`}
+          hitSlop={8}
+          onPress={action.onPress}
+          style={({ pressed }) => pressed && styles.pressed}
+        >
+          <Text style={styles.sectionAction}>{action.label}</Text>
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -213,4 +230,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   sectionTitle: { color: brandBlue, fontFamily: "SoraBold", fontSize: 15 },
+  sectionAction: { color: brandBlue, fontFamily: "SoraBold", fontSize: 11 },
 });

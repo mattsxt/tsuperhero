@@ -17,7 +17,14 @@ export type TransitMapState = {
     tag?: string | null;
     kind?: "stop" | "terminal";
   }[];
-  vehicles: { id: string; lat: number; lng: number; type: string }[];
+  vehicles: {
+    id: string;
+    lat: number;
+    lng: number;
+    type: string;
+    label?: string | null;
+    muted?: boolean;
+  }[];
   focus: {
     key: number | string;
     lat: number;
@@ -29,7 +36,6 @@ export type TransitMapState = {
   pickups?: { id: string; lat: number; lng: number; passengers?: number }[];
   pickupLine?: [number, number][] | null;
   userLocation?: { lat: number; lng: number } | null;
-  // Frames all points once each time the key changes.
   fit?: { key: number | string; points: [number, number][] } | null;
 };
 
@@ -63,7 +69,14 @@ const mapHtml = `<!DOCTYPE html>
     padding: 24px; box-sizing: border-box; text-align: center;
     font: 13px sans-serif; color: #6b6b6b;
   }
-  .pin-wrap { padding-bottom: 5px; cursor: pointer; }
+  .pin-wrap { padding-bottom: 5px; cursor: pointer; position: relative; }
+  .vehicle-badge {
+    position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
+    margin-top: -2px; padding: 2px 7px; border-radius: 999px;
+    background: #193caf; color: #ffffff; font: bold 9px sans-serif;
+    white-space: nowrap; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  }
+  .vehicle-badge.muted { background: #ffffff; color: #193caf; }
   .pin {
     width: 26px; height: 26px; box-sizing: border-box;
     display: flex; align-items: center; justify-content: center;
@@ -136,6 +149,7 @@ const mapHtml = `<!DOCTYPE html>
   var pickupMarkers = [];
   var lastPickupKey = "";
   var lastPickupLineKey = "null";
+  var reportCenter = false;
   var meMarker = null;
   var lastFitKey = null;
   var COUNTED_PIN_SVG = '<svg width="38" height="38" viewBox="0 0 24 24" fill="#c81e1e" stroke="#c81e1e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="5.2" fill="#ffffff" stroke="none"/></svg>';
@@ -157,7 +171,10 @@ const mapHtml = `<!DOCTYPE html>
 
   function applyState(state) {
     if (!map) return;
-    var routeKey = state.route && state.route.length ? state.routeId + ":" + state.route.length : null;
+    reportCenter = !!state.reportCenter;
+    var routeKey = state.keepRoute
+      ? lastRouteId
+      : state.route && state.route.length ? state.routeId + ":" + state.route.length : null;
     if (routeKey !== lastRouteId) {
       if (routeLine) { routeLine.setMap(null); routeLine = null; }
       alternativeLines.forEach(function (line) { line.setMap(null); });
@@ -261,6 +278,7 @@ const mapHtml = `<!DOCTYPE html>
   }
 
   function applyWaitingAreas(state) {
+    if (state.keepWaitingAreas) return;
     var areas = state.waitingAreas || [];
     var key = areas.map(function (area) { return area.id + ":" + (area.tag || "") + ":" + (area.kind || ""); }).join(",");
     if (key === lastWaitingKey) return;
@@ -333,15 +351,23 @@ const mapHtml = `<!DOCTYPE html>
         var content = document.createElement("div");
         content.className = "pin-wrap";
         content.innerHTML = '<div class="pin"><img src="' + ICONS[vehicle.type] + '" /></div>';
+        var badge = document.createElement("div");
+        badge.className = "vehicle-badge";
+        content.appendChild(badge);
         var position = { lat: vehicle.lat, lng: vehicle.lng };
         var marker = new google.maps.marker.AdvancedMarkerElement({
           map: map, position: position, content: content
         });
-        entry = { marker: marker, position: position, frame: null };
+        var vehicleId = vehicle.id;
+        marker.addListener("click", function () { send({ type: "vehicle", id: vehicleId }); });
+        entry = { marker: marker, position: position, frame: null, badge: badge };
         vehicleMarkers[vehicle.id] = entry;
       } else if (entry.position.lat !== vehicle.lat || entry.position.lng !== vehicle.lng) {
         animateTo(entry, vehicle.lat, vehicle.lng);
       }
+      entry.badge.textContent = vehicle.label || "";
+      entry.badge.style.display = vehicle.label ? "" : "none";
+      entry.badge.classList.toggle("muted", !!vehicle.muted);
     });
     updatePinFocus();
     Object.keys(vehicleMarkers).forEach(function (id) {
@@ -364,6 +390,10 @@ const mapHtml = `<!DOCTYPE html>
     });
     map.addListener("click", closeWaitingAreas);
     map.addListener("dragstart", function () { send({ type: "drag" }); });
+    map.addListener("idle", function () {
+      var center = map.getCenter();
+      if (center && reportCenter) send({ type: "center", lat: center.lat(), lng: center.lng() });
+    });
     send({ type: "ready" });
   };
 
@@ -389,47 +419,94 @@ const mapHtml = `<!DOCTYPE html>
 </body>
 </html>`;
 
-function getMessageType(raw: unknown) {
+type MapMessage = { type?: string; lat?: number; lng?: number; id?: string };
+
+function parseMessage(raw: unknown): MapMessage | null {
   if (typeof raw !== "string") return null;
   try {
-    return (JSON.parse(raw) as { type?: string }).type ?? null;
+    return JSON.parse(raw) as MapMessage;
   } catch {
     return null;
   }
 }
 
+export type MapCenter = { lat: number; lng: number };
+
 export function TransitMap({
   state,
   onDrag,
+  onCenterChange,
+  onVehiclePress,
 }: {
   state: TransitMapState;
   onDrag?: () => void;
+  onCenterChange?: (center: MapCenter) => void;
+  onVehiclePress?: (id: string) => void;
 }) {
   const [ready, setReady] = useState(false);
   const onDragRef = useRef(onDrag);
+  const onCenterRef = useRef(onCenterChange);
+  const onVehicleRef = useRef(onVehiclePress);
 
   useEffect(() => {
     onDragRef.current = onDrag;
-  }, [onDrag]);
+    onCenterRef.current = onCenterChange;
+    onVehicleRef.current = onVehiclePress;
+  }, [onDrag, onCenterChange, onVehiclePress]);
 
   const handleMessage = (raw: unknown) => {
-    const type = getMessageType(raw);
-    if (type === "ready") setReady(true);
-    else if (type === "drag") onDragRef.current?.();
+    const message = parseMessage(raw);
+    if (message?.type === "ready") setReady(true);
+    else if (message?.type === "drag") onDragRef.current?.();
+    else if (message?.type === "vehicle" && typeof message.id === "string")
+      onVehicleRef.current?.(message.id);
+    else if (
+      message?.type === "center" &&
+      typeof message.lat === "number" &&
+      typeof message.lng === "number"
+    ) {
+      onCenterRef.current?.({ lat: message.lat, lng: message.lng });
+    }
   };
+  const lastSent = useRef<Pick<
+    TransitMapState,
+    "routeId" | "route" | "alternativeRoutes" | "waitingAreas"
+  > | null>(null);
   const webViewRef = useRef<WebView>(null);
   const frameRef = useRef<FrameRef | null>(null);
 
   useEffect(() => {
     if (!ready) return;
+    const last = lastSent.current;
+    const keepRoute =
+      !!last &&
+      last.routeId === state.routeId &&
+      last.route === state.route &&
+      last.alternativeRoutes === state.alternativeRoutes;
+    const keepWaitingAreas = !!last && last.waitingAreas === state.waitingAreas;
+    lastSent.current = {
+      routeId: state.routeId,
+      route: state.route,
+      alternativeRoutes: state.alternativeRoutes,
+      waitingAreas: state.waitingAreas,
+    };
+    const payload = JSON.stringify({
+      ...state,
+      route: keepRoute ? null : state.route,
+      alternativeRoutes: keepRoute ? undefined : state.alternativeRoutes,
+      waitingAreas: keepWaitingAreas ? undefined : state.waitingAreas,
+      keepRoute,
+      keepWaitingAreas,
+      reportCenter: !!onCenterRef.current,
+    });
     if (Platform.OS === "web") {
       frameRef.current?.contentWindow?.postMessage(
-        JSON.stringify({ type: "state", state }),
+        `{"type":"state","state":${payload}}`,
         "*",
       );
     } else {
       webViewRef.current?.injectJavaScript(
-        `window.applyState(${JSON.stringify(state)}); true;`,
+        `window.applyState(${payload}); true;`,
       );
     }
   }, [ready, state]);

@@ -1,13 +1,14 @@
 import { StatusBar } from "expo-status-bar";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
 import MapPin from "lucide-react-native/icons/map-pin";
+import MapPinned from "lucide-react-native/icons/map-pinned";
 import PersonStanding from "lucide-react-native/icons/person-standing";
 import Search from "lucide-react-native/icons/search";
 import UserRound from "lucide-react-native/icons/user-round";
 import Users from "lucide-react-native/icons/users";
 import UsersRound from "lucide-react-native/icons/users-round";
 import X from "lucide-react-native/icons/x";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -16,6 +17,7 @@ import {
   cancelPickup,
   getKnownActivePickup,
   loadActivePickup,
+  loadRequestStatus,
   maxPickupPassengers,
   minPickupPassengers,
   requestPickup,
@@ -43,17 +45,18 @@ import { PlaceSearchField } from "@/components/place-search-field";
 import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { TransitMap, type TransitMapState } from "@/components/transit-map";
 import { Routes } from "@/constants/routes";
+import { usePolling } from "@/hooks/use-polling";
 import { goBackOr } from "@/utils/navigation";
 
 import { ActivePickup } from "./active-pickup";
+import { BoardedScreen } from "./boarded-screen";
+import { PinLocationPicker } from "./pin-location-picker";
 
 const { brandBlue, softBlue, mutedText, text, error } = moduleColors;
 
 export default function PickupScreen() {
   const insets = useSafeAreaInsets();
   const chrome = useScrollChrome();
-  // Start from what's already known (prefetched on the home screen) and
-  // refresh in the background, so the screen opens without a loading state.
   const [active, setActive] = useState<PickupRequest | null>(
     getKnownActivePickup,
   );
@@ -66,6 +69,7 @@ export default function PickupScreen() {
   const [problem, setProblem] = useState("");
   const [busy, setBusy] = useState(false);
   const [mapOpen, setMapOpen] = useState(false);
+  const [pinOpen, setPinOpen] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -92,20 +96,29 @@ export default function PickupScreen() {
 
   const stop = vehicle === "jeep" ? recommended : null;
 
+  const [boarded, setBoarded] = useState<PickupRequest | null>(null);
+  const lastActive = useRef(active);
+  useEffect(() => {
+    if (active) lastActive.current = active;
+  }, [active]);
+
   const activeId = active?.id;
   const activeStatus = active?.status;
-  useEffect(() => {
-    if (!activeId) return;
-    let mounted = true;
-    const timer = setInterval(async () => {
+  usePolling(
+    async () => {
+      if (!activeId) return;
       const latest = await loadActivePickup();
-      if (mounted && latest.ok) setActive(latest.data);
-    }, 5_000);
-    return () => {
-      mounted = false;
-      clearInterval(timer);
-    };
-  }, [activeId, activeStatus]);
+      if (!latest.ok) return;
+      if (!latest.data && activeStatus === "accepted") {
+        const status = await loadRequestStatus(activeId);
+        if (status.ok && status.data === "completed")
+          setBoarded(lastActive.current);
+      }
+      setActive(latest.data);
+    },
+    5_000,
+    !!activeId,
+  );
 
   const goBack = () => goBackOr(Routes.commuterHome);
 
@@ -135,6 +148,18 @@ export default function PickupScreen() {
     setMapOpen(false);
     setActive(null);
   };
+
+  if (boarded) {
+    return (
+      <BoardedScreen
+        request={boarded}
+        onDone={() => {
+          setBoarded(null);
+          goBack();
+        }}
+      />
+    );
+  }
 
   if (active) {
     return (
@@ -174,6 +199,38 @@ export default function PickupScreen() {
             icon={<Search color={brandBlue} size={20} strokeWidth={2} />}
             allowCurrentLocation
           />
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Pin a different pickup location on the map"
+            onPress={() => setPinOpen(true)}
+            style={({ pressed }) => [
+              styles.pinOption,
+              pressed && styles.pressed,
+            ]}
+          >
+            <View style={styles.pinOptionIcon}>
+              <MapPinned color={brandBlue} size={16} strokeWidth={2} />
+            </View>
+            <Text style={[styles.pinOptionText, styles.flex]}>
+              Pin a different pickup location on the map
+            </Text>
+            <ChevronRight color={brandBlue} size={16} strokeWidth={2.5} />
+          </Pressable>
+          {pinOpen && (
+            <PinLocationPicker
+              initial={place ? { lat: place.lat, lng: place.lng } : null}
+              vehicle={vehicle}
+              stops={stops}
+              onPick={(next) => {
+                setProblem("");
+                setMapOpen(false);
+                setPinOpen(false);
+                setPlace(next);
+              }}
+              onClose={() => setPinOpen(false)}
+            />
+          )}
 
           {place && vehicle === "jeep" && !stop && (
             <View style={styles.recommendCard}>
@@ -448,6 +505,26 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   recommendIconPlace: { backgroundColor: "#c81e1e" },
+  pinOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: softBlue,
+  },
+  pinOptionIcon: {
+    width: 28,
+    height: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 14,
+    backgroundColor: softBlue,
+  },
+  pinOptionText: { color: brandBlue, fontFamily: "SoraBold", fontSize: 11 },
   mapHint: {
     color: brandBlue,
     fontFamily: "SoraBold",

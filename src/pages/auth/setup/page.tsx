@@ -5,7 +5,18 @@ import { router } from "expo-router";
 import Calendar1 from "lucide-react-native/icons/calendar-1";
 import ChevronLeft from "lucide-react-native/icons/chevron-left";
 import { createElement, useEffect, useState } from "react";
-import { BackHandler, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  BackHandler,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {

@@ -3,7 +3,6 @@ import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import Bus from "lucide-react-native/icons/bus";
 import MapPinSearch from "lucide-react-native/icons/map-pin-search";
-import Route from "lucide-react-native/icons/route";
 import { useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import Animated, {
@@ -17,7 +16,6 @@ import { loadActivePickup } from "@/api/v1/pickups/controllers";
 import { loadHome } from "@/api/v1/profile/controllers";
 import { loadWaitingAreas } from "@/api/v1/waiting-areas/controllers";
 import { BottomNav, bottomNavHeight } from "@/components/bottom-nav";
-import { EmptyState } from "@/components/empty-state";
 import { LoadingSprite } from "@/components/brand-logo";
 import {
   ActionCard,
@@ -34,6 +32,7 @@ import {
   DestinationSearchPanel,
   DestinationSearchTrigger,
 } from "@/pages/commuter/home/destination-search";
+import { TripHistory } from "@/pages/commuter/home/trip-history";
 
 const { brandBlue } = homeColors;
 const searchLayerGap = 14;
@@ -64,7 +63,6 @@ export default function CommuterHomeScreen() {
         return;
       }
       if (active) setFirstName(home.firstName);
-      // Warm the Pickup module so it opens without a loading screen.
       loadActivePickup();
       loadWaitingAreas();
     };
@@ -135,11 +133,14 @@ export default function CommuterHomeScreen() {
                 </ActionRow>
 
                 <SectionDivider />
-                <SectionHeader title="Trip History" />
-                <EmptyState
-                  icon={<Route color={brandBlue} size={32} strokeWidth={1.8} />}
-                  message="Your completed trips will appear here."
+                <SectionHeader
+                  title="Trip History"
+                  action={{
+                    label: "See all",
+                    onPress: () => router.push(Routes.commuterTripHistory),
+                  }}
                 />
+                <TripHistory limit={5} />
               </Animated.View>
             )}
           </View>

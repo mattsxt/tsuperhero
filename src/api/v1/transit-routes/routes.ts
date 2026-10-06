@@ -11,7 +11,6 @@ type GoogleRoutesResponse = {
   routes?: {
     polyline?: GooglePolyline;
     distanceMeters?: number;
-    // Seconds, formatted like "245s".
     duration?: string;
     legs?: { distanceMeters?: number; polyline?: GooglePolyline }[];
   }[];
@@ -36,8 +35,22 @@ export type RouteRow = {
 
 const routeTable = () => getSupabaseClient().from("route");
 
+export type LiveVehicleRow = {
+  vehicle_id: string;
+  vehicle_type: string;
+  plate_number: string;
+  vehicle_status: string;
+  max_capacity: number;
+  current_capacity: number;
+  latitude: number;
+  longitude: number;
+  route_id: string | null;
+  route_name: string | null;
+};
+
 export const routeTableRoutes = {
   listRoutes: () => routeTable().select("*").order("route_name"),
+  listLiveVehicles: () => getSupabaseClient().rpc("get_live_vehicles"),
 };
 
 export const transitRouteApi = {
@@ -63,7 +76,6 @@ export const transitRouteApi = {
     }).then((response) => response.json());
   },
 
-  // Traffic-aware road route with travel time, for live ETAs.
   etaRoute: (from: LatLng, to: LatLng): Promise<GoogleRoutesResponse> => {
     if (!googleMapsApiKey) {
       return Promise.reject(new Error("Missing Google Maps API key."));

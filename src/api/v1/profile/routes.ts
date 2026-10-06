@@ -22,8 +22,7 @@ export const profileRoutes = {
 
   upsertProfile: (
     profile: Omit<ProfileRow, "profile_id" | "profile_picture">,
-  ) =>
-    profileTable().upsert(profile, { onConflict: "user_id" }),
+  ) => profileTable().upsert(profile, { onConflict: "user_id" }),
 
   updateProfile: (userId: string, changes: ProfileChanges) =>
     profileTable().update(changes).eq("user_id", userId),

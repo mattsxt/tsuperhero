@@ -129,7 +129,10 @@ function getPictureUrl(path: string | null) {
   return path ? profileRoutes.getPictureUrl(path) : null;
 }
 
-type ProfileDetails = Omit<ProfileRow, "profile_id" | "user_id" | "user_type"> & {
+type ProfileDetails = Omit<
+  ProfileRow,
+  "profile_id" | "user_id" | "user_type"
+> & {
   user_type: UserType;
 };
 
