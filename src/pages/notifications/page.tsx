@@ -65,6 +65,7 @@ export default function NotificationsScreen() {
           onScroll={chrome.scrollHandler}
           scrollEventThrottle={16}
           contentContainerStyle={{
+            flexGrow: 1,
             paddingTop: chrome.headerHeight,
             paddingBottom: insets.bottom + bottomNavHeight,
           }}
@@ -157,8 +158,13 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   titleCollapsed: { fontSize: 17, lineHeight: 24 },
-  body: { paddingHorizontal: 12 },
-  emptyState: { alignItems: "center", paddingTop: 60, paddingHorizontal: 32 },
+  body: { flex: 1, paddingHorizontal: 12 },
+  emptyState: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 32,
+  },
   emptyIcon: {
     width: 72,
     height: 72,

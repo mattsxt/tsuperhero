@@ -26,6 +26,7 @@ export default function TripHistoryScreen() {
         onScroll={chrome.scrollHandler}
         scrollEventThrottle={16}
         contentContainerStyle={{
+          flexGrow: 1,
           paddingTop: chrome.headerHeight,
           paddingBottom: insets.bottom + 24,
         }}
@@ -35,6 +36,7 @@ export default function TripHistoryScreen() {
           <EmptyState
             icon={<Route color={brandBlue} size={32} strokeWidth={1.8} />}
             message="Trips you complete will show up here."
+            style={styles.centered}
           />
         </View>
       </Animated.ScrollView>
@@ -54,5 +56,6 @@ export default function TripHistoryScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#ffffff" },
-  body: { paddingHorizontal: 12, paddingTop: 18 },
+  body: { flex: 1, paddingHorizontal: 12, paddingTop: 18 },
+  centered: { flex: 1, justifyContent: "center" },
 });

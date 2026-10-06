@@ -41,6 +41,7 @@ export default function RentalRequestsScreen() {
         onScroll={chrome.scrollHandler}
         scrollEventThrottle={16}
         contentContainerStyle={{
+          flexGrow: 1,
           paddingTop: chrome.headerHeight,
           paddingBottom: insets.bottom + 24,
         }}
@@ -62,6 +63,7 @@ export default function RentalRequestsScreen() {
           <EmptyState
             icon={<Inbox color={brandBlue} size={32} strokeWidth={1.8} />}
             message={emptyMessages[tab]}
+            style={styles.centered}
           />
         </View>
       </Animated.ScrollView>
@@ -81,6 +83,7 @@ export default function RentalRequestsScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#ffffff" },
-  body: { paddingHorizontal: 12, paddingTop: 18 },
+  body: { flex: 1, paddingHorizontal: 12, paddingTop: 18 },
+  centered: { flex: 1, justifyContent: "center" },
   tabRow: { flexDirection: "row", gap: 6 },
 });
