@@ -4,18 +4,40 @@ import BusFront from "lucide-react-native/icons/bus-front";
 import CalendarDays from "lucide-react-native/icons/calendar-days";
 import ChevronLeft from "lucide-react-native/icons/chevron-left";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
+import Award from "lucide-react-native/icons/award";
+import CircleCheck from "lucide-react-native/icons/circle-check";
 import Flag from "lucide-react-native/icons/flag";
 import MapPin from "lucide-react-native/icons/map-pin";
 import NotebookPen from "lucide-react-native/icons/notebook-pen";
 import TriangleAlert from "lucide-react-native/icons/triangle-alert";
 import UserRoundCheck from "lucide-react-native/icons/user-round-check";
 import Users from "lucide-react-native/icons/users";
-import { useEffect, useState } from "react";
-import { BackHandler, Pressable, StyleSheet, Text, View } from "react-native";
+import { useCallback, useEffect, useState } from "react";
+import {
+  Alert,
+  BackHandler,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import Animated, { useAnimatedRef } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import type { Place } from "@/api/v1/places/controllers";
+import {
+  cancelRental,
+  combineDateTime,
+  findRentalDrivers,
+  loadMyRentals,
+  requestRental,
+  type CharterVehicle,
+  type Rental,
+  type RentalDriver,
+  type RentalTrip,
+  type TripType,
+} from "@/api/v1/rentals/controllers";
+import { LoadingSprite } from "@/components/brand-logo";
 import { DateTimeField } from "@/components/date-time-field";
 import { EmptyState } from "@/components/empty-state";
 import {
@@ -31,14 +53,14 @@ import {
   type VehicleOption,
 } from "@/components/module-ui";
 import { PlaceSearchField } from "@/components/place-search-field";
+import { RentalCard } from "@/components/rental-card";
 import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
+import { usePolling } from "@/hooks/use-polling";
 
 const { brandBlue, softBlue, text, error } = moduleColors;
 
 type Step = 1 | 2 | 3;
-type TripType = "one_way" | "round_trip";
-type CharterVehicle = "van" | "jeep" | "bus";
 
 const stepTitles = ["Trip details", "Vehicle", "Driver"];
 
@@ -74,6 +96,7 @@ const occasions = [
 ];
 
 const maxPassengers = 50;
+const rentalPollMs = 10_000;
 
 function startOfToday() {
   const today = new Date();
@@ -114,6 +137,113 @@ export default function RentalScreen() {
   const [passengers, setPassengers] = useState(1);
   const [notes, setNotes] = useState("");
   const [vehicle, setVehicle] = useState<CharterVehicle>("van");
+  const [drivers, setDrivers] = useState<RentalDriver[] | null>(null);
+  const [driverId, setDriverId] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+  const [rentals, setRentals] = useState<Rental[]>([]);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [notice, setNotice] = useState("");
+
+  const refreshRentals = useCallback(async () => {
+    const result = await loadMyRentals();
+    if (result.ok) setRentals(result.data);
+  }, []);
+
+  usePolling(refreshRentals, rentalPollMs);
+
+  const buildTrip = (): RentalTrip | null => {
+    if (!pickup || !destination || !tripDate || !pickupTime) return null;
+    return {
+      pickup,
+      destination,
+      pickupTime: combineDateTime(tripDate, pickupTime),
+      tripType,
+      returnTime:
+        tripType === "round_trip" && returnDate && returnTime
+          ? combineDateTime(returnDate, returnTime)
+          : null,
+      purpose: occasion,
+      passengers,
+      notes,
+    };
+  };
+
+  const searchDrivers = async () => {
+    const trip = buildTrip();
+    if (!trip) return;
+    setDrivers(null);
+    setDriverId(null);
+    const result = await findRentalDrivers(vehicle, trip);
+    if (!result.ok) {
+      setDrivers([]);
+      setProblem(result.error);
+      return;
+    }
+    setDrivers(result.data);
+  };
+
+  const resetForm = () => {
+    setPickup(null);
+    setDestination(null);
+    setTripDate(null);
+    setPickupTime(null);
+    setTripType("one_way");
+    setReturnDate(null);
+    setReturnTime(null);
+    setOccasion("");
+    setPassengers(1);
+    setNotes("");
+    setVehicle("van");
+    setDrivers(null);
+    setDriverId(null);
+  };
+
+  const sendRequest = async () => {
+    const trip = buildTrip();
+    const driver = drivers?.find((item) => item.driverId === driverId);
+    if (!trip || !driver || sending) return;
+    setSending(true);
+    setProblem("");
+    const result = await requestRental(driver, trip);
+    setSending(false);
+    if (!result.ok) {
+      setProblem(result.error);
+      searchDrivers();
+      return;
+    }
+    resetForm();
+    setNotice(
+      `Request sent to ${driver.name}. We'll notify you when they respond.`,
+    );
+    goToStep(1);
+    refreshRentals();
+  };
+
+  const confirmCancel = (rental: Rental) => {
+    Alert.alert(
+      "Cancel this rental?",
+      `Your rental to ${rental.destination} will be cancelled and the driver will be notified.`,
+      [
+        { text: "Keep", style: "cancel" },
+        {
+          text: "Cancel rental",
+          style: "destructive",
+          onPress: async () => {
+            setCancellingId(rental.id);
+            const result = await cancelRental(rental.id);
+            setCancellingId(null);
+            if (!result.ok) {
+              Alert.alert("Couldn't cancel", result.error);
+              return;
+            }
+            setRentals((current) =>
+              current.filter((item) => item.id !== rental.id),
+            );
+          },
+        },
+      ],
+    );
+  };
 
   const goToStep = (next: Step) => {
     setProblem("");
@@ -159,7 +289,7 @@ export default function RentalScreen() {
   const stepProblems: Record<Step, () => string | null> = {
     1: getTripProblem,
     2: getVehicleProblem,
-    3: () => "No drivers are available for this trip yet.",
+    3: () => (driverId ? null : "Choose a driver to send your request to."),
   };
 
   const canGoForward = step < 3 && !stepProblems[step]();
@@ -168,6 +298,12 @@ export default function RentalScreen() {
   const advance = () => {
     const problem = stepProblems[step]();
     if (problem) return setProblem(problem);
+    const trip = buildTrip();
+    if (step === 1 && trip && trip.pickupTime.getTime() <= Date.now()) {
+      return setProblem("Choose a pickup time later than now.");
+    }
+    setNotice("");
+    if (step === 2) searchDrivers();
     goToStep((step + 1) as Step);
   };
 
@@ -207,6 +343,47 @@ export default function RentalScreen() {
         <View style={styles.body}>
           {step === 1 && (
             <>
+              {!!notice && (
+                <View style={[styles.infoCard, styles.successCard]}>
+                  <CircleCheck color="#15803d" size={18} strokeWidth={2} />
+                  <Text style={[styles.infoText, styles.successText]}>
+                    {notice}
+                  </Text>
+                </View>
+              )}
+              {rentals.length > 0 && (
+                <>
+                  <SectionTitle
+                    icon={
+                      <BusFront color="#ffffff" size={18} strokeWidth={2} />
+                    }
+                    title="Your rental requests"
+                  />
+                  <View style={styles.rentalList}>
+                    {rentals.map((rental) => (
+                      <RentalCard
+                        key={rental.id}
+                        rental={rental}
+                        viewer="commuter"
+                        disabled={!!cancellingId}
+                        actions={
+                          (rental.status === "pending" && !rental.expired) ||
+                          rental.status === "accepted"
+                            ? [
+                                {
+                                  label: "CANCEL RENTAL",
+                                  tone: "danger",
+                                  busy: cancellingId === rental.id,
+                                  onPress: () => confirmCancel(rental),
+                                },
+                              ]
+                            : []
+                        }
+                      />
+                    ))}
+                  </View>
+                </>
+              )}
               <SectionTitle
                 icon={<MapPin color="#ffffff" size={18} strokeWidth={2} />}
                 title="Where are we going?"
@@ -392,16 +569,49 @@ export default function RentalScreen() {
                 }
                 title="Available drivers"
               />
-              <EmptyState
-                icon={
-                  <UserRoundCheck
-                    color={brandBlue}
-                    size={32}
-                    strokeWidth={1.8}
+              {drivers === null ? (
+                <LoadingSprite style={styles.loading} label="Finding drivers" />
+              ) : drivers.length === 0 ? (
+                <EmptyState
+                  icon={
+                    <UserRoundCheck
+                      color={brandBlue}
+                      size={32}
+                      strokeWidth={1.8}
+                    />
+                  }
+                  title="No drivers available"
+                  message={`No ${vehicleNames[vehicle].toLowerCase()} driver is free for ${passengers} ${passengers === 1 ? "passenger" : "passengers"} on that date. Try another date or vehicle.`}
+                />
+              ) : (
+                <>
+                  <Text style={styles.driverHint}>
+                    {drivers.length}{" "}
+                    {drivers.length === 1 ? "driver is" : "drivers are"} free
+                    for your trip. Choose one to send your request.
+                  </Text>
+                  <View style={styles.driverList}>
+                    {drivers.map((driver) => (
+                      <DriverOption
+                        key={driver.driverId}
+                        driver={driver}
+                        selected={driver.driverId === driverId}
+                        onPress={() => {
+                          setProblem("");
+                          setDriverId(driver.driverId);
+                        }}
+                      />
+                    ))}
+                  </View>
+                  <Problem message={problem} />
+                  <ModuleButton
+                    label={sending ? "SENDING..." : "SEND REQUEST"}
+                    disabled={!driverId || sending}
+                    onPress={sendRequest}
                   />
-                }
-                message="Drivers available for this vehicle and group size will show up here."
-              />
+                </>
+              )}
+              {drivers?.length === 0 && <Problem message={problem} />}
             </>
           )}
         </View>
@@ -506,6 +716,66 @@ function StepArrow({
   );
 }
 
+function DriverOption({
+  driver,
+  selected,
+  onPress,
+}: {
+  driver: RentalDriver;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="radio"
+      accessibilityState={{ selected }}
+      accessibilityLabel={`${driver.name}, ${driver.vehicleType} ${driver.plateNumber}, seats ${driver.maxCapacity}`}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.driver,
+        selected && styles.driverSelected,
+        pressed && styles.pressed,
+      ]}
+    >
+      <View style={styles.driverAvatar}>
+        <Text style={styles.driverInitial}>
+          {driver.name.charAt(0).toUpperCase()}
+        </Text>
+      </View>
+      <View style={styles.flex}>
+        <Text style={styles.driverName} numberOfLines={1}>
+          {driver.name}
+        </Text>
+        <Text style={styles.driverMeta} numberOfLines={1}>
+          {driver.plateNumber} · {driver.isModern ? "Modern " : ""}
+          {driver.vehicleType} · {driver.maxCapacity} seats
+        </Text>
+        <View style={styles.driverTags}>
+          {driver.yearsOfExperience !== null && (
+            <View style={styles.driverTag}>
+              <Award color={brandBlue} size={11} strokeWidth={2.2} />
+              <Text style={styles.driverTagText}>
+                {driver.yearsOfExperience}{" "}
+                {driver.yearsOfExperience === 1 ? "yr" : "yrs"} driving
+              </Text>
+            </View>
+          )}
+          {!!driver.cooperative && (
+            <View style={styles.driverTag}>
+              <Text style={styles.driverTagText} numberOfLines={1}>
+                {driver.cooperative}
+              </Text>
+            </View>
+          )}
+        </View>
+      </View>
+      <View style={[styles.radio, selected && styles.radioSelected]}>
+        {selected && <View style={styles.radioDot} />}
+      </View>
+    </Pressable>
+  );
+}
+
 function Problem({ message }: { message: string }) {
   if (!message) return null;
   return <Text style={styles.problem}>{message}</Text>;
@@ -574,6 +844,71 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   warningText: { color: error },
+  successCard: { marginTop: 14, backgroundColor: "#dcfce7" },
+  successText: { color: "#166534" },
+  rentalList: { gap: 10 },
+  loading: { marginTop: 48 },
+  pressed: { opacity: 0.8 },
+  driverHint: {
+    color: text,
+    fontFamily: "Sora",
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 4,
+  },
+  driverList: { gap: 10, marginTop: 12 },
+  driver: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 12,
+    borderWidth: 1.5,
+    borderColor: "#d9e2f3",
+    borderRadius: 12,
+    backgroundColor: "#ffffff",
+  },
+  driverSelected: { borderColor: brandBlue, backgroundColor: softBlue },
+  driverAvatar: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 20,
+    backgroundColor: brandBlue,
+  },
+  driverInitial: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 16 },
+  driverName: { color: brandBlue, fontFamily: "SoraBold", fontSize: 13 },
+  driverMeta: { color: text, fontFamily: "Sora", fontSize: 10, marginTop: 2 },
+  driverTags: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 6 },
+  driverTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    maxWidth: "100%",
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 999,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#d9e2f3",
+  },
+  driverTagText: { color: brandBlue, fontFamily: "SoraBold", fontSize: 8 },
+  radio: {
+    width: 20,
+    height: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: "#b9c6e4",
+  },
+  radioSelected: { borderColor: brandBlue },
+  radioDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: brandBlue,
+  },
   problem: {
     color: error,
     fontFamily: "Sora",

@@ -6,6 +6,7 @@ import type {
   PickupDriverRow,
   PickupRequestRow,
   RequestStatus,
+  RiderRow,
 } from "@/api/v1/pickups/types";
 import { attempt, failure, unwrap, type Result } from "@/api/v1/result";
 import {
@@ -30,7 +31,7 @@ export type PickupRequest = {
 export const minPickupPassengers = 1;
 export const maxPickupPassengers = 10;
 
-async function getCommuterId() {
+export async function getCommuterId() {
   const { session } = await unwrap(authRoutes.getSession());
   if (!session) throw new Error("Sign in again to request a pickup.");
   const { id, email } = session.user;
@@ -100,19 +101,22 @@ type PickupForm = {
   passengers: number;
   location: PickupPoint | null;
   waitingArea: PickupPoint | null;
+  riders: Rider[];
 };
 
 export async function requestPickup(
   form: PickupForm,
 ): Promise<Result<PickupRequest>> {
-  const { vehicle, passengers, location, waitingArea } = form;
+  const { vehicle, passengers, location, waitingArea, riders } = form;
 
   if (!location) {
     return failure("Choose where you are so drivers can find you.");
   }
-  if (vehicle === "jeep" && !waitingArea) {
+  if (!waitingArea) {
     return failure(
-      "There’s no waiting area near you. Jeepneys only pick up at waiting areas.",
+      vehicle === "jeep"
+        ? "There’s no waiting area near you. Jeepneys only pick up at waiting areas."
+        : "There’s no waiting area near you. Tricycles pick up at waiting areas.",
     );
   }
   if (passengers < minPickupPassengers || passengers > maxPickupPassengers) {
@@ -120,8 +124,13 @@ export async function requestPickup(
       `Choose between ${minPickupPassengers} and ${maxPickupPassengers} passengers.`,
     );
   }
+  if (riders.length + 1 > passengers) {
+    return failure(
+      `You're riding with ${riders.length} ${riders.length === 1 ? "person" : "people"}, so choose at least ${riders.length + 1} passengers.`,
+    );
+  }
 
-  const point = (vehicle === "jeep" ? waitingArea : null) ?? location;
+  const point = waitingArea;
 
   return attempt(async () => {
     const commuterId = await getCommuterId();
@@ -140,6 +149,21 @@ export async function requestPickup(
     } catch (error) {
       await pickupRoutes.deleteRequest(request.request_id);
       throw error;
+    }
+
+    if (riders.length > 0) {
+      try {
+        await unwrap(
+          pickupRoutes.addCompanions(
+            request.request_id,
+            riders.map((rider) => rider.userId),
+          ),
+        );
+      } catch (error) {
+        await pickupRoutes.deletePickup(request.request_id);
+        await pickupRoutes.deleteRequest(request.request_id);
+        throw error;
+      }
     }
 
     knownActivePickup = {
@@ -228,6 +252,8 @@ export type Booking = {
   plateNumber: string | null;
   vehicleType: string | null;
   driverName: string | null;
+  rating: { score: number; feedback: string | null } | null;
+  sharedBy: string | null;
 };
 
 export function loadBookings(): Promise<Result<Booking[]>> {
@@ -245,6 +271,11 @@ export function loadBookings(): Promise<Result<Booking[]>> {
       plateNumber: row.plate_number,
       vehicleType: row.vehicle_type,
       driverName: row.driver_name,
+      rating:
+        row.rating_score === null
+          ? null
+          : { score: row.rating_score, feedback: row.rating_feedback },
+      sharedBy: row.shared_by ?? null,
     }));
   });
 }
@@ -293,5 +324,33 @@ export function loadTripHistory(): Promise<Result<TripRide[]>> {
       vehicleType: row.vehicle_type,
       driverName: row.driver_name,
     }));
+  });
+}
+
+export type Rider = {
+  userId: string;
+  name: string;
+  initials: string;
+  picture: string | null;
+};
+
+const toRider = (row: RiderRow): Rider => {
+  const first = row.first_name?.trim() ?? "";
+  const last = row.last_name?.trim() ?? "";
+  return {
+    userId: row.user_id,
+    name: [first, last].filter(Boolean).join(" ") || "Commuter",
+    initials: `${first.charAt(0)}${last.charAt(0)}`.toUpperCase() || "?",
+    picture: row.profile_picture ?? null,
+  };
+};
+
+export const maxRiders = maxPickupPassengers - 1;
+
+export function searchRiders(query: string): Promise<Result<Rider[]>> {
+  return attempt(async () => {
+    const rows: RiderRow[] =
+      (await unwrap(pickupRoutes.searchCommuters(query.trim()))) ?? [];
+    return rows.map(toRider);
   });
 }

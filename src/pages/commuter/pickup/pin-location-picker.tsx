@@ -1,12 +1,10 @@
 import ArrowLeft from "lucide-react-native/icons/arrow-left";
-import MapPin from "lucide-react-native/icons/map-pin";
 import PersonStanding from "lucide-react-native/icons/person-standing";
 import { useEffect, useMemo, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 
-import type { PickupVehicle } from "@/api/v1/pickups/controllers";
 import {
   describePoint,
   getLastKnownPoint,
@@ -33,13 +31,11 @@ const defaultCenter: MapCenter = { lat: 13.6218, lng: 123.1948 };
 
 export function PinLocationPicker({
   initial,
-  vehicle,
   stops,
   onPick,
   onClose,
 }: {
   initial: MapCenter | null;
-  vehicle: PickupVehicle;
   stops: WaitingArea[];
   onPick: (place: Place) => void;
   onClose: () => void;
@@ -62,9 +58,8 @@ export function PinLocationPicker({
   }, [initial]);
 
   const nearest = useMemo(
-    () =>
-      center && vehicle === "jeep" ? recommendWaitingArea(center, stops) : null,
-    [center, vehicle, stops],
+    () => (center ? recommendWaitingArea(center, stops) : null),
+    [center, stops],
   );
 
   const mapState = useMemo<TransitMapState>(
@@ -72,16 +67,13 @@ export function PinLocationPicker({
       routeId: null,
       route: null,
       vehicles: [],
-      waitingAreas:
-        vehicle === "jeep"
-          ? stops.map(({ id, name, lat, lng }) => ({
-              id,
-              name,
-              lat,
-              lng,
-              kind: "stop" as const,
-            }))
-          : [],
+      waitingAreas: stops.map(({ id, name, lat, lng }) => ({
+        id,
+        name,
+        lat,
+        lng,
+        kind: "stop" as const,
+      })),
       pickupLine:
         center && nearest
           ? [
@@ -95,7 +87,7 @@ export function PinLocationPicker({
       padTop: 0,
       padBottom: 0,
     }),
-    [vehicle, stops, center, nearest, start],
+    [stops, center, nearest, start],
   );
 
   const confirm = async () => {
@@ -142,38 +134,27 @@ export function PinLocationPicker({
         </View>
 
         <View style={[styles.card, { paddingBottom: insets.bottom + 16 }]}>
-          {vehicle === "jeep" ? (
-            nearest ? (
-              <View style={styles.preview}>
-                <View style={styles.previewIcon}>
-                  <PersonStanding color="#ffffff" size={18} strokeWidth={2} />
-                </View>
-                <View style={styles.flex}>
-                  <Text style={styles.previewLabel}>NEAREST PICKUP POINT</Text>
-                  <Text style={styles.previewName} numberOfLines={1}>
-                    {nearest.name}
-                  </Text>
-                  <Text style={styles.previewMeta}>
-                    {formatDistance(nearest.distanceMeters)} from your pin ·
-                    about {nearest.walkMinutes} min walk
-                  </Text>
-                </View>
-              </View>
-            ) : (
-              <Text style={styles.previewWarning}>
-                No waiting area within walking distance of this spot. Move the
-                pin closer to a jeepney route.
-              </Text>
-            )
-          ) : (
+          {nearest ? (
             <View style={styles.preview}>
-              <View style={[styles.previewIcon, styles.previewIconPlace]}>
-                <MapPin color="#ffffff" size={18} strokeWidth={2} />
+              <View style={styles.previewIcon}>
+                <PersonStanding color="#ffffff" size={18} strokeWidth={2} />
               </View>
-              <Text style={[styles.previewMeta, styles.flex]}>
-                Tricycles pick you up right at the pin.
-              </Text>
+              <View style={styles.flex}>
+                <Text style={styles.previewLabel}>NEAREST PICKUP POINT</Text>
+                <Text style={styles.previewName} numberOfLines={1}>
+                  {nearest.name}
+                </Text>
+                <Text style={styles.previewMeta}>
+                  {formatDistance(nearest.distanceMeters)} from your pin · about{" "}
+                  {nearest.walkMinutes} min walk
+                </Text>
+              </View>
             </View>
+          ) : (
+            <Text style={styles.previewWarning}>
+              No waiting area within walking distance of this spot. Move the pin
+              closer to a route.
+            </Text>
           )}
 
           <Pressable
@@ -289,7 +270,6 @@ const styles = StyleSheet.create({
     borderRadius: 17,
     backgroundColor: "#1e9e45",
   },
-  previewIconPlace: { backgroundColor: pinRed },
   previewLabel: { color: mutedText, fontFamily: "SoraBold", fontSize: 8 },
   previewName: {
     color: brandBlue,

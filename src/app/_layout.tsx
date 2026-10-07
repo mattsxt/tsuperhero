@@ -5,6 +5,7 @@ import { useColorScheme } from "react-native";
 
 import { AnimatedSplashOverlay } from "@/components/animated-icon";
 import type { TabTransition } from "@/components/bottom-nav";
+import { NotificationSync } from "@/components/notification-sync";
 import { AppFonts } from "@/constants/fonts";
 
 SplashScreen.preventAutoHideAsync();
@@ -31,6 +32,7 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
       <AnimatedSplashOverlay />
+      <NotificationSync />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="landing/index" />
@@ -57,6 +59,7 @@ export default function RootLayout() {
         />
         <Stack.Screen name="transit/rental-requests/index" />
         <Stack.Screen name="transit/trip-history/index" />
+        <Stack.Screen name="commuter/trip-history/index" />
       </Stack>
     </ThemeProvider>
   );

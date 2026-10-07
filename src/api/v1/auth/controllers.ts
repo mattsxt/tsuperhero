@@ -5,6 +5,7 @@ import {
   getPasswordProblem,
 } from "@/api/v1/auth/validation";
 import { getErrorMessage } from "@/api/v1/client";
+import { forgetPushToken } from "@/api/v1/notifications/controllers";
 import {
   getSignedInRoute,
   unsupportedAccountMessage,
@@ -78,6 +79,7 @@ export async function completeSignUp(password: string): Promise<Result> {
   if (problem) return failure(problem);
   return attempt(async () => {
     await unwrap(authRoutes.updatePassword(password));
+    await forgetPushToken();
     const { error } = await authRoutes.signOut();
     if (error) throw error;
   });
@@ -85,6 +87,7 @@ export async function completeSignUp(password: string): Promise<Result> {
 
 export async function logout(): Promise<Result> {
   return attempt(async () => {
+    await forgetPushToken();
     const { error } = await authRoutes.signOut();
     if (error) throw error;
   });

@@ -16,7 +16,8 @@ import Animated, {
 } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 
-const collapseOffset = 8;
+const collapseOffset = 32;
+const expandOffset = 4;
 const directionThreshold = 6;
 
 const chromeDuration = 250;
@@ -63,7 +64,9 @@ export function useScrollChrome(): ScrollChrome {
     lastY.value = y;
     if (lockedValue.value) return;
 
-    const shouldCollapse = y > collapseOffset;
+    const shouldCollapse = collapsedValue.value
+      ? y > expandOffset
+      : y > collapseOffset;
     if (shouldCollapse !== collapsedValue.value) {
       collapsedValue.value = shouldCollapse;
       scheduleOnRN(setScrolledPast, shouldCollapse);
@@ -80,8 +83,15 @@ export function useScrollChrome(): ScrollChrome {
 
   const onHeaderLayout = (event: LayoutChangeEvent) => {
     const { height } = event.nativeEvent.layout;
-    if (collapsed) setCollapsedHeaderHeight(height);
-    else setHeaderHeight(height);
+    if (collapsed) {
+      setCollapsedHeaderHeight(height);
+      return;
+    }
+    if (collapsedHeaderHeight !== null && height <= collapsedHeaderHeight)
+      return;
+    setHeaderHeight((current) =>
+      Math.abs(current - height) < 1 ? current : height,
+    );
   };
 
   const setLocked = (next: boolean) => {

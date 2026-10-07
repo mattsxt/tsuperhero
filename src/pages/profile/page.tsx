@@ -2,8 +2,8 @@ import { BlurTargetView } from "expo-blur";
 import { Image } from "expo-image";
 import { router, useFocusEffect } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import CircleUserRound from "lucide-react-native/icons/circle-user-round";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
-import ClipboardList from "lucide-react-native/icons/clipboard-list";
 import FileText from "lucide-react-native/icons/file-text";
 import LogOut from "lucide-react-native/icons/log-out";
 import ShieldCog from "lucide-react-native/icons/shield-cog";
@@ -22,6 +22,7 @@ import { LoadingSprite } from "@/components/brand-logo";
 import {
   ExpandedOnly,
   headerLayoutTransition,
+  headerLogoTransition,
   headerTitleTransition,
   StickyHeader,
   useScrollChrome,
@@ -144,24 +145,12 @@ export default function ProfileScreen() {
                   <ShieldCog color={brandBlue} size={18} strokeWidth={1.8} />
                 }
               />
-              {summary.userType === "transit_personnel" ? (
+              {summary.userType === "transit_personnel" && (
                 <ActionRow
                   label="Vehicles & Documents"
                   onPress={() => router.push(Routes.profileVehicles)}
                   icon={
                     <FileText color={brandBlue} size={18} strokeWidth={1.8} />
-                  }
-                />
-              ) : (
-                <ActionRow
-                  label="My Bookings"
-                  onPress={() => router.push(Routes.profileBookings)}
-                  icon={
-                    <ClipboardList
-                      color={brandBlue}
-                      size={18}
-                      strokeWidth={1.8}
-                    />
                   }
                 />
               )}
@@ -186,20 +175,38 @@ export default function ProfileScreen() {
               { paddingTop: insets.top + (chrome.collapsed ? 10 : 16) },
             ]}
           >
-            <Animated.Text
+            <View
               style={[
-                styles.title,
-                chrome.collapsed && styles.titleCollapsed,
-                headerTitleTransition,
+                styles.headerRow,
+                chrome.collapsed && styles.headerRowCollapsedIcon,
               ]}
             >
-              User Profile and Actions
-            </Animated.Text>
-            <ExpandedOnly collapsed={chrome.collapsed}>
-              <Text style={styles.subtitle}>
-                Manage your own profile and settings
-              </Text>
-            </ExpandedOnly>
+              <View style={styles.headerTextBlock}>
+                <Animated.Text
+                  style={[
+                    styles.title,
+                    chrome.collapsed && styles.titleCollapsed,
+                    headerTitleTransition,
+                  ]}
+                >
+                  User Profile and Actions
+                </Animated.Text>
+                <ExpandedOnly collapsed={chrome.collapsed}>
+                  <Text style={styles.subtitle}>
+                    Manage your own profile and settings
+                  </Text>
+                </ExpandedOnly>
+              </View>
+              <Animated.View
+                style={[
+                  styles.headerIcon,
+                  chrome.collapsed && styles.headerIconCollapsed,
+                  headerLogoTransition,
+                ]}
+              >
+                <CircleUserRound color="#ffffff" size={40} strokeWidth={1.8} />
+              </Animated.View>
+            </View>
           </Animated.View>
         </StickyHeader>
       </BlurTargetView>
@@ -272,6 +279,29 @@ const styles = StyleSheet.create({
     backgroundColor: headerBlue,
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
+  },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  headerRowCollapsedIcon: { alignItems: "center" },
+  headerTextBlock: { flex: 1 },
+  headerIcon: {
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+    opacity: 1,
+    transform: [{ scale: 1 }],
+  },
+  headerIconCollapsed: {
+    width: 0,
+    height: 0,
+    opacity: 0,
+    transform: [{ scale: 0.4 }],
   },
   headerCollapsed: { paddingBottom: 14 },
   title: {

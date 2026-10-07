@@ -17,7 +17,8 @@
         "backgroundImage": "./src/assets/images/android-icon-background.png",
         "monochromeImage": "./src/assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.xorti.tsuperhero"
     },
     "web": {
       "output": "static",
@@ -35,13 +36,27 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Tsuperhero uses your location to fill in your pickup point."
+          "locationWhenInUsePermission": "Tsuperhero uses your location to fill in your pickup point and to share your vehicle during a trip.",
+          "locationAlwaysAndWhenInUsePermission": "Tsuperhero keeps sharing your vehicle's location with commuters and your cooperative while a trip is active, even when the app is in the background.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true,
+          "isIosBackgroundLocationEnabled": true
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./src/assets/images/notification-icon.png",
+          "color": "#1034A6",
+          "defaultChannel": "updates"
         }
       ],
       [
         "expo-font",
         {
-          "fonts": ["./src/assets/fonts/Sora.ttf"]
+          "fonts": [
+            "./src/assets/fonts/Sora.ttf"
+          ]
         }
       ],
       [
@@ -56,6 +71,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "c265ed6e-49db-42fe-abab-d085be505639"
+      }
+    },
+    "owner": "xorti"
   }
 }

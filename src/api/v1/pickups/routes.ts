@@ -61,6 +61,15 @@ export const pickupRoutes = {
 
   findMyTripHistory: () => getSupabaseClient().rpc("get_my_trip_history"),
 
+  searchCommuters: (query: string) =>
+    getSupabaseClient().rpc("search_commuters", { p_query: query }),
+
+  addCompanions: (requestId: string, userIds: string[]) =>
+    getSupabaseClient().rpc("add_pickup_companions", {
+      p_request_id: requestId,
+      p_user_ids: userIds,
+    }),
+
   findRequestStatus: (requestId: string) =>
     requestTable()
       .select("request_status")

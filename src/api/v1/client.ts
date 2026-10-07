@@ -3,6 +3,8 @@ import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import Constants from "expo-constants";
 import { AppState, Platform } from "react-native";
 
+import { toUserMessage } from "@/api/v1/errors";
+
 let client: SupabaseClient | undefined;
 
 export function getSupabaseClient() {
@@ -41,13 +43,5 @@ export function getSupabaseClient() {
 }
 
 export function getErrorMessage(error: unknown) {
-  if (
-    error &&
-    typeof error === "object" &&
-    "message" in error &&
-    typeof error.message === "string"
-  ) {
-    return error.message;
-  }
-  return "Something went wrong.";
+  return toUserMessage(error);
 }

@@ -20,6 +20,13 @@ import { LoadingSprite } from "@/components/brand-logo";
 const { brandBlue, error: errorRed, mutedText, softBlue, text } = moduleColors;
 
 const maxSuggestions = 6;
+
+function placeLabel(place: Place) {
+  const address = place.address.trim();
+  if (!address || place.name.includes(address)) return place.name;
+  if (address.includes(place.name)) return address;
+  return `${place.name}, ${address}`;
+}
 const searchDelayMs = 300;
 
 export function PlaceSearchField({
@@ -39,12 +46,18 @@ export function PlaceSearchField({
 }) {
   const session = useRef(createPlacesSession());
   const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [query, setQuery] = useState(value?.name ?? "");
+  const [query, setQuery] = useState(value ? placeLabel(value) : "");
+  const [shownId, setShownId] = useState(value?.id ?? null);
   const [open, setOpen] = useState(false);
   const [searching, setSearching] = useState(false);
   const [busy, setBusy] = useState(false);
   const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
   const [searchError, setSearchError] = useState("");
+
+  if (value && value.id !== shownId) {
+    setShownId(value.id);
+    setQuery(placeLabel(value));
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -71,7 +84,8 @@ export function PlaceSearchField({
   );
 
   const choose = (place: Place) => {
-    setQuery(place.name);
+    setShownId(place.id);
+    setQuery(placeLabel(place));
     setOpen(false);
     onChange(place);
     session.current = createPlacesSession();
@@ -105,6 +119,7 @@ export function PlaceSearchField({
   };
 
   const clear = () => {
+    setShownId(null);
     setQuery("");
     setSuggestions([]);
     onChange(null);
@@ -118,7 +133,10 @@ export function PlaceSearchField({
           setQuery(next);
           setOpen(true);
           setSearching(true);
-          if (value) onChange(null);
+          if (value) {
+            setShownId(null);
+            onChange(null);
+          }
         }}
         onFocus={() => {
           if (blurTimer.current) clearTimeout(blurTimer.current);
@@ -161,12 +179,6 @@ export function PlaceSearchField({
           </View>
         }
       />
-
-      {!!value && !open && (
-        <Text style={styles.selectedAddress} numberOfLines={1}>
-          {value.address}
-        </Text>
-      )}
 
       {open && (
         <Animated.View
@@ -228,13 +240,6 @@ export function PlaceSearchField({
 const styles = StyleSheet.create({
   pressed: { opacity: 0.7 },
   trailing: { flexDirection: "row", alignItems: "center", gap: 12 },
-  selectedAddress: {
-    color: mutedText,
-    fontFamily: "Sora",
-    fontSize: 9,
-    marginTop: 5,
-    marginLeft: 4,
-  },
   dropdown: {
     marginTop: 6,
     paddingVertical: 6,

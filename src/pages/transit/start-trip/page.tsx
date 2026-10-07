@@ -18,6 +18,11 @@ import {
   Text,
   View,
 } from "react-native";
+import Animated, {
+  FadeInDown,
+  FadeOutDown,
+  LinearTransition,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
@@ -40,6 +45,10 @@ import {
   loadRouteGeometry,
   type LatLng,
 } from "@/api/v1/transit-routes/controllers";
+import {
+  startLocationSharing,
+  stopLocationSharing,
+} from "@/api/v1/operator/location-sharing";
 import { watchLocation } from "@/api/v1/places/controllers";
 import { EmptyState } from "@/components/empty-state";
 import { LoadingSprite } from "@/components/brand-logo";
@@ -68,6 +77,9 @@ const movedMeters = 15;
 const movingSpeedMps = 1.5;
 const myVehicleZoom = 16;
 const pickupPollMs = 5_000;
+const overlayLayout = LinearTransition.duration(220);
+const overlayEnter = FadeInDown.duration(220);
+const overlayExit = FadeOutDown.duration(180);
 const boardMeters = 40;
 const boardRetryMs = 3_000;
 
@@ -155,6 +167,7 @@ function Trip({ details }: { details: AssignmentDetails }) {
   const [routePath, setRoutePath] = useState<LatLng[] | null>(null);
   const [status, setStatus] = useState<TripStatus>("idle");
   const [starting, setStarting] = useState(false);
+  const [backgroundSharing, setBackgroundSharing] = useState(false);
   const [fix, setFix] = useState<LocationObject | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [watchAttempt, setWatchAttempt] = useState(0);
@@ -246,7 +259,7 @@ function Trip({ details }: { details: AssignmentDetails }) {
   }, [onTrip, finalizing]);
 
   useEffect(() => {
-    if (!onTrip) return;
+    if (!onTrip || backgroundSharing) return;
     const ping = async () => {
       if (!latestCoords.current) return;
       const result = await shareLocation(latestCoords.current);
@@ -260,7 +273,7 @@ function Trip({ details }: { details: AssignmentDetails }) {
     ping();
     const timer = setInterval(ping, pingMs);
     return () => clearInterval(timer);
-  }, [onTrip]);
+  }, [onTrip, backgroundSharing]);
 
   useEffect(() => {
     if (!onTrip) return;
@@ -348,6 +361,7 @@ function Trip({ details }: { details: AssignmentDetails }) {
 
   useEffect(
     () => () => {
+      stopLocationSharing();
       if (tripActive.current) endTrip(distanceDone.current);
       else if (!savedState.current?.startsWith("idle:"))
         saveTripState("idle", 0);
@@ -419,6 +433,16 @@ function Trip({ details }: { details: AssignmentDetails }) {
     setCount(0);
     setMarkedFull(false);
     setStatus("in-transit");
+    const sharing = await startLocationSharing();
+    if (!tripActive.current) return;
+    setBackgroundSharing(sharing.mode === "background");
+    if (sharing.backgroundDenied)
+      setToast(
+        nextToast(
+          "Allow location access all the time to keep sharing while the app is in the background.",
+          "info",
+        ),
+      );
   };
 
   const finalizeTrip = async () => {
@@ -433,6 +457,8 @@ function Trip({ details }: { details: AssignmentDetails }) {
     }
     tripActive.current = false;
     boardingAttempts.current.clear();
+    stopLocationSharing();
+    setBackgroundSharing(false);
     setPickups([]);
     setAccepted([]);
     setStatus("idle");
@@ -455,7 +481,14 @@ function Trip({ details }: { details: AssignmentDetails }) {
   const acceptRequest = async (pickup: NearbyPickup) => {
     if (acceptingId) return;
     if (pickup.passengers > seatsLeft) {
-      setToast(nextToast("Not enough seats for this request.", "danger"));
+      setToast(
+        nextToast(
+          markedFull
+            ? "You marked the vehicle as full, so you can't accept new passengers."
+            : `This request needs ${pickup.passengers} ${pickup.passengers === 1 ? "seat" : "seats"}, but only ${Math.max(seatsLeft, 0)} ${seatsLeft === 1 ? "is" : "are"} left.`,
+          "danger",
+        ),
+      );
       return;
     }
     setAcceptingId(pickup.id);
@@ -574,7 +607,13 @@ function Trip({ details }: { details: AssignmentDetails }) {
         style={[styles.overlayStack, { bottom: overlayBottom }]}
       >
         {toast && (
-          <View style={[styles.toast, toastTones[toast.tone].container]}>
+          <Animated.View
+            key={toast.id}
+            entering={overlayEnter}
+            exiting={overlayExit}
+            layout={overlayLayout}
+            style={[styles.toast, toastTones[toast.tone].container]}
+          >
             <CircleAlert
               color={toastTones[toast.tone].color}
               size={12}
@@ -603,25 +642,31 @@ function Trip({ details }: { details: AssignmentDetails }) {
                 />
               </Pressable>
             )}
-          </View>
+          </Animated.View>
         )}
         {pickups.slice(0, maxPickupCards).map((pickup) => (
-          <PickupCard
+          <Animated.View
             key={pickup.id}
-            pickup={pickup}
-            distanceMeters={
-              coords
-                ? getDistanceMeters(
-                    { lat: coords.latitude, lng: coords.longitude },
-                    pickup,
-                  )
-                : pickup.distanceMeters
-            }
-            fits={pickup.passengers <= seatsLeft}
-            busy={acceptingId === pickup.id}
-            onAccept={() => acceptRequest(pickup)}
-            onDecline={() => declineRequest(pickup)}
-          />
+            entering={overlayEnter}
+            exiting={overlayExit}
+            layout={overlayLayout}
+          >
+            <PickupCard
+              pickup={pickup}
+              distanceMeters={
+                coords
+                  ? getDistanceMeters(
+                      { lat: coords.latitude, lng: coords.longitude },
+                      pickup,
+                    )
+                  : pickup.distanceMeters
+              }
+              fits={pickup.passengers <= seatsLeft}
+              busy={acceptingId === pickup.id}
+              onAccept={() => acceptRequest(pickup)}
+              onDecline={() => declineRequest(pickup)}
+            />
+          </Animated.View>
         ))}
       </View>
 
@@ -789,13 +834,14 @@ function PickupCard({
         accessibilityRole="button"
         accessibilityLabel="Accept pickup request"
         accessibilityState={{ disabled: !fits, busy }}
-        disabled={!fits || busy}
+        disabled={busy}
         hitSlop={4}
         onPress={onAccept}
         style={({ pressed }) => [
           styles.pickupButton,
           styles.pickupAccept,
-          (pressed || !fits) && styles.pressed,
+          !fits && styles.pickupAcceptBlocked,
+          pressed && styles.pressed,
         ]}
       >
         {busy ? (
@@ -1035,6 +1081,7 @@ const styles = StyleSheet.create({
   },
   pickupDecline: { backgroundColor: "#ffffff" },
   pickupAccept: { backgroundColor: brandBlue },
+  pickupAcceptBlocked: { backgroundColor: "#9aa5c4" },
   toast: {
     flexDirection: "row",
     alignItems: "center",

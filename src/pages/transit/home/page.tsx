@@ -4,7 +4,6 @@ import { StatusBar } from "expo-status-bar";
 import Clock from "lucide-react-native/icons/clock";
 import Inbox from "lucide-react-native/icons/inbox";
 import Route from "lucide-react-native/icons/route";
-import Star from "lucide-react-native/icons/star";
 import { useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import Animated from "react-native-reanimated";
@@ -12,7 +11,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { loadHome } from "@/api/v1/profile/controllers";
 import { BottomNav, bottomNavHeight } from "@/components/bottom-nav";
-import { EmptyState } from "@/components/empty-state";
 import { LoadingSprite } from "@/components/brand-logo";
 import {
   ActionCard,
@@ -24,6 +22,7 @@ import {
 } from "@/components/home-ui";
 import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
+import { RatingsSummary } from "@/pages/transit/home/ratings-summary";
 
 const { brandBlue } = homeColors;
 
@@ -96,10 +95,7 @@ export default function TransitHomeScreen() {
 
             <SectionDivider />
             <SectionHeader title="Ratings" />
-            <EmptyState
-              icon={<Star color={brandBlue} size={32} strokeWidth={1.8} />}
-              message="Ratings from commuters will show up here after your trips."
-            />
+            <RatingsSummary />
           </View>
         </Animated.ScrollView>
 

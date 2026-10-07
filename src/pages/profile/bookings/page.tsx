@@ -3,11 +3,14 @@ import Bus from "lucide-react-native/icons/bus";
 import CalendarDays from "lucide-react-native/icons/calendar-days";
 import CircleCheck from "lucide-react-native/icons/circle-check";
 import ClipboardList from "lucide-react-native/icons/clipboard-list";
+import MessageSquareQuote from "lucide-react-native/icons/message-square-quote";
+import Star from "lucide-react-native/icons/star";
 import IdCard from "lucide-react-native/icons/id-card";
 import UserRound from "lucide-react-native/icons/user-round";
 import Users from "lucide-react-native/icons/users";
+import UsersRound from "lucide-react-native/icons/users-round";
 import { useEffect, useState, type ReactNode } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -20,6 +23,7 @@ import { LoadingSprite } from "@/components/brand-logo";
 import { EmptyState } from "@/components/empty-state";
 import { PickupIcon } from "@/components/module-icons";
 import { Chip, ModuleHeader, moduleColors } from "@/components/module-ui";
+import { RateTripModal, StarBadge } from "@/components/star-rating";
 import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
 import { goBackOr } from "@/utils/navigation";
@@ -57,6 +61,7 @@ export default function BookingsScreen() {
   const [tab, setTab] = useState<BookingKind>("rental");
   const [bookings, setBookings] = useState<Booking[] | null>(null);
   const [problem, setProblem] = useState("");
+  const [rating, setRating] = useState<Booking | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -73,8 +78,24 @@ export default function BookingsScreen() {
     };
   }, []);
 
-  const goBack = () => goBackOr(Routes.profile);
+  const goBack = () => goBackOr(Routes.commuterHome);
   const visible = (bookings ?? []).filter((booking) => booking.kind === tab);
+  const unrated = (bookings ?? []).filter(
+    (booking) => booking.kind === "rental" && !booking.rating,
+  );
+
+  const saveRating = (score: number, feedback: string) => {
+    if (!rating) return;
+    const id = rating.id;
+    setBookings((current) =>
+      (current ?? []).map((booking) =>
+        booking.id === id
+          ? { ...booking, rating: { score, feedback: feedback || null } }
+          : booking,
+      ),
+    );
+    setRating(null);
+  };
 
   return (
     <View style={styles.screen}>
@@ -90,15 +111,30 @@ export default function BookingsScreen() {
       >
         <View style={styles.body}>
           <View style={styles.tabRow}>
-            {tabs.map((option) => (
-              <Chip
-                key={option.value}
-                label={option.label}
-                selected={tab === option.value}
-                onPress={() => setTab(option.value)}
-                grow
-              />
-            ))}
+            {tabs.map((option) => {
+              const pending = option.value === "rental" ? unrated.length : 0;
+              return (
+                <View key={option.value} style={styles.tab}>
+                  <Chip
+                    label={option.label}
+                    selected={tab === option.value}
+                    onPress={() => setTab(option.value)}
+                    grow
+                  />
+                  {pending > 0 && (
+                    <View
+                      pointerEvents="none"
+                      accessibilityLabel={`${pending} ${pending === 1 ? "rental" : "rentals"} to rate`}
+                      style={styles.count}
+                    >
+                      <Text style={styles.countText}>
+                        {pending > 99 ? "99+" : pending}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              );
+            })}
           </View>
 
           {bookings === null ? (
@@ -120,7 +156,11 @@ export default function BookingsScreen() {
           ) : (
             <View style={styles.list}>
               {visible.map((booking) => (
-                <BookingCard key={booking.id} booking={booking} />
+                <BookingCard
+                  key={booking.id}
+                  booking={booking}
+                  onRate={() => setRating(booking)}
+                />
               ))}
             </View>
           )}
@@ -136,53 +176,130 @@ export default function BookingsScreen() {
           collapsed={chrome.collapsed}
         />
       </StickyHeader>
+
+      <RateTripModal
+        target={
+          rating
+            ? {
+                id: rating.id,
+                title: rating.destination,
+                subtitle: rating.driverName ?? "",
+              }
+            : null
+        }
+        onClose={() => setRating(null)}
+        onRated={saveRating}
+      />
     </View>
   );
 }
 
-function BookingCard({ booking }: { booking: Booking }) {
+export function BookingCard({
+  booking,
+  onRate,
+}: {
+  booking: Booking;
+  onRate: () => void;
+}) {
   const vehicle = [booking.plateNumber, booking.vehicleType]
     .filter(Boolean)
     .join(" · ");
   return (
     <View style={styles.card}>
       <View style={styles.cardTop}>
-        <Text style={styles.destination} numberOfLines={2}>
-          {booking.destination}
-        </Text>
-        <View style={styles.badge}>
-          <CircleCheck color={completedGreen} size={11} strokeWidth={2.5} />
-          <Text style={styles.badgeText}>COMPLETED</Text>
+        <View style={styles.titleBlock}>
+          <Text style={styles.kind}>
+            {booking.kind === "rental" ? "RENTAL" : "PICKUP"}
+          </Text>
+          <Text style={styles.destination} numberOfLines={2}>
+            {booking.destination}
+          </Text>
+        </View>
+        <View style={styles.badges}>
+          <View style={styles.badge}>
+            <CircleCheck color={completedGreen} size={11} strokeWidth={2.5} />
+            <Text style={styles.badgeText}>COMPLETED</Text>
+          </View>
+          {booking.rating ? (
+            <StarBadge score={booking.rating.score} />
+          ) : (
+            booking.kind === "rental" && (
+              <View style={styles.unratedBadge}>
+                <Text style={styles.unratedText}>NOT YET RATED</Text>
+              </View>
+            )
+          )}
         </View>
       </View>
-      <Detail
-        icon={<CalendarDays color={brandBlue} size={13} strokeWidth={2} />}
-      >
-        {formatBookingDate(booking.requestedAt)}
-      </Detail>
-      {booking.passengers !== null && (
-        <Detail icon={<Users color={brandBlue} size={13} strokeWidth={2} />}>
-          {booking.passengers}{" "}
-          {booking.passengers === 1 ? "passenger" : "passengers"}
-        </Detail>
-      )}
-      {!!vehicle && (
-        <Detail icon={<IdCard color={brandBlue} size={13} strokeWidth={2} />}>
-          {vehicle}
-        </Detail>
-      )}
-      {!!booking.driverName && (
+
+      <View style={styles.details}>
         <Detail
-          icon={<UserRound color={brandBlue} size={13} strokeWidth={2} />}
+          icon={<CalendarDays color={brandBlue} size={13} strokeWidth={2} />}
         >
-          {booking.driverName}
+          {formatBookingDate(booking.requestedAt)}
         </Detail>
-      )}
-      {!!booking.purpose && (
-        <Detail icon={<Bus color={brandBlue} size={13} strokeWidth={2} />}>
-          {booking.purpose}
-        </Detail>
-      )}
+        {booking.passengers !== null && (
+          <Detail icon={<Users color={brandBlue} size={13} strokeWidth={2} />}>
+            {booking.passengers}{" "}
+            {booking.passengers === 1 ? "passenger" : "passengers"}
+          </Detail>
+        )}
+        {!!vehicle && (
+          <Detail icon={<IdCard color={brandBlue} size={13} strokeWidth={2} />}>
+            {vehicle}
+          </Detail>
+        )}
+        {!!booking.driverName && (
+          <Detail
+            icon={<UserRound color={brandBlue} size={13} strokeWidth={2} />}
+          >
+            {booking.driverName}
+          </Detail>
+        )}
+        {!!booking.sharedBy && (
+          <Detail
+            icon={<UsersRound color={brandBlue} size={13} strokeWidth={2} />}
+          >
+            Shared by {booking.sharedBy}
+          </Detail>
+        )}
+        {!!booking.purpose && (
+          <Detail icon={<Bus color={brandBlue} size={13} strokeWidth={2} />}>
+            {booking.purpose}
+          </Detail>
+        )}
+      </View>
+
+      {booking.kind === "rental" &&
+        (!booking.rating || !!booking.rating.feedback) && (
+          <View style={styles.ratingArea}>
+            {booking.rating ? (
+              <View style={styles.feedbackRow}>
+                <MessageSquareQuote
+                  color={brandBlue}
+                  size={13}
+                  strokeWidth={2}
+                />
+                <Text style={styles.feedbackText} numberOfLines={3}>
+                  {booking.rating.feedback}
+                </Text>
+              </View>
+            ) : (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Rate your rental to ${booking.destination}`}
+                onPress={onRate}
+                style={({ pressed }) => [
+                  styles.rateButton,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Star color="#ffffff" size={14} strokeWidth={2.2} />
+                <Text style={styles.rateButtonText}>RATE THIS RENTAL</Text>
+              </Pressable>
+            )}
+          </View>
+        )}
     </View>
   );
 }
@@ -201,7 +318,24 @@ function Detail({ icon, children }: { icon: ReactNode; children: ReactNode }) {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#ffffff" },
   body: { paddingHorizontal: 12, paddingTop: 18 },
-  tabRow: { flexDirection: "row", gap: 8 },
+  tabRow: { flexDirection: "row", gap: 8, paddingTop: 6 },
+  tab: { flex: 1 },
+  count: {
+    position: "absolute",
+    top: -6,
+    right: -2,
+    minWidth: 18,
+    height: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 5,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: "#ffffff",
+    backgroundColor: "#e5383b",
+  },
+  countText: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 9 },
+  badges: { alignItems: "flex-end", gap: 4 },
   loading: { marginTop: 48 },
   problem: {
     color: error,
@@ -212,8 +346,8 @@ const styles = StyleSheet.create({
   },
   list: { gap: 10, marginTop: 16 },
   card: {
-    gap: 6,
-    paddingVertical: 12,
+    gap: 12,
+    paddingVertical: 14,
     paddingHorizontal: 14,
     borderWidth: 1.5,
     borderColor: brandBlue,
@@ -224,15 +358,29 @@ const styles = StyleSheet.create({
   cardTop: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 8,
-    marginBottom: 2,
+    gap: 10,
+  },
+  titleBlock: { flex: 1, gap: 2 },
+  kind: {
+    color: "#6b6b6b",
+    fontFamily: "SoraBold",
+    fontSize: 8,
+    letterSpacing: 0.8,
   },
   destination: {
-    flex: 1,
     color: brandBlue,
     fontFamily: "SoraBold",
-    fontSize: 13,
+    fontSize: 17,
+    lineHeight: 22,
   },
+  details: { flexDirection: "row", flexWrap: "wrap", rowGap: 8 },
+  unratedBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: "#eceef2",
+  },
+  unratedText: { color: "#6b7280", fontFamily: "SoraBold", fontSize: 8 },
   badge: {
     flexDirection: "row",
     alignItems: "center",
@@ -243,7 +391,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#dcfce7",
   },
   badgeText: { color: completedGreen, fontFamily: "SoraBold", fontSize: 8 },
-  detail: { flexDirection: "row", alignItems: "center", gap: 8 },
+  detail: {
+    width: "50%",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingRight: 6,
+  },
   detailIcon: {
     width: 22,
     height: 22,
@@ -251,6 +405,36 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: 11,
     backgroundColor: softBlue,
+  },
+  pressed: { opacity: 0.75 },
+  ratingArea: {
+    gap: 6,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#eef1f7",
+  },
+  feedbackRow: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
+  feedbackText: {
+    flex: 1,
+    color: text,
+    fontFamily: "Sora",
+    fontSize: 10,
+    fontStyle: "italic",
+  },
+  rateButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    height: 36,
+    borderRadius: 9,
+    backgroundColor: brandBlue,
+  },
+  rateButtonText: {
+    color: "#ffffff",
+    fontFamily: "SoraBold",
+    fontSize: 11,
+    letterSpacing: 0.5,
   },
   detailText: { flex: 1, color: text, fontFamily: "Sora", fontSize: 10 },
 });

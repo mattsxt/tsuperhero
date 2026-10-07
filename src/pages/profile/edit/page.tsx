@@ -32,6 +32,7 @@ import {
   type ProfileEditErrors,
   type ProfileEditField,
 } from "@/api/v1/profile/controllers";
+import { useKeyboardVisible } from "@/components/auth-screen";
 import { DateTimeField } from "@/components/date-time-field";
 import { LoadingSprite } from "@/components/brand-logo";
 import { MiniToast, type MiniToastMessage } from "@/components/mini-toast";
@@ -53,6 +54,7 @@ const minimumBirthDate = new Date(1900, 0, 1);
 export default function EditProfileScreen() {
   const insets = useSafeAreaInsets();
   const chrome = useScrollChrome();
+  const keyboardVisible = useKeyboardVisible();
   const [profile, setProfile] = useState<EditableProfile | null>(null);
   const [email, setEmail] = useState("");
   const [contact, setContact] = useState("");
@@ -170,6 +172,9 @@ export default function EditProfileScreen() {
           }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
+          scrollEnabled={keyboardVisible}
+          bounces={false}
+          overScrollMode="never"
         >
           <View style={styles.body}>
             <Pressable

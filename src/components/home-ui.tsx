@@ -112,14 +112,31 @@ export function SectionDivider() {
 
 export function SectionHeader({
   title,
+  icon,
+  count = 0,
   action,
 }: {
   title: string;
+  icon?: ReactNode;
+  count?: number;
   action?: { label: string; onPress: () => void };
 }) {
   return (
     <View style={styles.sectionHeader}>
-      <Text style={styles.sectionTitle}>{title}</Text>
+      <View style={styles.sectionTitleRow}>
+        {icon && <View style={styles.sectionIcon}>{icon}</View>}
+        <Text style={styles.sectionTitle}>{title}</Text>
+        {count > 0 && (
+          <View
+            style={styles.sectionCount}
+            accessibilityLabel={`${count} to rate`}
+          >
+            <Text style={styles.sectionCountText}>
+              {count > 99 ? "99+" : count}
+            </Text>
+          </View>
+        )}
+      </View>
       {action && (
         <Pressable
           accessibilityRole="button"
@@ -229,6 +246,25 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     paddingHorizontal: 8,
   },
+  sectionTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  sectionIcon: {
+    width: 28,
+    height: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 14,
+    backgroundColor: brandBlue,
+  },
   sectionTitle: { color: brandBlue, fontFamily: "SoraBold", fontSize: 15 },
+  sectionCount: {
+    minWidth: 18,
+    height: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 5,
+    borderRadius: 9,
+    backgroundColor: "#e5383b",
+  },
+  sectionCountText: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 9 },
   sectionAction: { color: brandBlue, fontFamily: "SoraBold", fontSize: 11 },
 });

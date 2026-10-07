@@ -17,6 +17,16 @@ export type BookingRow = {
   plate_number: string | null;
   vehicle_type: string | null;
   driver_name: string | null;
+  rating_score: number | null;
+  rating_feedback: string | null;
+  shared_by: string | null;
+};
+
+export type RiderRow = {
+  user_id: string;
+  first_name: string | null;
+  last_name: string | null;
+  profile_picture?: string | null;
 };
 
 export type PickupDriverRow = {

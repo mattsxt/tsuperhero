@@ -23,7 +23,6 @@ import {
   homeColors,
   HomeHeader,
   SectionDivider,
-  SectionHeader,
 } from "@/components/home-ui";
 import { PickupIcon } from "@/components/module-icons";
 import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
@@ -32,7 +31,7 @@ import {
   DestinationSearchPanel,
   DestinationSearchTrigger,
 } from "@/pages/commuter/home/destination-search";
-import { TripHistory } from "@/pages/commuter/home/trip-history";
+import { RecentBookings } from "@/pages/commuter/home/recent-bookings";
 
 const { brandBlue } = homeColors;
 const searchLayerGap = 14;
@@ -133,14 +132,7 @@ export default function CommuterHomeScreen() {
                 </ActionRow>
 
                 <SectionDivider />
-                <SectionHeader
-                  title="Trip History"
-                  action={{
-                    label: "See all",
-                    onPress: () => router.push(Routes.commuterTripHistory),
-                  }}
-                />
-                <TripHistory limit={5} />
+                <RecentBookings limit={2} />
               </Animated.View>
             )}
           </View>

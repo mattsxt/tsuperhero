@@ -19,10 +19,12 @@ import {
   loadActivePickup,
   loadRequestStatus,
   maxPickupPassengers,
+  maxRiders,
   minPickupPassengers,
   requestPickup,
   type PickupRequest,
   type PickupVehicle,
+  type Rider,
 } from "@/api/v1/pickups/controllers";
 import type { Place } from "@/api/v1/places/controllers";
 import {
@@ -38,7 +40,6 @@ import {
   moduleColors,
   PassengerStepper,
   SectionTitle,
-  SoftField,
   VehiclePicker,
 } from "@/components/module-ui";
 import { PlaceSearchField } from "@/components/place-search-field";
@@ -51,6 +52,7 @@ import { goBackOr } from "@/utils/navigation";
 import { ActivePickup } from "./active-pickup";
 import { BoardedScreen } from "./boarded-screen";
 import { PinLocationPicker } from "./pin-location-picker";
+import { ShareRideField } from "./share-ride-field";
 
 const { brandBlue, softBlue, mutedText, text, error } = moduleColors;
 
@@ -64,7 +66,7 @@ export default function PickupScreen() {
     useState<WaitingArea[]>(getKnownWaitingAreas);
   const [place, setPlace] = useState<Place | null>(null);
   const [vehicle, setVehicle] = useState<PickupVehicle>("jeep");
-  const [shareQuery, setShareQuery] = useState("");
+  const [riders, setRiders] = useState<Rider[]>([]);
   const [passengers, setPassengers] = useState(1);
   const [problem, setProblem] = useState("");
   const [busy, setBusy] = useState(false);
@@ -94,7 +96,7 @@ export default function PickupScreen() {
     [place, stops],
   );
 
-  const stop = vehicle === "jeep" ? recommended : null;
+  const stop = recommended;
 
   const [boarded, setBoarded] = useState<PickupRequest | null>(null);
   const lastActive = useRef(active);
@@ -131,10 +133,12 @@ export default function PickupScreen() {
       passengers,
       location: place,
       waitingArea: recommended,
+      riders,
     });
     setBusy(false);
     if (!result.ok) return setProblem(result.error);
     setMapOpen(false);
+    setRiders([]);
     setActive(result.data);
   };
 
@@ -220,7 +224,6 @@ export default function PickupScreen() {
           {pinOpen && (
             <PinLocationPicker
               initial={place ? { lat: place.lat, lng: place.lng } : null}
-              vehicle={vehicle}
               stops={stops}
               onPick={(next) => {
                 setProblem("");
@@ -232,18 +235,18 @@ export default function PickupScreen() {
             />
           )}
 
-          {place && vehicle === "jeep" && !stop && (
+          {place && !stop && (
             <View style={styles.recommendCard}>
               <View style={styles.recommendIcon}>
                 <PersonStanding color="#ffffff" size={18} strokeWidth={2} />
               </View>
               <Text style={[styles.recommendMeta, styles.flex]}>
                 There’s no waiting area within walking distance of this place.
-                Try another location or choose a tricycle.
+                Try another location or pin a spot closer to a route.
               </Text>
             </View>
           )}
-          {place && (vehicle === "tricy" || stop) && (
+          {place && stop && (
             <>
               <Pressable
                 accessibilityRole="button"
@@ -254,29 +257,20 @@ export default function PickupScreen() {
                   pressed && styles.pressed,
                 ]}
               >
-                <View
-                  style={[
-                    styles.recommendIcon,
-                    !stop && styles.recommendIconPlace,
-                  ]}
-                >
-                  {stop ? (
-                    <PersonStanding color="#ffffff" size={18} strokeWidth={2} />
-                  ) : (
-                    <MapPin color="#ffffff" size={18} strokeWidth={2} />
-                  )}
+                <View style={styles.recommendIcon}>
+                  <PersonStanding color="#ffffff" size={18} strokeWidth={2} />
                 </View>
                 <View style={styles.flex}>
                   <Text style={styles.recommendLabel}>
-                    {stop ? "NEAREST WAITING AREA" : "PICKUP POINT"}
+                    NEAREST WAITING AREA
                   </Text>
-                  <Text style={styles.recommendName}>
-                    {stop ? stop.name : place.name}
+                  <Text style={styles.recommendName}>{stop.name}</Text>
+                  <Text style={styles.recommendMeta}>
+                    {`${formatDistance(stop.distanceMeters)} away · about ${stop.walkMinutes} min walk${stop.vicinity ? ` · ${stop.vicinity}` : ""}`}
                   </Text>
                   <Text style={styles.recommendMeta}>
-                    {stop
-                      ? `${formatDistance(stop.distanceMeters)} away · about ${stop.walkMinutes} min walk${stop.vicinity ? ` · ${stop.vicinity}` : ""}`
-                      : "Tricycles pick you up right where you are."}
+                    Wait here for your{" "}
+                    {vehicle === "jeep" ? "jeepney" : "tricycle"}.
                   </Text>
                   <Text style={styles.mapHint}>
                     Tap to see the exact location
@@ -285,9 +279,9 @@ export default function PickupScreen() {
               </Pressable>
               {mapOpen && (
                 <LocationMap
-                  target={stop ?? place}
-                  kind={stop ? "stop" : "place"}
-                  origin={stop ? place : undefined}
+                  target={stop}
+                  kind="stop"
+                  origin={place}
                   onClose={() => setMapOpen(false)}
                 />
               )}
@@ -310,16 +304,14 @@ export default function PickupScreen() {
             icon={<UserRound color="#ffffff" size={18} strokeWidth={2} />}
             title="Share a Ride?"
           />
-          <SoftField
-            value={shareQuery}
-            onChangeText={setShareQuery}
-            placeholder="Search a user..."
-            accessibilityLabel="Search a user to share the ride with"
-            icon={<UserRound color={brandBlue} size={20} strokeWidth={2} />}
-            trailing={
-              <ChevronRight color={brandBlue} size={20} strokeWidth={2.5} />
-            }
-            style={styles.shareField}
+          <ShareRideField
+            riders={riders}
+            max={maxRiders}
+            onChange={(next) => {
+              setProblem("");
+              setRiders(next);
+              setPassengers((current) => Math.max(current, next.length + 1));
+            }}
           />
 
           <View style={styles.passengerSection}>
@@ -331,7 +323,7 @@ export default function PickupScreen() {
               <PassengerStepper
                 value={passengers}
                 onChange={setPassengers}
-                min={minPickupPassengers}
+                min={Math.max(minPickupPassengers, riders.length + 1)}
                 max={maxPickupPassengers}
               />
             </View>
@@ -563,7 +555,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     backgroundColor: softBlue,
   },
-  shareField: { gap: 14, paddingHorizontal: 16 },
   passengerSection: {
     flexDirection: "row",
     alignItems: "flex-start",
