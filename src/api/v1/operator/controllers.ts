@@ -17,7 +17,11 @@ import {
   type VehicleType,
 } from "@/api/v1/transit-routes/controllers";
 
-type Cooperative = { name: string; type: string };
+type Operator = { name: string; type: string };
+
+export type CooperativeDetail = { label: string; value: string };
+
+type Cooperative = { name: string; details: CooperativeDetail[] };
 
 type OperatorVehicle = {
   vehicle_type: VehicleType;
@@ -28,9 +32,77 @@ type OperatorVehicle = {
 
 export type OperatorAssignment = {
   cooperative: Cooperative | null;
+  operator: Operator | null;
   vehicle: OperatorVehicle;
   routeId: string | null;
 };
+
+const hiddenCooperativeKeys = new Set([
+  "cooperative_name",
+  "name",
+  "created_at",
+  "updated_at",
+  "deleted_at",
+]);
+
+const acronyms = new Set(["cda", "tin", "ltfrb", "lto", "sec", "url"]);
+
+function toLabel(key: string) {
+  return key
+    .replace(/^cooperative_/, "")
+    .split("_")
+    .filter(Boolean)
+    .map((word) => {
+      if (acronyms.has(word)) return word.toUpperCase();
+      if (word === "no" || word === "num") return "No.";
+      return word.charAt(0).toUpperCase() + word.slice(1);
+    })
+    .join(" ");
+}
+
+const isoDate = /^\d{4}-\d{2}-\d{2}(T|$)/;
+
+function toDisplayValue(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (typeof value === "number") return String(value);
+  if (Array.isArray(value)) {
+    const items = value.map(toDisplayValue).filter(Boolean);
+    return items.length ? items.join(", ") : null;
+  }
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (isoDate.test(trimmed)) {
+    const date = new Date(trimmed);
+    if (!Number.isNaN(date.getTime())) {
+      return date.toLocaleDateString("en-PH", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+    }
+  }
+  return trimmed;
+}
+
+function toCooperative(
+  row: Record<string, unknown> | null | undefined,
+): Cooperative | null {
+  if (!row) return null;
+  const name = toDisplayValue(row.cooperative_name ?? row.name);
+  if (!name) return null;
+
+  const details = Object.entries(row).flatMap(([key, value]) => {
+    if (hiddenCooperativeKeys.has(key) || key === "id" || key.endsWith("_id")) {
+      return [];
+    }
+    const display = toDisplayValue(value);
+    return display ? [{ label: toLabel(key), value: display }] : [];
+  });
+
+  return { name, details };
+}
 
 export async function loadOperatorAssignment(): Promise<OperatorAssignment | null> {
   try {
@@ -41,7 +113,8 @@ export async function loadOperatorAssignment(): Promise<OperatorAssignment | nul
     if (!row) return null;
 
     return {
-      cooperative: row.operator
+      cooperative: toCooperative(row.cooperative),
+      operator: row.operator
         ? { name: row.operator.name, type: row.operator.operator_type }
         : null,
       vehicle: {

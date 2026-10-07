@@ -9,7 +9,7 @@ import { EmptyState } from "@/components/empty-state";
 import { homeColors, SectionHeader } from "@/components/home-ui";
 import { RateTripModal } from "@/components/star-rating";
 import { Routes } from "@/constants/routes";
-import { BookingCard } from "@/pages/profile/bookings/page";
+import { BookingCard } from "@/pages/commuter/bookings/page";
 
 const { brandBlue } = homeColors;
 
@@ -52,7 +52,7 @@ export function RecentBookings({ limit }: { limit: number }) {
         count={unrated}
         action={{
           label: "See all",
-          onPress: () => router.push(Routes.profileBookings),
+          onPress: () => router.push(Routes.commuterBookings),
         }}
       />
       {bookings === null ? (

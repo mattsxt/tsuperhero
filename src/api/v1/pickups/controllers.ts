@@ -7,6 +7,7 @@ import type {
   PickupRequestRow,
   RequestStatus,
   RiderRow,
+  ShareInviteRow,
 } from "@/api/v1/pickups/types";
 import { unwrapCached } from "@/api/v1/cache";
 import { attempt, failure, unwrap, type Result } from "@/api/v1/result";
@@ -358,4 +359,35 @@ export function searchRiders(query: string): Promise<Result<Rider[]>> {
       (await unwrap(pickupRoutes.searchCommuters(query.trim()))) ?? [];
     return rows.map(toRider);
   });
+}
+
+export type ShareInvite = {
+  requestId: string;
+  from: Rider;
+  pickupName: string;
+  passengers: number;
+  status: RequestStatus;
+};
+
+export function loadShareInvites(): Promise<Result<ShareInvite[]>> {
+  return attempt(async () => {
+    const rows: ShareInviteRow[] =
+      (await unwrap(pickupRoutes.findShareInvites())) ?? [];
+    return rows.map((row) => ({
+      requestId: row.request_id,
+      from: toRider({ ...row, user_id: row.request_id }),
+      pickupName: row.pickup_destination ?? "their waiting area",
+      passengers: row.number_of_passengers ?? 1,
+      status: row.request_status,
+    }));
+  });
+}
+
+export function respondToShareInvite(
+  requestId: string,
+  accept: boolean,
+): Promise<Result<number>> {
+  return attempt(() =>
+    unwrap(pickupRoutes.respondToShareInvite(requestId, accept)),
+  );
 }

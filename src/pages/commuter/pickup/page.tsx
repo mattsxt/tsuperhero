@@ -317,9 +317,18 @@ export default function PickupScreen() {
             riders={riders}
             max={maxRiders}
             onChange={(next) => {
+              const removed = riders.length - next.length;
               setProblem("");
               setRiders(next);
-              setPassengers((current) => Math.max(current, next.length + 1));
+              setPassengers((current) =>
+                removed > 0
+                  ? Math.max(
+                      minPickupPassengers,
+                      next.length + 1,
+                      current - removed,
+                    )
+                  : Math.max(current, next.length + 1),
+              );
             }}
           />
 

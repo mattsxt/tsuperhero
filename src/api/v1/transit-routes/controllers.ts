@@ -33,10 +33,25 @@ export const vehicleTypeLabels: Record<VehicleType, string> = {
 };
 
 let transitRoutes: TransitRoute[] = [];
+let selectableRoutes: TransitRoute[] = [];
 let routesRequest: Promise<Result<TransitRoute[]>> | null = null;
 const routeListeners = new Set<() => void>();
 
-export const getTransitRoutes = () => transitRoutes;
+const areaWidePattern = /\b(within|outside)\s+(of\s+)?naga\b/i;
+
+const isAreaWideRoute = (route: TransitRoute) =>
+  areaWidePattern.test(route.name) || areaWidePattern.test(route.code);
+
+export const getTransitRoutes = () => selectableRoutes;
+
+export function servesRoute(
+  vehicleRouteId: string | null,
+  routeId: string | null,
+) {
+  if (!routeId || vehicleRouteId === routeId) return true;
+  const vehicleRoute = findRoute(vehicleRouteId);
+  return !!vehicleRoute && isAreaWideRoute(vehicleRoute);
+}
 
 export function subscribeToTransitRoutes(listener: () => void) {
   routeListeners.add(listener);
@@ -81,6 +96,7 @@ export function loadTransitRoutes(): Promise<Result<TransitRoute[]>> {
         ? row.vicinity.filter((item) => typeof item === "string")
         : [],
     }));
+    selectableRoutes = transitRoutes.filter((route) => !isAreaWideRoute(route));
     routeListeners.forEach((listener) => listener());
     return transitRoutes;
   }).then((result) => {
@@ -101,7 +117,7 @@ export function findRoute(id: string | null | undefined) {
 
 export function searchDestinations(query: string) {
   const needle = query.trim().toLowerCase();
-  return transitRoutes.filter(
+  return selectableRoutes.filter(
     (route) =>
       route.name.toLowerCase().includes(needle) ||
       route.vicinity.some((place) => place.toLowerCase().includes(needle)),
@@ -116,7 +132,7 @@ export function findRoutesNear(point: {
   lat: number;
   lng: number;
 }): RouteNearPlace[] {
-  return transitRoutes
+  return selectableRoutes
     .map((route) => ({
       route,
       distanceMeters: Math.min(

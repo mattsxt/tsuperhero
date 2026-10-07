@@ -7,6 +7,7 @@ import { AnimatedSplashOverlay } from "@/components/animated-icon";
 import type { TabTransition } from "@/components/bottom-nav";
 import { NotificationSync } from "@/components/notification-sync";
 import { OfflineBanner } from "@/components/offline-banner";
+import { ShareInviteModal } from "@/components/share-invite-modal";
 import { AppFonts } from "@/constants/fonts";
 
 SplashScreen.preventAutoHideAsync();
@@ -54,7 +55,6 @@ export default function RootLayout() {
         <Stack.Screen name="profile/edit/index" />
         <Stack.Screen name="profile/security/index" />
         <Stack.Screen name="profile/vehicles/index" />
-        <Stack.Screen name="profile/bookings/index" />
         <Stack.Screen name="commuter/pickup/index" />
         <Stack.Screen name="commuter/rental/index" />
         <Stack.Screen name="commuter/routes/index" />
@@ -64,9 +64,10 @@ export default function RootLayout() {
         />
         <Stack.Screen name="transit/rental-requests/index" />
         <Stack.Screen name="transit/trip-history/index" />
-        <Stack.Screen name="commuter/trip-history/index" />
+        <Stack.Screen name="commuter/bookings/index" />
       </Stack>
       <OfflineBanner />
+      <ShareInviteModal />
     </ThemeProvider>
   );
 }

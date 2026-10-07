@@ -28,6 +28,7 @@ import {
   loadAlternativeGeometry,
   loadLiveVehicles,
   loadRouteGeometry,
+  servesRoute,
   type LatLng,
   type LiveVehicle,
 } from "@/api/v1/transit-routes/controllers";
@@ -168,13 +169,20 @@ export default function RoutesScreen() {
   const vehiclesOnRoute = useMemo(
     () =>
       routeId && path
-        ? liveVehicles.filter((vehicle) =>
-            [path, ...alternativePaths].some((line) =>
-              isNearPath(vehicle, line, onRouteMeters),
-            ),
-          )
+        ? liveVehicles
+            .filter((vehicle) =>
+              [path, ...alternativePaths].some((line) =>
+                isNearPath(vehicle, line, onRouteMeters),
+              ),
+            )
+            .map((vehicle) =>
+              vehicle.routeId !== routeId &&
+              servesRoute(vehicle.routeId, routeId)
+                ? { ...vehicle, routeId, routeName: route?.name ?? null }
+                : vehicle,
+            )
         : [],
-    [liveVehicles, routeId, path, alternativePaths],
+    [liveVehicles, routeId, path, alternativePaths, route],
   );
   const selectedVehicle =
     vehiclesOnRoute.find((vehicle) => vehicle.id === selectedVehicleId) ?? null;

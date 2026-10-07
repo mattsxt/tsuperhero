@@ -29,14 +29,18 @@ import {
 import { RateTripModal } from "@/components/star-rating";
 import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
+import { TripHistory } from "@/pages/commuter/bookings/trip-history";
 import { goBackOr } from "@/utils/navigation";
 
 const { brandBlue, softBlue, text, error } = moduleColors;
 const cardEdgeBlue = "#1a2f8f";
 
-const tabs: { value: BookingKind; label: string }[] = [
+type BookingTab = BookingKind | "trips";
+
+const tabs: { value: BookingTab; label: string }[] = [
   { value: "rental", label: "Rental" },
   { value: "pickup", label: "Pickup" },
+  { value: "trips", label: "Trips" },
 ];
 
 const emptyMessages: Record<BookingKind, string> = {
@@ -60,7 +64,7 @@ function formatBookingDate(date: Date) {
 export default function BookingsScreen() {
   const insets = useSafeAreaInsets();
   const chrome = useScrollChrome();
-  const [tab, setTab] = useState<BookingKind>("rental");
+  const [tab, setTab] = useState<BookingTab>("rental");
   const [bookings, setBookings] = useState<Booking[] | null>(null);
   const [problem, setProblem] = useState("");
   const [rating, setRating] = useState<Booking | null>(null);
@@ -139,7 +143,11 @@ export default function BookingsScreen() {
             })}
           </View>
 
-          {bookings === null ? (
+          {tab === "trips" ? (
+            <View style={styles.list}>
+              <TripHistory />
+            </View>
+          ) : bookings === null ? (
             <LoadingLogo style={styles.loading} />
           ) : visible.length === 0 ? (
             <>
@@ -172,7 +180,7 @@ export default function BookingsScreen() {
       <StickyHeader chrome={chrome}>
         <ModuleHeader
           title="My Bookings"
-          subtitle="Your completed rentals and pickups."
+          subtitle="Your completed rentals, pickups and trips."
           icon={<ClipboardList color="#ffffff" size={44} strokeWidth={1.8} />}
           onBack={goBack}
           collapsed={chrome.collapsed}

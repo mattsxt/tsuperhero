@@ -15,6 +15,7 @@ export type AssignmentRow = {
     verified_at: string | null;
   };
   operator: { operator_type: string; name: string } | null;
+  cooperative?: Record<string, unknown> | null;
   route_id: string | null;
 };
 

@@ -8,7 +8,7 @@ export const Routes = {
   commuterPickup: "/commuter/pickup",
   commuterRental: "/commuter/rental",
   commuterRoutes: "/commuter/routes",
-  commuterTripHistory: "/commuter/trip-history",
+  commuterBookings: "/commuter/bookings",
   transitHome: "/transit/home",
   transitStartTrip: "/transit/start-trip",
   transitRentalRequests: "/transit/rental-requests",
@@ -18,7 +18,6 @@ export const Routes = {
   profileEdit: "/profile/edit",
   profileSecurity: "/profile/security",
   profileVehicles: "/profile/vehicles",
-  profileBookings: "/profile/bookings",
 } as const;
 
 export type AppRoute = (typeof Routes)[keyof typeof Routes];

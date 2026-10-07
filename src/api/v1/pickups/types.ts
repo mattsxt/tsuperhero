@@ -29,6 +29,14 @@ export type RiderRow = {
   profile_picture?: string | null;
 };
 
+export type ShareInviteRow = Omit<RiderRow, "user_id"> & {
+  request_id: string;
+  pickup_destination: string | null;
+  number_of_passengers: number | null;
+  request_status: RequestStatus;
+  added_at: string;
+};
+
 export type PickupDriverRow = {
   request_id: string;
   plate_number: string;

@@ -89,10 +89,16 @@ export default function VehiclesScreen() {
 
 function AssignmentView({ details }: { details: AssignmentDetails }) {
   const { assignment, route, vehicleLabel } = details;
-  const { cooperative, vehicle } = assignment;
+  const { cooperative, operator, vehicle } = assignment;
   const vehicleIcon = vehicleOptions.find(
     (option) => option.value === vehicle.vehicle_type,
   )?.icon;
+  const cooperativeRows = [
+    ...(cooperative?.details ?? []),
+    ...(operator?.name
+      ? [{ label: "Operator", value: `${operator.name} (${operator.type})` }]
+      : []),
+  ];
 
   return (
     <View style={styles.body}>
@@ -104,15 +110,31 @@ function AssignmentView({ details }: { details: AssignmentDetails }) {
         </Text>
       </View>
 
-      {cooperative && (
+      {(cooperative || operator) && (
         <>
           <SectionTitle
             icon={<Handshake color="#ffffff" size={18} strokeWidth={2} />}
             title="Transport Cooperative"
           />
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>{cooperative.name}</Text>
-            <Text style={styles.helper}>{cooperative.type} operator</Text>
+            <Text style={styles.cardTitle}>
+              {cooperative?.name ?? "No cooperative on record"}
+            </Text>
+            <Text style={styles.helper}>
+              The cooperative your vehicle is registered under.
+            </Text>
+            {cooperativeRows.length > 0 && (
+              <View style={styles.cardRows}>
+                {cooperativeRows.map((row, index) => (
+                  <InfoRow
+                    key={row.label}
+                    label={row.label}
+                    value={row.value}
+                    last={index === cooperativeRows.length - 1}
+                  />
+                ))}
+              </View>
+            )}
           </View>
         </>
       )}
@@ -223,6 +245,7 @@ const styles = StyleSheet.create({
     lineHeight: 15,
     marginTop: 2,
   },
+  cardRows: { marginTop: 6 },
   infoRow: { flexDirection: "row", gap: 12, paddingVertical: 9 },
   infoRowDivider: { borderBottomWidth: 1, borderBottomColor: "#eef1f7" },
   infoLabel: { width: 110, color: mutedText, fontFamily: "Sora", fontSize: 10 },

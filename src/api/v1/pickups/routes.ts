@@ -70,6 +70,14 @@ export const pickupRoutes = {
       p_user_ids: userIds,
     }),
 
+  findShareInvites: () => getSupabaseClient().rpc("get_my_share_invites"),
+
+  respondToShareInvite: (requestId: string, accept: boolean) =>
+    getSupabaseClient().rpc("respond_to_share_invite", {
+      p_request_id: requestId,
+      p_accept: accept,
+    }),
+
   findRequestStatus: (requestId: string) =>
     requestTable()
       .select("request_status")
