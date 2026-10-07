@@ -1,5 +1,6 @@
 export const Routes = {
   landing: "/landing",
+  offline: "/offline",
   login: "/auth/login",
   register: "/auth/register",
   setup: "/auth/setup",

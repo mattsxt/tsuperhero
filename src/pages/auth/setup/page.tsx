@@ -17,6 +17,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import Reanimated, { FadeIn } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
@@ -25,24 +26,35 @@ import {
   contactLengthMessage,
   getContactProblem,
   getNameProblem,
+  peekSetupUserId,
   submitProfile,
   toIsoDate,
   type ProfileFormErrors,
   type ProfileFormField,
 } from "@/api/v1/profile/controllers";
 import { BrandHeader } from "@/components/brand-header";
-import { LoadingSprite } from "@/components/brand-logo";
+import { LoadingLogo } from "@/components/LoadingLogo";
+import { LoadingScreen } from "@/components/LoadingScreen";
 import { MiniToast, type MiniToastMessage } from "@/components/mini-toast";
 import { Routes } from "@/constants/routes";
 
 const backgroundBlue = "#1034A6";
 const accentBlue = "#29A9E1";
 const errorRed = "#ffb4ab";
+
+const stepFadeMs = 260;
+
+const setupLoadingMessages = [
+  "Getting things ready...",
+  "Loading your profile...",
+  "Almost there...",
+];
 const contentWidth = 320;
 
 export default function SetupScreen() {
-  const [checking, setChecking] = useState(true);
-  const [userId, setUserId] = useState("");
+  const [knownUserId] = useState(peekSetupUserId);
+  const [checking, setChecking] = useState(knownUserId === null);
+  const [userId, setUserId] = useState(knownUserId ?? "");
   const [step, setStep] = useState(1);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -122,13 +134,7 @@ export default function SetupScreen() {
     setStep(4);
   };
 
-  if (checking) {
-    return (
-      <View style={styles.loadingScreen}>
-        <LoadingSprite color="#ffffff" />
-      </View>
-    );
-  }
+  if (checking) return <LoadingScreen messages={setupLoadingMessages} />;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -154,7 +160,11 @@ export default function SetupScreen() {
 
           <BrandHeader variant="hero" />
 
-          <View style={styles.stepArea}>
+          <Reanimated.View
+            key={step}
+            entering={FadeIn.duration(stepFadeMs)}
+            style={styles.stepArea}
+          >
             {step === 1 && (
               <>
                 <Text style={styles.message}>
@@ -256,8 +266,8 @@ export default function SetupScreen() {
                 )}
 
                 <PrimaryButton
-                  label={saving ? "SAVING..." : "CONTINUE"}
-                  disabled={saving}
+                  label="CONTINUE"
+                  busy={saving}
                   onPress={saveProfile}
                 />
               </View>
@@ -275,7 +285,7 @@ export default function SetupScreen() {
                 />
               </>
             )}
-          </View>
+          </Reanimated.View>
         </ScrollView>
       </KeyboardAvoidingView>
       <MiniToast message={toast} top={12} />
@@ -402,20 +412,26 @@ function BirthdateField({
 function PrimaryButton({
   label,
   onPress,
-  disabled,
+  busy = false,
 }: {
   label: string;
   onPress: () => void;
-  disabled?: boolean;
+  busy?: boolean;
 }) {
   return (
     <Pressable
       accessibilityRole="button"
-      disabled={disabled}
+      accessibilityLabel={label}
+      accessibilityState={{ busy }}
+      disabled={busy}
       onPress={onPress}
-      style={[styles.primaryButton, disabled && styles.buttonDisabled]}
+      style={[styles.primaryButton, busy && styles.buttonDisabled]}
     >
-      <Text style={styles.primaryButtonText}>{label}</Text>
+      {busy ? (
+        <LoadingLogo size={20} color="#ffffff" label="Saving" />
+      ) : (
+        <Text style={styles.primaryButtonText}>{label}</Text>
+      )}
     </Pressable>
   );
 }
@@ -440,12 +456,6 @@ function FormField({
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  loadingScreen: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: backgroundBlue,
-  },
   safeArea: { flex: 1, backgroundColor: backgroundBlue },
   container: {
     flexGrow: 1,

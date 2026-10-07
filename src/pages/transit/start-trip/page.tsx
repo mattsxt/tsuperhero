@@ -33,7 +33,7 @@ import {
   loadNearbyPickups,
   loadOperatorAssignment,
   saveTripState,
-  shareLocation,
+  queueTripState,
   startTrip,
   tripStatusLabels,
   type AssignmentDetails,
@@ -49,13 +49,19 @@ import {
   startLocationSharing,
   stopLocationSharing,
 } from "@/api/v1/operator/location-sharing";
+import {
+  clearOutbox,
+  sendLocation,
+  usePendingSync,
+} from "@/api/v1/operator/outbox";
 import { watchLocation } from "@/api/v1/places/controllers";
 import { EmptyState } from "@/components/empty-state";
-import { LoadingSprite } from "@/components/brand-logo";
+import { LoadingLogo } from "@/components/LoadingLogo";
 import { VehicleIcon } from "@/components/module-icons";
 import { ModuleHeader, moduleColors } from "@/components/module-ui";
 import { TransitMap, type TransitMapState } from "@/components/transit-map";
 import { Routes } from "@/constants/routes";
+import { useOnline } from "@/hooks/use-online";
 import { getDistanceMeters, getPairDistanceMeters } from "@/utils/geo";
 import { goBackOr } from "@/utils/navigation";
 
@@ -129,7 +135,7 @@ export default function TripScreen() {
   if (loading) {
     return (
       <View style={styles.loadingScreen}>
-        <LoadingSprite color={circleNavy} />
+        <LoadingLogo color={circleNavy} />
       </View>
     );
   }
@@ -194,6 +200,9 @@ function Trip({ details }: { details: AssignmentDetails }) {
   const passedPickups = useRef(new Set<string>());
 
   const onTrip = status !== "idle";
+  const online = useOnline();
+  const pendingSync = usePendingSync();
+  const syncing = !online || pendingSync > 0;
   const full = markedFull || count >= capacity;
   const occupancy = markedFull ? "Full" : getOccupancyLevel(count, capacity);
 
@@ -262,8 +271,8 @@ function Trip({ details }: { details: AssignmentDetails }) {
     if (!onTrip || backgroundSharing) return;
     const ping = async () => {
       if (!latestCoords.current) return;
-      const result = await shareLocation(latestCoords.current);
-      if (result.ok) {
+      const result = await sendLocation(latestCoords.current);
+      if (result.status !== "failed") {
         shareFailing.current = false;
       } else if (tripActive.current && !shareFailing.current) {
         shareFailing.current = true;
@@ -351,8 +360,8 @@ function Trip({ details }: { details: AssignmentDetails }) {
     const key = `${status}:${count}`;
     if (key === savedState.current) return;
     savedState.current = key;
-    saveTripState(status, count).then((result) => {
-      if (!result.ok)
+    queueTripState(status, count).then((result) => {
+      if (result.status === "failed")
         setToast(
           nextToast(`Couldn't update your trip: ${result.error}`, "danger"),
         );
@@ -421,6 +430,7 @@ function Trip({ details }: { details: AssignmentDetails }) {
       setToast(nextToast(result.error || "Couldn't start the trip.", "danger"));
       return;
     }
+    clearOutbox();
     savedState.current = "in-transit:0";
     lastMovedAt.current = Date.now();
     shareFailing.current = false;
@@ -457,6 +467,7 @@ function Trip({ details }: { details: AssignmentDetails }) {
     }
     tripActive.current = false;
     boardingAttempts.current.clear();
+    clearOutbox();
     stopLocationSharing();
     setBackgroundSharing(false);
     setPickups([]);
@@ -697,10 +708,28 @@ function Trip({ details }: { details: AssignmentDetails }) {
           <Text style={styles.coverage} numberOfLines={1}>
             {coverageTitle.toUpperCase().replace(" – ", " - ")}
           </Text>
-          <View style={[styles.sharing, onTrip && styles.sharingOn]}>
-            <View style={[styles.sharingDot, onTrip && styles.sharingDotOn]} />
+          <View
+            style={[
+              styles.sharing,
+              onTrip && styles.sharingOn,
+              onTrip && syncing && styles.sharingPending,
+            ]}
+          >
+            <View
+              style={[
+                styles.sharingDot,
+                onTrip && styles.sharingDotOn,
+                onTrip && syncing && styles.sharingDotPending,
+              ]}
+            />
             <Text style={styles.sharingText}>
-              {onTrip ? "Location Shared" : "Location Not Shared"}
+              {!onTrip
+                ? "Location Not Shared"
+                : !online
+                  ? "Offline · Will Sync"
+                  : pendingSync > 0
+                    ? "Syncing..."
+                    : "Location Shared"}
             </Text>
           </View>
         </View>
@@ -845,7 +874,7 @@ function PickupCard({
         ]}
       >
         {busy ? (
-          <LoadingSprite color="#ffffff" size={18} />
+          <LoadingLogo color="#ffffff" size={18} />
         ) : (
           <Check color="#ffffff" size={15} strokeWidth={3} />
         )}
@@ -907,7 +936,7 @@ function FinalizeTripModal({
               ]}
             >
               {busy ? (
-                <LoadingSprite color="#ffffff" size={22} />
+                <LoadingLogo color="#ffffff" size={22} />
               ) : (
                 <Text style={[styles.modalButtonText, styles.modalConfirmText]}>
                   CONFIRM
@@ -1138,6 +1167,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#9ca3af",
   },
   sharingDotOn: { backgroundColor: "#4ade80" },
+  sharingPending: { backgroundColor: "rgba(251, 191, 36, 0.25)" },
+  sharingDotPending: { backgroundColor: "#fbbf24" },
   sharingText: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 8 },
   infoRow: {
     flexDirection: "row",

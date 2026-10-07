@@ -1,6 +1,7 @@
 import * as Location from "expo-location";
 import { Platform } from "react-native";
 
+import { readCache, writeCache } from "@/api/v1/cache";
 import { getErrorMessage } from "@/api/v1/client";
 import { placesApi } from "@/api/v1/places/routes";
 import { attempt, failure, success, type Result } from "@/api/v1/result";
@@ -126,6 +127,7 @@ export async function getCurrentPlace(): Promise<Result<Place>> {
       );
     }
     const { latitude: lat, longitude: lng } = position.coords;
+    rememberPosition(lat, lng);
     return success(await describePoint(lat, lng, "Current location"));
   } catch (error) {
     return failure(getErrorMessage(error));
@@ -160,11 +162,23 @@ export async function getLastKnownPoint(): Promise<{
   const permission = await Location.getForegroundPermissionsAsync().catch(
     () => null,
   );
-  if (!permission?.granted) return null;
+  if (!permission?.granted) return readCache<Coordinates>(lastPositionKey);
   const position = await Location.getLastKnownPositionAsync().catch(() => null);
-  return position
-    ? { lat: position.coords.latitude, lng: position.coords.longitude }
-    : null;
+  if (!position) return readCache<Coordinates>(lastPositionKey);
+  return { lat: position.coords.latitude, lng: position.coords.longitude };
+}
+
+type Coordinates = { lat: number; lng: number };
+
+const lastPositionKey = "last-position";
+const positionSaveMs = 15_000;
+let lastPositionSavedAt = 0;
+
+function rememberPosition(lat: number, lng: number) {
+  const now = Date.now();
+  if (now - lastPositionSavedAt < positionSaveMs) return;
+  lastPositionSavedAt = now;
+  writeCache<Coordinates>(lastPositionKey, { lat, lng });
 }
 
 export async function watchLocation(
@@ -186,7 +200,10 @@ export async function watchLocation(
         timeInterval: 1_000,
         distanceInterval: 0,
       },
-      onFix,
+      (location) => {
+        rememberPosition(location.coords.latitude, location.coords.longitude);
+        onFix(location);
+      },
     ),
   );
 }

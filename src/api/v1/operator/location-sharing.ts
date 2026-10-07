@@ -7,7 +7,7 @@ import {
   isLocationSharingNoticeShown,
   showLocationSharingNotice,
 } from "@/api/v1/notifications/device";
-import { shareLocation } from "@/api/v1/operator/controllers";
+import { sendLocation } from "@/api/v1/operator/outbox";
 
 type TaskManagerModule = typeof import("expo-task-manager");
 
@@ -23,7 +23,7 @@ async function loadTaskManager(): Promise<TaskManagerModule | null> {
       async ({ data, error }) => {
         const latest = data?.locations?.[data.locations.length - 1];
         if (error || !latest) return;
-        await shareLocation(latest.coords);
+        await sendLocation(latest.coords);
       },
     );
     return TaskManager;

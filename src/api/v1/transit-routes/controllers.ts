@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+import { unwrapCached } from "@/api/v1/cache";
 import { attempt, unwrap, type Result } from "@/api/v1/result";
 import {
   routeTableRoutes,
@@ -69,7 +70,7 @@ function parseAlternativePaths(paths: unknown): LatLng[][] {
 export function loadTransitRoutes(): Promise<Result<TransitRoute[]>> {
   routesRequest ??= attempt(async () => {
     const rows: RouteRow[] =
-      (await unwrap(routeTableRoutes.listRoutes())) ?? [];
+      (await unwrapCached("routes", routeTableRoutes.listRoutes())) ?? [];
     transitRoutes = rows.map((row) => ({
       id: row.route_id,
       name: row.route_name,
@@ -87,6 +88,11 @@ export function loadTransitRoutes(): Promise<Result<TransitRoute[]>> {
     return result;
   });
   return routesRequest;
+}
+
+export function reloadTransitRoutes() {
+  routesRequest = null;
+  return loadTransitRoutes();
 }
 
 export function findRoute(id: string | null | undefined) {

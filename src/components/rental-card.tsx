@@ -1,3 +1,4 @@
+import Bus from "lucide-react-native/icons/bus";
 import BusFront from "lucide-react-native/icons/bus-front";
 import CalendarDays from "lucide-react-native/icons/calendar-days";
 import MapPin from "lucide-react-native/icons/map-pin";
@@ -14,19 +15,23 @@ import {
   rentalStatusLabels,
   type Rental,
 } from "@/api/v1/rentals/controllers";
-import { LoadingSprite } from "@/components/brand-logo";
+import { LoadingLogo } from "@/components/LoadingLogo";
 import { moduleColors } from "@/components/module-ui";
-import { StarBadge, StarRow } from "@/components/star-rating";
+import {
+  RatingCell,
+  RatingFeedback,
+  StatusPill,
+  type PillTone,
+} from "@/components/card-badges";
 
 const { brandBlue, softBlue, text } = moduleColors;
 const cardEdgeBlue = "#1a2f8f";
 
-const statusColors: Record<string, { background: string; color: string }> = {
-  pending: { background: "#fef3c7", color: "#92400e" },
-  accepted: { background: "#dcfce7", color: "#15803d" },
-  rejected: { background: "#fee2e2", color: "#b91c1c" },
-  completed: { background: softBlue, color: brandBlue },
-  expired: { background: "#f3f4f6", color: "#6b7280" },
+const statusTones: Record<Rental["status"], PillTone> = {
+  pending: "pending",
+  accepted: "accepted",
+  rejected: "rejected",
+  completed: "completed",
 };
 
 export type RentalAction = {
@@ -47,8 +52,9 @@ export function RentalCard({
   actions?: RentalAction[];
   disabled?: boolean;
 }) {
-  const statusKey = rental.expired ? "expired" : rental.status;
-  const status = statusColors[statusKey];
+  const statusTone: PillTone = rental.expired
+    ? "muted"
+    : statusTones[rental.status];
   const statusLabel = rental.expired
     ? "Expired"
     : viewer === "driver" && rental.status === "pending"
@@ -65,84 +71,84 @@ export function RentalCard({
   return (
     <View style={styles.card}>
       <View style={styles.top}>
-        <Text style={styles.destination} numberOfLines={2}>
-          {rental.destination}
-        </Text>
-        <View style={styles.badges}>
-          {rental.rating && <StarBadge score={rental.rating.score} />}
-          <View style={[styles.status, { backgroundColor: status.background }]}>
-            <Text style={[styles.statusText, { color: status.color }]}>
-              {statusLabel.toUpperCase()}
-            </Text>
-          </View>
+        <View style={styles.titleBlock}>
+          {viewer === "commuter" && <Text style={styles.kind}>RENTAL</Text>}
+          <Text style={styles.destination} numberOfLines={2}>
+            {rental.destination}
+          </Text>
         </View>
+        <StatusPill label={statusLabel} tone={statusTone} />
       </View>
 
-      <Detail icon={<MapPin color={brandBlue} size={13} strokeWidth={2} />}>
-        From {rental.pickupLocation}
-      </Detail>
-      <Detail
-        icon={<CalendarDays color={brandBlue} size={13} strokeWidth={2} />}
-      >
-        {formatRentalTime(rental.pickupTime)}
-      </Detail>
-      {rental.tripType === "round_trip" && rental.returnTime && (
-        <Detail icon={<Repeat color={brandBlue} size={13} strokeWidth={2} />}>
-          Return {formatRentalTime(rental.returnTime)}
-        </Detail>
-      )}
-      <Detail icon={<Users color={brandBlue} size={13} strokeWidth={2} />}>
-        {rental.passengers}{" "}
-        {rental.passengers === 1 ? "passenger" : "passengers"} ·{" "}
-        {rental.purpose}
-      </Detail>
-      {viewer === "commuter" && !!vehicle && (
-        <Detail icon={<BusFront color={brandBlue} size={13} strokeWidth={2} />}>
-          {vehicle}
-        </Detail>
-      )}
-      {!!person.name && (
+      <View style={styles.details}>
         <Detail
-          icon={<UserRound color={brandBlue} size={13} strokeWidth={2} />}
+          wide
+          icon={<MapPin color={brandBlue} size={13} strokeWidth={2} />}
         >
-          {viewer === "driver" ? "Commuter: " : "Driver: "}
-          {person.name}
+          From {rental.pickupLocation}
         </Detail>
-      )}
-      {!!person.contact && (
-        <Pressable
-          accessibilityRole="link"
-          accessibilityLabel={`Call ${person.contact}`}
-          onPress={() => Linking.openURL(`tel:${person.contact}`)}
+        <Detail
+          icon={<CalendarDays color={brandBlue} size={13} strokeWidth={2} />}
         >
-          <Detail icon={<Phone color={brandBlue} size={13} strokeWidth={2} />}>
-            <Text style={styles.link}>{person.contact}</Text>
+          {formatRentalTime(rental.pickupTime)}
+        </Detail>
+        <Detail icon={<Users color={brandBlue} size={13} strokeWidth={2} />}>
+          {rental.passengers}{" "}
+          {rental.passengers === 1 ? "passenger" : "passengers"}
+        </Detail>
+        {rental.tripType === "round_trip" && rental.returnTime && (
+          <Detail icon={<Repeat color={brandBlue} size={13} strokeWidth={2} />}>
+            Return {formatRentalTime(rental.returnTime)}
           </Detail>
-        </Pressable>
-      )}
-      {!!rental.notes && (
-        <Detail
-          icon={<NotebookPen color={brandBlue} size={13} strokeWidth={2} />}
-          lines={3}
-        >
-          {rental.notes}
+        )}
+        <Detail icon={<Bus color={brandBlue} size={13} strokeWidth={2} />}>
+          {rental.purpose}
         </Detail>
-      )}
+        {viewer === "commuter" && !!vehicle && (
+          <Detail
+            icon={<BusFront color={brandBlue} size={13} strokeWidth={2} />}
+          >
+            {vehicle}
+          </Detail>
+        )}
+        {!!person.name && (
+          <Detail
+            icon={<UserRound color={brandBlue} size={13} strokeWidth={2} />}
+          >
+            {person.name}
+          </Detail>
+        )}
+        {!!person.contact && (
+          <Pressable
+            accessibilityRole="link"
+            accessibilityLabel={`Call ${person.contact}`}
+            onPress={() => Linking.openURL(`tel:${person.contact}`)}
+            style={styles.half}
+          >
+            <Detail
+              fill
+              icon={<Phone color={brandBlue} size={13} strokeWidth={2} />}
+            >
+              <Text style={styles.link}>{person.contact}</Text>
+            </Detail>
+          </Pressable>
+        )}
+        {!!rental.notes && (
+          <Detail
+            wide
+            lines={3}
+            icon={<NotebookPen color={brandBlue} size={13} strokeWidth={2} />}
+          >
+            {rental.notes}
+          </Detail>
+        )}
+        {rental.status === "completed" && (
+          <RatingCell score={rental.rating?.score ?? null} />
+        )}
+      </View>
 
-      {rental.rating && (
-        <View style={styles.rating}>
-          <View style={styles.ratingTop}>
-            <Text style={styles.ratingLabel}>
-              {viewer === "driver" ? "Commuter rating" : "Your rating"}
-            </Text>
-            <StarRow score={rental.rating.score} />
-          </View>
-          {!!rental.rating.feedback && (
-            <Text style={styles.ratingFeedback} numberOfLines={3}>
-              &ldquo;{rental.rating.feedback}&rdquo;
-            </Text>
-          )}
-        </View>
+      {!!rental.rating?.feedback && (
+        <RatingFeedback feedback={rental.rating.feedback} />
       )}
 
       {actions.length > 0 && (
@@ -162,7 +168,7 @@ export function RentalCard({
               ]}
             >
               {action.busy ? (
-                <LoadingSprite
+                <LoadingLogo
                   size={18}
                   color={action.tone === "primary" ? "#ffffff" : brandBlue}
                 />
@@ -185,13 +191,22 @@ function Detail({
   icon,
   children,
   lines = 1,
+  wide = false,
+  fill = false,
 }: {
   icon: ReactNode;
   children: ReactNode;
   lines?: number;
+  wide?: boolean;
+  fill?: boolean;
 }) {
   return (
-    <View style={styles.detail}>
+    <View
+      style={[
+        styles.detail,
+        fill ? styles.fill : wide ? styles.wide : styles.half,
+      ]}
+    >
       <View style={styles.detailIcon}>{icon}</View>
       <Text style={styles.detailText} numberOfLines={lines}>
         {children}
@@ -202,8 +217,8 @@ function Detail({
 
 const styles = StyleSheet.create({
   card: {
-    gap: 6,
-    paddingVertical: 12,
+    gap: 12,
+    paddingVertical: 14,
     paddingHorizontal: 14,
     borderWidth: 1.5,
     borderColor: brandBlue,
@@ -215,19 +230,31 @@ const styles = StyleSheet.create({
   top: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 8,
-    marginBottom: 2,
+    gap: 10,
+  },
+  titleBlock: { flex: 1, gap: 2 },
+  kind: {
+    color: "#6b6b6b",
+    fontFamily: "SoraBold",
+    fontSize: 8,
+    letterSpacing: 0.8,
   },
   destination: {
-    flex: 1,
     color: brandBlue,
     fontFamily: "SoraBold",
-    fontSize: 13,
+    fontSize: 17,
+    lineHeight: 22,
   },
-  badges: { alignItems: "flex-end", gap: 4 },
-  status: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 999 },
-  statusText: { fontFamily: "SoraBold", fontSize: 8 },
-  detail: { flexDirection: "row", alignItems: "center", gap: 8 },
+  details: { flexDirection: "row", flexWrap: "wrap", rowGap: 8 },
+  half: { width: "50%" },
+  wide: { width: "100%" },
+  fill: { width: "100%", paddingRight: 0 },
+  detail: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingRight: 6,
+  },
   detailIcon: {
     width: 22,
     height: 22,
@@ -238,26 +265,7 @@ const styles = StyleSheet.create({
   },
   detailText: { flex: 1, color: text, fontFamily: "Sora", fontSize: 10 },
   link: { color: brandBlue, fontFamily: "SoraBold" },
-  actions: { flexDirection: "row", gap: 8, marginTop: 6 },
-  rating: {
-    gap: 4,
-    marginTop: 4,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: "#eef1f7",
-  },
-  ratingTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  ratingLabel: { color: brandBlue, fontFamily: "SoraBold", fontSize: 10 },
-  ratingFeedback: {
-    color: text,
-    fontFamily: "Sora",
-    fontSize: 10,
-    fontStyle: "italic",
-  },
+  actions: { flexDirection: "row", gap: 8 },
   action: {
     flex: 1,
     height: 38,

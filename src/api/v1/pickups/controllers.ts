@@ -8,6 +8,7 @@ import type {
   RequestStatus,
   RiderRow,
 } from "@/api/v1/pickups/types";
+import { unwrapCached } from "@/api/v1/cache";
 import { attempt, failure, unwrap, type Result } from "@/api/v1/result";
 import {
   getOccupancyLevel,
@@ -36,7 +37,8 @@ export async function getCommuterId() {
   if (!session) throw new Error("Sign in again to request a pickup.");
   const { id, email } = session.user;
 
-  const existing: { commuter_id: string } | null = await unwrap(
+  const existing: { commuter_id: string } | null = await unwrapCached(
+    `commuter:${id}`,
     pickupRoutes.findCommuter(id),
   );
   if (existing) return existing.commuter_id;
@@ -78,7 +80,8 @@ export async function loadActivePickup(): Promise<
 function fetchActivePickup(): Promise<Result<PickupRequest | null>> {
   return attempt(async () => {
     const commuterId = await getCommuterId();
-    const row: PickupRequestRow | null = await unwrap(
+    const row: PickupRequestRow | null = await unwrapCached(
+      "active-pickup",
       pickupRoutes.findActiveRequest(commuterId),
     );
     const pickup = Array.isArray(row?.pickup) ? row.pickup[0] : row?.pickup;
@@ -259,7 +262,7 @@ export type Booking = {
 export function loadBookings(): Promise<Result<Booking[]>> {
   return attempt(async () => {
     const rows: BookingRow[] =
-      (await unwrap(pickupRoutes.findMyBookings())) ?? [];
+      (await unwrapCached("bookings", pickupRoutes.findMyBookings())) ?? [];
     return rows.map((row) => ({
       id: row.request_id,
       kind: row.request_type === "Charter_Rental" ? "rental" : "pickup",
@@ -313,7 +316,9 @@ export function loadTripHistory(): Promise<Result<TripRide[]>> {
       plate_number: string | null;
       vehicle_type: string | null;
       driver_name: string | null;
-    }[] = (await unwrap(pickupRoutes.findMyTripHistory())) ?? [];
+    }[] =
+      (await unwrapCached("trip-history", pickupRoutes.findMyTripHistory())) ??
+      [];
     return rows.map((row) => ({
       id: row.history_id,
       onBoard: row.trip_status === "active",

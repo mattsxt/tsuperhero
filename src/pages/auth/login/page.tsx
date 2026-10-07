@@ -1,4 +1,5 @@
 import { router } from "expo-router";
+import CircleAlert from "lucide-react-native/icons/circle-alert";
 import Eye from "lucide-react-native/icons/eye";
 import EyeOff from "lucide-react-native/icons/eye-off";
 import { useState } from "react";
@@ -11,7 +12,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import Reanimated from "react-native-reanimated";
+import Reanimated, { FadeInDown, FadeOut } from "react-native-reanimated";
 
 import { login } from "@/api/v1/auth/controllers";
 import {
@@ -20,9 +21,13 @@ import {
   useKeyboardVisible,
 } from "@/components/auth-screen";
 import { BrandHeader } from "@/components/brand-header";
+import { LoadingLogo } from "@/components/LoadingLogo";
+import { LoadingScreen } from "@/components/LoadingScreen";
 import { Routes } from "@/constants/routes";
 
 const brandBlue = "#193caf";
+const errorRed = "#b3261e";
+const welcomeMs = 1200;
 
 export default function LoginScreen() {
   const [emailLoginVisible, setEmailLoginVisible] = useState(false);
@@ -31,6 +36,7 @@ export default function LoginScreen() {
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [loginError, setLoginError] = useState("");
   const [loggingIn, setLoggingIn] = useState(false);
+  const [signedIn, setSignedIn] = useState(false);
   const [formProgress] = useState(() => new Animated.Value(0));
   const keyboardVisible = useKeyboardVisible();
 
@@ -45,6 +51,7 @@ export default function LoginScreen() {
   };
 
   const signIn = async () => {
+    if (loggingIn) return;
     setLoggingIn(true);
     setLoginError("");
     const result = await login(email, password);
@@ -54,7 +61,14 @@ export default function LoginScreen() {
       setLoginError(result.error);
       return;
     }
+    setSignedIn(true);
+    await new Promise((resolve) => setTimeout(resolve, welcomeMs));
     router.replace(result.data as Parameters<typeof router.replace>[0]);
+  };
+
+  const editField = (setter: (value: string) => void) => (value: string) => {
+    setter(value);
+    if (loginError) setLoginError("");
   };
 
   const formHeight = formProgress.interpolate({
@@ -69,6 +83,8 @@ export default function LoginScreen() {
     inputRange: [0, 0.6, 1],
     outputRange: [1, 0, 0],
   });
+
+  if (signedIn) return <LoadingScreen />;
 
   return (
     <AuthScreen compact={keyboardVisible}>
@@ -94,21 +110,26 @@ export default function LoginScreen() {
           <Text style={styles.fieldLabel}>EMAIL ADDRESS</Text>
           <TextInput
             value={email}
-            onChangeText={setEmail}
+            onChangeText={editField(setEmail)}
             placeholder="Email address"
             placeholderTextColor="#929292"
             autoCapitalize="none"
             autoComplete="email"
             keyboardType="email-address"
-            style={styles.input}
+            style={[styles.input, !!loginError && styles.inputError]}
           />
         </View>
         <View style={styles.fieldGroup}>
           <Text style={styles.fieldLabel}>PASSWORD</Text>
-          <View style={styles.passwordInputWrap}>
+          <View
+            style={[
+              styles.passwordInputWrap,
+              !!loginError && styles.inputError,
+            ]}
+          >
             <TextInput
               value={password}
-              onChangeText={setPassword}
+              onChangeText={editField(setPassword)}
               placeholder="Password"
               placeholderTextColor="#929292"
               autoComplete="password"
@@ -134,7 +155,18 @@ export default function LoginScreen() {
         </View>
       </Animated.View>
 
-      {!!loginError && <Text style={styles.errorText}>{loginError}</Text>}
+      {!!loginError && (
+        <Reanimated.View
+          entering={FadeInDown.duration(200)}
+          exiting={FadeOut.duration(150)}
+          style={styles.errorBox}
+          accessibilityRole="alert"
+          accessibilityLiveRegion="assertive"
+        >
+          <CircleAlert color={errorRed} size={15} strokeWidth={2.4} />
+          <Text style={styles.errorText}>{loginError}</Text>
+        </Reanimated.View>
+      )}
 
       {!emailLoginVisible ? (
         <Animated.View style={{ opacity: introOpacity }}>
@@ -144,13 +176,22 @@ export default function LoginScreen() {
         </Animated.View>
       ) : (
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Log in"
+          accessibilityState={{ busy: loggingIn }}
           style={[styles.primaryButton, loggingIn && styles.buttonDisabled]}
           disabled={loggingIn}
           onPress={signIn}
         >
-          <Text style={styles.primaryButtonText}>
-            {loggingIn ? "LOGGING IN..." : "LOGIN"}
-          </Text>
+          {loggingIn ? (
+            <LoadingLogo
+              size={20}
+              color="#ffffff"
+              label="Checking your details"
+            />
+          ) : (
+            <Text style={styles.primaryButtonText}>LOGIN</Text>
+          )}
         </Pressable>
       )}
 
@@ -181,7 +222,6 @@ const styles = StyleSheet.create({
     color: "#050505",
     fontFamily: "SoraBold",
     fontSize: 17,
-    fontWeight: "400",
     lineHeight: 24,
     marginTop: 43,
     marginBottom: 32,
@@ -198,19 +238,32 @@ const styles = StyleSheet.create({
   buttonDisabled: {
     opacity: 0.6,
   },
-  errorText: {
+  errorBox: {
     width: 320,
-    color: "#d93025",
-    fontFamily: "Sora",
-    fontSize: 8,
-    marginTop: -4,
-    marginBottom: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 2,
+    marginBottom: 12,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: "#f5c2c0",
+    borderRadius: 9,
+    backgroundColor: "#fdecea",
   },
+  errorText: {
+    flex: 1,
+    color: errorRed,
+    fontFamily: "SoraBold",
+    fontSize: 10,
+    lineHeight: 14,
+  },
+  inputError: { borderColor: errorRed },
   primaryButtonText: {
     color: "#ffffff",
     fontFamily: "SoraBold",
     fontSize: 9,
-    fontWeight: "400",
   },
   divider: {
     width: 320,

@@ -16,7 +16,7 @@ import {
   type AssignmentDetails,
 } from "@/api/v1/operator/controllers";
 import { EmptyState } from "@/components/empty-state";
-import { LoadingSprite } from "@/components/brand-logo";
+import { LoadingLogo } from "@/components/LoadingLogo";
 import {
   ModuleHeader,
   moduleColors,
@@ -62,7 +62,7 @@ export default function VehiclesScreen() {
         showsVerticalScrollIndicator={false}
       >
         {loading ? (
-          <LoadingSprite color={brandBlue} style={styles.loading} />
+          <LoadingLogo color={brandBlue} style={styles.loading} />
         ) : details ? (
           <AssignmentView details={details} />
         ) : (

@@ -37,7 +37,7 @@ import {
   type TransitRoute,
 } from "@/api/v1/transit-routes/controllers";
 import { formatDistance } from "@/api/v1/waiting-areas/controllers";
-import { LoadingSprite } from "@/components/brand-logo";
+import { LoadingLogo } from "@/components/LoadingLogo";
 import { Routes } from "@/constants/routes";
 import { useTransitRoutes } from "@/hooks/use-transit-routes";
 
@@ -388,7 +388,7 @@ function buildResultItems({
     if (searchingPlaces && places.length === 0) {
       items.push(
         <View key="places-loading" style={styles.loadingRow}>
-          <LoadingSprite size={18} />
+          <LoadingLogo size={18} />
         </View>,
       );
     }
@@ -420,7 +420,7 @@ function buildResultItems({
             )}
           </View>
           {resolvingId === place.id ? (
-            <LoadingSprite size={16} />
+            <LoadingLogo size={16} />
           ) : (
             <ChevronRight color={brandBlue} size={16} strokeWidth={2.5} />
           )}

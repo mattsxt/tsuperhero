@@ -2,6 +2,7 @@ import { router, usePathname } from "expo-router";
 import { useEffect } from "react";
 import { Platform } from "react-native";
 
+import { clearCache } from "@/api/v1/cache";
 import { getSupabaseClient } from "@/api/v1/client";
 import {
   clearNotifications,
@@ -23,7 +24,10 @@ import {
   takeLaunchNotification,
 } from "@/api/v1/notifications/device";
 import { stopLocationSharing } from "@/api/v1/operator/location-sharing";
+import { prepareOffline, resetOfflinePreparation } from "@/api/v1/prefetch";
+import { clearOutbox } from "@/api/v1/operator/outbox";
 import { Routes, type AppRoute } from "@/constants/routes";
+import { isOnline, subscribeToOnline } from "@/hooks/use-online";
 import { useNotifications } from "@/hooks/use-notifications";
 
 let currentRoute: string | null = null;
@@ -83,6 +87,7 @@ export function NotificationSync() {
     let userId: string | null = null;
     let stopSync: (() => void) | null = null;
     let usesPush = false;
+    let stopPreparing: (() => void) | null = null;
 
     const start = async (nextUserId: string) => {
       await requestDevicePermission();
@@ -103,14 +108,23 @@ export function NotificationSync() {
       });
       const launch = takeLaunchNotification();
       if (launch) openFromDevice(launch);
+      stopPreparing = subscribeToOnline(() => {
+        if (isOnline() && userId === nextUserId) prepareOffline();
+      });
+      if (isOnline()) prepareOffline();
     };
 
     const stop = () => {
       stopSync?.();
       stopSync = null;
+      stopPreparing?.();
+      stopPreparing = null;
       usesPush = false;
       clearNotifications();
       clearDevice();
+      clearOutbox();
+      clearCache();
+      resetOfflinePreparation();
     };
 
     const { data } = getSupabaseClient().auth.onAuthStateChange(
@@ -126,6 +140,7 @@ export function NotificationSync() {
     return () => {
       data.subscription.unsubscribe();
       stopSync?.();
+      stopPreparing?.();
     };
   }, []);
 

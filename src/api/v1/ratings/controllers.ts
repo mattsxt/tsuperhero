@@ -1,4 +1,5 @@
 import { ratingRoutes, type RatingSummaryRow } from "@/api/v1/ratings/routes";
+import { unwrapCached } from "@/api/v1/cache";
 import { attempt, failure, unwrap, type Result } from "@/api/v1/result";
 
 export const maxFeedbackLength = 500;
@@ -44,7 +45,10 @@ export async function rateTrip(
 
 export function loadMyRatings(): Promise<Result<RatingSummary>> {
   return attempt(async () => {
-    const row: RatingSummaryRow = await unwrap(ratingRoutes.mySummary());
+    const row: RatingSummaryRow = await unwrapCached(
+      "ratings",
+      ratingRoutes.mySummary(),
+    );
     const average = row?.average === null ? null : Number(row?.average);
     return {
       average: average !== null && Number.isFinite(average) ? average : null,

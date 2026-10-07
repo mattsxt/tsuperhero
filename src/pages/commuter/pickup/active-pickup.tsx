@@ -24,7 +24,8 @@ import { ModuleHeader } from "@/components/module-ui";
 import { TransitMap, type TransitMapState } from "@/components/transit-map";
 import { usePolling } from "@/hooks/use-polling";
 import { getDistanceMeters } from "@/utils/geo";
-import { BrandLogo, LoadingSprite } from "@/components/brand-logo";
+import { BrandLogo } from "@/components/brand-logo";
+import { LoadingLogo } from "@/components/LoadingLogo";
 
 const panelNavy = "#1d3354";
 const routeCyan = "#7fd4f7";
@@ -207,7 +208,7 @@ export function ActivePickup({
                 <Users color={panelNavy} size={16} strokeWidth={2.4} />
               </View>
               <Text style={styles.passengerCount}>{request.passengers}</Text>
-              <LoadingSprite
+              <LoadingLogo
                 color={routeCyan}
                 size={24}
                 label="Waiting for a driver"
@@ -286,7 +287,7 @@ function MatchedDetails({
           </View>
         </View>
       ) : (
-        <LoadingSprite color={routeCyan} style={styles.vehicleLoading} />
+        <LoadingLogo color={routeCyan} style={styles.vehicleLoading} />
       )}
     </>
   );

@@ -30,7 +30,7 @@ import {
   rateTrip,
   scoreLabels,
 } from "@/api/v1/ratings/controllers";
-import { LoadingSprite } from "@/components/brand-logo";
+import { LoadingLogo } from "@/components/LoadingLogo";
 import { moduleColors } from "@/components/module-ui";
 
 const { brandBlue, mutedText, softBlue, text, error } = moduleColors;
@@ -328,7 +328,7 @@ export function RateTripModal({
                   ]}
                 >
                   {saving ? (
-                    <LoadingSprite size={20} color="#ffffff" />
+                    <LoadingLogo size={20} color="#ffffff" />
                   ) : (
                     <Text style={styles.buttonText}>SUBMIT</Text>
                   )}

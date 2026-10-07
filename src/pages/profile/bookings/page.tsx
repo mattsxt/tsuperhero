@@ -1,9 +1,7 @@
 import { StatusBar } from "expo-status-bar";
 import Bus from "lucide-react-native/icons/bus";
 import CalendarDays from "lucide-react-native/icons/calendar-days";
-import CircleCheck from "lucide-react-native/icons/circle-check";
 import ClipboardList from "lucide-react-native/icons/clipboard-list";
-import MessageSquareQuote from "lucide-react-native/icons/message-square-quote";
 import Star from "lucide-react-native/icons/star";
 import IdCard from "lucide-react-native/icons/id-card";
 import UserRound from "lucide-react-native/icons/user-round";
@@ -19,18 +17,22 @@ import {
   type Booking,
   type BookingKind,
 } from "@/api/v1/pickups/controllers";
-import { LoadingSprite } from "@/components/brand-logo";
+import { LoadingLogo } from "@/components/LoadingLogo";
 import { EmptyState } from "@/components/empty-state";
 import { PickupIcon } from "@/components/module-icons";
 import { Chip, ModuleHeader, moduleColors } from "@/components/module-ui";
-import { RateTripModal, StarBadge } from "@/components/star-rating";
+import {
+  RatingCell,
+  RatingFeedback,
+  StatusPill,
+} from "@/components/card-badges";
+import { RateTripModal } from "@/components/star-rating";
 import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
 import { goBackOr } from "@/utils/navigation";
 
 const { brandBlue, softBlue, text, error } = moduleColors;
 const cardEdgeBlue = "#1a2f8f";
-const completedGreen = "#15803d";
 
 const tabs: { value: BookingKind; label: string }[] = [
   { value: "rental", label: "Rental" },
@@ -138,7 +140,7 @@ export default function BookingsScreen() {
           </View>
 
           {bookings === null ? (
-            <LoadingSprite style={styles.loading} />
+            <LoadingLogo style={styles.loading} />
           ) : visible.length === 0 ? (
             <>
               {!!problem && <Text style={styles.problem}>{problem}</Text>}
@@ -215,21 +217,7 @@ export function BookingCard({
             {booking.destination}
           </Text>
         </View>
-        <View style={styles.badges}>
-          <View style={styles.badge}>
-            <CircleCheck color={completedGreen} size={11} strokeWidth={2.5} />
-            <Text style={styles.badgeText}>COMPLETED</Text>
-          </View>
-          {booking.rating ? (
-            <StarBadge score={booking.rating.score} />
-          ) : (
-            booking.kind === "rental" && (
-              <View style={styles.unratedBadge}>
-                <Text style={styles.unratedText}>NOT YET RATED</Text>
-              </View>
-            )
-          )}
-        </View>
+        <StatusPill label="Completed" tone="completed" />
       </View>
 
       <View style={styles.details}>
@@ -268,38 +256,32 @@ export function BookingCard({
             {booking.purpose}
           </Detail>
         )}
+        {booking.kind === "rental" && (
+          <RatingCell score={booking.rating?.score ?? null} />
+        )}
       </View>
 
-      {booking.kind === "rental" &&
-        (!booking.rating || !!booking.rating.feedback) && (
-          <View style={styles.ratingArea}>
-            {booking.rating ? (
-              <View style={styles.feedbackRow}>
-                <MessageSquareQuote
-                  color={brandBlue}
-                  size={13}
-                  strokeWidth={2}
-                />
-                <Text style={styles.feedbackText} numberOfLines={3}>
-                  {booking.rating.feedback}
-                </Text>
-              </View>
-            ) : (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Rate your rental to ${booking.destination}`}
-                onPress={onRate}
-                style={({ pressed }) => [
-                  styles.rateButton,
-                  pressed && styles.pressed,
-                ]}
-              >
-                <Star color="#ffffff" size={14} strokeWidth={2.2} />
-                <Text style={styles.rateButtonText}>RATE THIS RENTAL</Text>
-              </Pressable>
-            )}
-          </View>
-        )}
+      {booking.kind === "rental" && (
+        <>
+          {!!booking.rating?.feedback && (
+            <RatingFeedback feedback={booking.rating.feedback} />
+          )}
+          {!booking.rating && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Rate your rental to ${booking.destination}`}
+              onPress={onRate}
+              style={({ pressed }) => [
+                styles.rateButton,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Star color="#ffffff" size={14} strokeWidth={2.2} />
+              <Text style={styles.rateButtonText}>RATE THIS RENTAL</Text>
+            </Pressable>
+          )}
+        </>
+      )}
     </View>
   );
 }
@@ -335,7 +317,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#e5383b",
   },
   countText: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 9 },
-  badges: { alignItems: "flex-end", gap: 4 },
   loading: { marginTop: 48 },
   problem: {
     color: error,
@@ -374,23 +355,6 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   details: { flexDirection: "row", flexWrap: "wrap", rowGap: 8 },
-  unratedBadge: {
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 999,
-    backgroundColor: "#eceef2",
-  },
-  unratedText: { color: "#6b7280", fontFamily: "SoraBold", fontSize: 8 },
-  badge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 999,
-    backgroundColor: "#dcfce7",
-  },
-  badgeText: { color: completedGreen, fontFamily: "SoraBold", fontSize: 8 },
   detail: {
     width: "50%",
     flexDirection: "row",
@@ -407,26 +371,14 @@ const styles = StyleSheet.create({
     backgroundColor: softBlue,
   },
   pressed: { opacity: 0.75 },
-  ratingArea: {
-    gap: 6,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: "#eef1f7",
-  },
-  feedbackRow: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
-  feedbackText: {
-    flex: 1,
-    color: text,
-    fontFamily: "Sora",
-    fontSize: 10,
-    fontStyle: "italic",
-  },
   rateButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    alignSelf: "flex-start",
     gap: 6,
-    height: 36,
+    height: 32,
+    paddingHorizontal: 14,
     borderRadius: 9,
     backgroundColor: brandBlue,
   },

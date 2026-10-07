@@ -18,7 +18,7 @@ import {
   type ProfileSummary,
 } from "@/api/v1/profile/controllers";
 import { BottomNav, bottomNavHeight } from "@/components/bottom-nav";
-import { LoadingSprite } from "@/components/brand-logo";
+import { LoadingLogo } from "@/components/LoadingLogo";
 import {
   ExpandedOnly,
   headerLayoutTransition,
@@ -27,6 +27,7 @@ import {
   StickyHeader,
   useScrollChrome,
 } from "@/components/scroll-chrome";
+import { LoadingScreen, signOutMessages } from "@/components/LoadingScreen";
 import { Routes } from "@/constants/routes";
 
 const brandBlue = "#193caf";
@@ -34,6 +35,7 @@ const headerBlue = "#1034A6";
 const cardEdgeBlue = "#1a2f8f";
 const iconBackground = "#d4ecf9";
 const dangerRed = "#a31818";
+const signOutMinMs = 1200;
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
@@ -65,20 +67,25 @@ export default function ProfileScreen() {
   const signOut = async () => {
     if (signingOut) return;
     setSigningOut(true);
-    const result = await logout();
-    setSigningOut(false);
+    const [result] = await Promise.all([
+      logout(),
+      new Promise((resolve) => setTimeout(resolve, signOutMinMs)),
+    ]);
 
     if (!result.ok) {
+      setSigningOut(false);
       Alert.alert("Couldn't sign out", result.error);
       return;
     }
     router.replace(Routes.login);
   };
 
+  if (signingOut) return <LoadingScreen messages={signOutMessages} />;
+
   if (!summary) {
     return (
       <View style={styles.loadingScreen}>
-        <LoadingSprite color={brandBlue} />
+        <LoadingLogo color={brandBlue} />
       </View>
     );
   }
@@ -155,7 +162,7 @@ export default function ProfileScreen() {
                 />
               )}
               <ActionRow
-                label={signingOut ? "Signing out..." : "Sign out"}
+                label="Sign out"
                 danger
                 disabled={signingOut}
                 onPress={signOut}

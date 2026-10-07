@@ -7,7 +7,7 @@ import {
   type RatingSummary,
   type Review,
 } from "@/api/v1/ratings/controllers";
-import { LoadingSprite } from "@/components/brand-logo";
+import { LoadingLogo } from "@/components/LoadingLogo";
 import { EmptyState } from "@/components/empty-state";
 import { homeColors } from "@/components/home-ui";
 import { StarRow } from "@/components/star-rating";
@@ -44,7 +44,7 @@ export function RatingsSummary() {
     return problem ? (
       <Text style={styles.problem}>{problem}</Text>
     ) : (
-      <LoadingSprite style={styles.loading} />
+      <LoadingLogo style={styles.loading} />
     );
   }
 

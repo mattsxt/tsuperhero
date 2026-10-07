@@ -52,9 +52,8 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   strengthText: {
-    fontFamily: "Sora",
+    fontFamily: "SoraBold",
     fontSize: 7,
-    fontWeight: "700",
     alignSelf: "flex-end",
     marginTop: 3,
   },

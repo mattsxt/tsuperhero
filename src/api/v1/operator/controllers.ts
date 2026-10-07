@@ -1,5 +1,5 @@
-import type { LocationObjectCoords } from "expo-location";
 
+import { sendTripState } from "@/api/v1/operator/outbox";
 import {
   operatorRoutes,
   type AssignmentRow,
@@ -7,6 +7,7 @@ import {
   type TripRow,
   type VehicleStatus,
 } from "@/api/v1/operator/routes";
+import { unwrapCached } from "@/api/v1/cache";
 import { attempt, unwrap, type Result } from "@/api/v1/result";
 import {
   findRoute,
@@ -34,7 +35,7 @@ export type OperatorAssignment = {
 export async function loadOperatorAssignment(): Promise<OperatorAssignment | null> {
   try {
     const [row]: [AssignmentRow | null, unknown] = await Promise.all([
-      unwrap(operatorRoutes.findMyAssignment()),
+      unwrapCached("assignment", operatorRoutes.findMyAssignment()),
       loadTransitRoutes(),
     ]);
     if (!row) return null;
@@ -104,22 +105,8 @@ export function saveTripState(
   );
 }
 
-export function shareLocation({
-  latitude,
-  longitude,
-  speed,
-  heading,
-}: LocationObjectCoords): Promise<Result<unknown>> {
-  return attempt(() =>
-    unwrap(
-      operatorRoutes.shareMyLocation({
-        p_latitude: latitude,
-        p_longitude: longitude,
-        p_speed_kmh: Math.max(speed ?? 0, 0) * 3.6,
-        p_heading: heading != null && heading >= 0 ? heading : 0,
-      }),
-    ),
-  );
+export function queueTripState(status: TripStatus, passengers: number) {
+  return sendTripState(vehicleStatuses[status], passengers);
 }
 
 const metersPerKm = 1_000;
@@ -186,7 +173,8 @@ const toNumber = (value: number | string | null) => Number(value ?? 0) || 0;
 
 export function loadMyTrips(): Promise<Result<TripRecord[]>> {
   return attempt(async () => {
-    const rows: TripRow[] = (await unwrap(operatorRoutes.findMyTrips())) ?? [];
+    const rows: TripRow[] =
+      (await unwrapCached("driver-trips", operatorRoutes.findMyTrips())) ?? [];
     return rows.map((row) => {
       const departedAt = row.departure_time
         ? new Date(row.departure_time)

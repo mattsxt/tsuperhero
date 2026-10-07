@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { loadBookings, type Booking } from "@/api/v1/pickups/controllers";
-import { LoadingSprite } from "@/components/brand-logo";
+import { LoadingLogo } from "@/components/LoadingLogo";
 import { EmptyState } from "@/components/empty-state";
 import { homeColors, SectionHeader } from "@/components/home-ui";
 import { RateTripModal } from "@/components/star-rating";
@@ -56,7 +56,7 @@ export function RecentBookings({ limit }: { limit: number }) {
         }}
       />
       {bookings === null ? (
-        <LoadingSprite size={28} style={styles.loading} />
+        <LoadingLogo size={28} style={styles.loading} />
       ) : bookings.length === 0 ? (
         <EmptyState
           icon={<ClipboardList color={brandBlue} size={32} strokeWidth={1.8} />}

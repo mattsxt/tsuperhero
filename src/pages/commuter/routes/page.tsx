@@ -47,7 +47,7 @@ import { usePolling } from "@/hooks/use-polling";
 import { useTransitRoutes } from "@/hooks/use-transit-routes";
 import { isNearPath } from "@/utils/geo";
 import { goBackOr } from "@/utils/navigation";
-import { LoadingSprite } from "@/components/brand-logo";
+import { LoadingLogo } from "@/components/LoadingLogo";
 
 const { brandBlue, headerBlue, mutedText, softBlue, text } = moduleColors;
 const cardNavy = "#0f2a5c";
@@ -325,7 +325,7 @@ export default function RoutesScreen() {
             <View style={styles.chipGroup}>
               {loadingRoute && (
                 <View style={styles.chip}>
-                  <LoadingSprite color="#ffffff" size={18} />
+                  <LoadingLogo color="#ffffff" size={18} />
                   <Text style={styles.chipText}>Loading route...</Text>
                 </View>
               )}

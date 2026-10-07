@@ -11,7 +11,7 @@ import {
   respondToRental,
   type Rental,
 } from "@/api/v1/rentals/controllers";
-import { LoadingSprite } from "@/components/brand-logo";
+import { LoadingLogo } from "@/components/LoadingLogo";
 import { EmptyState } from "@/components/empty-state";
 import { Chip, ModuleHeader, moduleColors } from "@/components/module-ui";
 import { RentalCard, type RentalAction } from "@/components/rental-card";
@@ -209,7 +209,7 @@ export default function RentalRequestsScreen() {
           {!!problem && <Text style={styles.problem}>{problem}</Text>}
 
           {rentals === null ? (
-            <LoadingSprite style={styles.loading} />
+            <LoadingLogo style={styles.loading} />
           ) : visible.length === 0 ? (
             <EmptyState
               icon={<Inbox color={brandBlue} size={32} strokeWidth={1.8} />}

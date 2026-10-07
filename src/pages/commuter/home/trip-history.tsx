@@ -5,7 +5,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { loadTripHistory, type TripRide } from "@/api/v1/pickups/controllers";
-import { LoadingSprite } from "@/components/brand-logo";
+import { LoadingLogo } from "@/components/LoadingLogo";
 import { EmptyState } from "@/components/empty-state";
 import { moduleColors } from "@/components/module-ui";
 
@@ -38,7 +38,7 @@ export function TripHistory({ limit }: { limit?: number }) {
     };
   }, []);
 
-  if (rides === null) return <LoadingSprite size={28} style={styles.loading} />;
+  if (rides === null) return <LoadingLogo size={28} style={styles.loading} />;
 
   if (rides.length === 0) {
     return (

@@ -15,7 +15,7 @@ import {
   type PlaceSuggestion,
 } from "@/api/v1/places/controllers";
 import { moduleColors, SoftField } from "@/components/module-ui";
-import { LoadingSprite } from "@/components/brand-logo";
+import { LoadingLogo } from "@/components/LoadingLogo";
 
 const { brandBlue, error: errorRed, mutedText, softBlue, text } = moduleColors;
 
@@ -152,7 +152,7 @@ export function PlaceSearchField({
         trailing={
           <View style={styles.trailing}>
             {busy ? (
-              <LoadingSprite color={brandBlue} size={18} />
+              <LoadingLogo color={brandBlue} size={18} />
             ) : (
               query.length > 0 && (
                 <Pressable
@@ -212,7 +212,7 @@ export function PlaceSearchField({
 
           {searching ? (
             <View style={styles.status}>
-              <LoadingSprite color={brandBlue} size={18} />
+              <LoadingLogo color={brandBlue} size={18} />
               <Text style={styles.statusText}>Searching places...</Text>
             </View>
           ) : suggestions.length === 0 ? (

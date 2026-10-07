@@ -4,8 +4,10 @@ import {
   notificationRoutes,
   type NotificationRow,
 } from "@/api/v1/notifications/routes";
+import { unwrapCached } from "@/api/v1/cache";
 import { attempt, success, unwrap, type Result } from "@/api/v1/result";
 import { Routes, type AppRoute } from "@/constants/routes";
+import { isOnline, subscribeToOnline } from "@/hooks/use-online";
 
 export type AppNotification = {
   id: string;
@@ -89,7 +91,7 @@ export async function refreshNotifications(): Promise<
 > {
   const result = await attempt(async () => {
     const rows: NotificationRow[] =
-      (await unwrap(notificationRoutes.list())) ?? [];
+      (await unwrapCached("notifications", notificationRoutes.list())) ?? [];
     return rows.map(toNotification);
   });
   if (result.ok) setNotifications(result.data);
@@ -126,9 +128,13 @@ export function startNotificationSync({
   const appState = AppState.addEventListener("change", (state) => {
     if (state === "active") refreshNotifications();
   });
+  const stopOnline = subscribeToOnline(() => {
+    if (isOnline()) refreshNotifications();
+  });
   return () => {
     stopRealtime();
     appState.remove();
+    stopOnline();
   };
 }
 

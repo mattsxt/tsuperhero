@@ -1,4 +1,6 @@
 import { StatusBar } from "expo-status-bar";
+import BusFront from "lucide-react-native/icons/bus-front";
+import CalendarDays from "lucide-react-native/icons/calendar-days";
 import Clock from "lucide-react-native/icons/clock";
 import Gauge from "lucide-react-native/icons/gauge";
 import Route from "lucide-react-native/icons/route";
@@ -14,7 +16,8 @@ import {
   loadMyTrips,
   type TripRecord,
 } from "@/api/v1/operator/controllers";
-import { LoadingSprite } from "@/components/brand-logo";
+import { LoadingLogo } from "@/components/LoadingLogo";
+import { StatusPill } from "@/components/card-badges";
 import { EmptyState } from "@/components/empty-state";
 import { Chip, ModuleHeader, moduleColors } from "@/components/module-ui";
 import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
@@ -134,7 +137,7 @@ export default function TripHistoryScreen() {
           </View>
 
           {trips === null ? (
-            <LoadingSprite style={styles.loading} />
+            <LoadingLogo style={styles.loading} />
           ) : visible.length === 0 ? (
             <View style={styles.centered}>
               {!!problem && <Text style={styles.problem}>{problem}</Text>}
@@ -219,63 +222,59 @@ function TripCard({ trip }: { trip: TripRecord }) {
         trip.arrivedAt ? formatTime(trip.arrivedAt) : "now"
       }`
     : "Time unavailable";
+  const vehicle = [trip.plateNumber, trip.vehicleType]
+    .filter(Boolean)
+    .join(" · ");
   return (
     <View style={styles.card}>
       <View style={styles.cardTop}>
-        <View style={styles.flex}>
-          <Text style={styles.route} numberOfLines={1}>
-            {trip.routeName}
-          </Text>
-          <Text style={styles.code}>{trip.code}</Text>
-        </View>
-        <View style={[styles.badge, trip.inProgress && styles.badgeLive]}>
-          <Text
-            style={[styles.badgeText, trip.inProgress && styles.badgeTextLive]}
-          >
-            {trip.inProgress ? "IN PROGRESS" : "COMPLETED"}
-          </Text>
-        </View>
-      </View>
-
-      <Text style={styles.date}>
-        {trip.departedAt ? formatDay(trip.departedAt) : "Date unavailable"} ·{" "}
-        {times}
-      </Text>
-
-      <View style={styles.metrics}>
-        <Metric
-          icon={<Timer color={brandBlue} size={12} strokeWidth={2} />}
-          value={
-            trip.durationMinutes === null
-              ? "—"
-              : formatDuration(trip.durationMinutes)
-          }
-        />
-        <Metric
-          icon={<Gauge color={brandBlue} size={12} strokeWidth={2} />}
-          value={formatKm(trip.distanceKm)}
-        />
-        <Metric
-          icon={<Users color={brandBlue} size={12} strokeWidth={2} />}
-          value={`${trip.pickups} ${trip.pickups === 1 ? "pickup" : "pickups"}`}
-        />
-      </View>
-
-      {!!trip.plateNumber && (
-        <Text style={styles.vehicle}>
-          {[trip.plateNumber, trip.vehicleType].filter(Boolean).join(" · ")}
+        <Text style={styles.route} numberOfLines={2}>
+          {trip.routeName}
         </Text>
-      )}
+        <StatusPill
+          label={trip.inProgress ? "In progress" : "Completed"}
+          tone={trip.inProgress ? "live" : "completed"}
+        />
+      </View>
+
+      <View style={styles.details}>
+        <Detail
+          icon={<CalendarDays color={brandBlue} size={13} strokeWidth={2} />}
+        >
+          {trip.departedAt ? formatDay(trip.departedAt) : "Date unavailable"}
+        </Detail>
+        <Detail icon={<Clock color={brandBlue} size={13} strokeWidth={2} />}>
+          {times}
+        </Detail>
+        <Detail icon={<Timer color={brandBlue} size={13} strokeWidth={2} />}>
+          {trip.durationMinutes === null
+            ? "—"
+            : formatDuration(trip.durationMinutes)}
+        </Detail>
+        <Detail icon={<Gauge color={brandBlue} size={13} strokeWidth={2} />}>
+          {formatKm(trip.distanceKm)}
+        </Detail>
+        <Detail icon={<Users color={brandBlue} size={13} strokeWidth={2} />}>
+          {trip.pickups} {trip.pickups === 1 ? "pickup" : "pickups"}
+        </Detail>
+        {!!vehicle && (
+          <Detail
+            icon={<BusFront color={brandBlue} size={13} strokeWidth={2} />}
+          >
+            {vehicle}
+          </Detail>
+        )}
+      </View>
     </View>
   );
 }
 
-function Metric({ icon, value }: { icon: ReactNode; value: string }) {
+function Detail({ icon, children }: { icon: ReactNode; children: ReactNode }) {
   return (
-    <View style={styles.metric}>
-      {icon}
-      <Text style={styles.metricText} numberOfLines={1}>
-        {value}
+    <View style={styles.detail}>
+      <View style={styles.detailIcon}>{icon}</View>
+      <Text style={styles.detailText} numberOfLines={1}>
+        {children}
       </Text>
     </View>
   );
@@ -316,8 +315,8 @@ const styles = StyleSheet.create({
   tileLabel: { color: mutedText, fontFamily: "Sora", fontSize: 8 },
   list: { gap: 10, marginTop: 16 },
   card: {
-    gap: 6,
-    paddingVertical: 12,
+    gap: 12,
+    paddingVertical: 14,
     paddingHorizontal: 14,
     borderWidth: 1.5,
     borderColor: brandBlue,
@@ -325,21 +324,29 @@ const styles = StyleSheet.create({
     borderRightColor: cardEdgeBlue,
     borderRadius: 10,
   },
-  cardTop: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
-  route: { color: brandBlue, fontFamily: "SoraBold", fontSize: 13 },
-  code: { color: mutedText, fontFamily: "Sora", fontSize: 8, marginTop: 2 },
-  badge: {
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 999,
-    backgroundColor: "#dcfce7",
+  cardTop: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  route: {
+    flex: 1,
+    color: brandBlue,
+    fontFamily: "SoraBold",
+    fontSize: 17,
+    lineHeight: 22,
   },
-  badgeLive: { backgroundColor: softBlue },
-  badgeText: { color: "#15803d", fontFamily: "SoraBold", fontSize: 8 },
-  badgeTextLive: { color: brandBlue },
-  date: { color: text, fontFamily: "Sora", fontSize: 10 },
-  metrics: { flexDirection: "row", gap: 14 },
-  metric: { flexDirection: "row", alignItems: "center", gap: 4 },
-  metricText: { color: text, fontFamily: "SoraBold", fontSize: 10 },
-  vehicle: { color: mutedText, fontFamily: "Sora", fontSize: 9 },
+  details: { flexDirection: "row", flexWrap: "wrap", rowGap: 8 },
+  detail: {
+    width: "50%",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingRight: 6,
+  },
+  detailIcon: {
+    width: 22,
+    height: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 11,
+    backgroundColor: softBlue,
+  },
+  detailText: { flex: 1, color: text, fontFamily: "Sora", fontSize: 10 },
 });

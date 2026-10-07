@@ -8,7 +8,7 @@ import { Keyboard, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 
 import { searchRiders, type Rider } from "@/api/v1/pickups/controllers";
-import { LoadingSprite } from "@/components/brand-logo";
+import { LoadingLogo } from "@/components/LoadingLogo";
 import { moduleColors, SoftField } from "@/components/module-ui";
 
 const { brandBlue, mutedText, softBlue, text, error } = moduleColors;
@@ -129,7 +129,7 @@ export function ShareRideField({
         icon={<UserRound color={brandBlue} size={20} strokeWidth={2} />}
         trailing={
           searching ? (
-            <LoadingSprite size={18} />
+            <LoadingLogo size={18} />
           ) : query.length > 0 ? (
             <Pressable
               accessibilityRole="button"

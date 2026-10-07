@@ -5,6 +5,7 @@ import {
   getPasswordProblem,
 } from "@/api/v1/auth/validation";
 import { getErrorMessage } from "@/api/v1/client";
+import { signedOutOrOffline } from "@/api/v1/session-route";
 import { forgetPushToken } from "@/api/v1/notifications/controllers";
 import {
   getSignedInRoute,
@@ -30,8 +31,8 @@ export async function getStartupRoute(): Promise<AppRoute> {
     const { session } = await unwrap(authRoutes.getSession());
     if (!session) return Routes.login;
     return (await getSignedInRoute(session.user.id)) ?? Routes.login;
-  } catch {
-    return Routes.login;
+  } catch (error) {
+    return signedOutOrOffline(error);
   }
 }
 

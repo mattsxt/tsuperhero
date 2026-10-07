@@ -13,7 +13,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import Reanimated from "react-native-reanimated";
+import Reanimated, { FadeIn } from "react-native-reanimated";
 
 import {
   codeLength,
@@ -34,6 +34,7 @@ import { Routes } from "@/constants/routes";
 
 const brandBlue = "#193caf";
 const inputWidth = 320;
+const stepFadeMs = 260;
 
 export default function RegisterScreen() {
   const [step, setStep] = useState(1);
@@ -114,127 +115,140 @@ export default function RegisterScreen() {
         </Reanimated.Text>
       )}
 
-      {step === 4 ? (
-        <CompletionState />
-      ) : (
-        <>
-          {step === 1 && (
-            <View style={styles.stepContent}>
-              <Text style={styles.stepTitle}>Input your email address</Text>
-              <StepNavigation step={step} onBack={goToPreviousStep} />
-              <FieldLabel label="EMAIL ADDRESS" />
-              <TextInput
-                value={email}
-                onChangeText={(value) => {
-                  setEmail(value);
-                  if (emailError) setEmailError("");
-                }}
-                placeholder="Email address"
-                autoCapitalize="none"
-                keyboardType="email-address"
-                style={[styles.input, emailError && styles.inputError]}
-              />
-              {!!emailError && (
-                <Text style={styles.errorText}>{emailError}</Text>
-              )}
-            </View>
-          )}
-
-          {step === 2 && (
-            <View style={styles.stepContent}>
-              <Text style={styles.stepTitle}>Verify your email address</Text>
-              <StepNavigation step={step} onBack={goToPreviousStep} />
-              <Text style={styles.description}>
-                We just sent a {codeLength}-digit code to{"\n"}
-                {email || "your email"}, enter it below
-              </Text>
-              <View style={styles.fieldHeading}>
-                <FieldLabel label="CODE" />
-                <Pressable onPress={resendCode} style={styles.resendButton}>
-                  <RefreshCcw color="#171717" size={10} strokeWidth={2} />
-                  <Text style={styles.resendText}>RESEND CODE</Text>
-                </Pressable>
+      <Reanimated.View
+        key={step}
+        entering={FadeIn.duration(stepFadeMs)}
+        style={styles.stepWrap}
+      >
+        {step === 4 ? (
+          <CompletionState />
+        ) : (
+          <>
+            {step === 1 && (
+              <View style={styles.stepContent}>
+                <Text style={styles.stepTitle}>Input your email address</Text>
+                <StepNavigation step={step} onBack={goToPreviousStep} />
+                <FieldLabel label="EMAIL ADDRESS" />
+                <TextInput
+                  value={email}
+                  onChangeText={(value) => {
+                    setEmail(value);
+                    if (emailError) setEmailError("");
+                  }}
+                  placeholder="Email address"
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  style={[styles.input, emailError && styles.inputError]}
+                />
+                {!!emailError && (
+                  <Text style={styles.errorText}>{emailError}</Text>
+                )}
               </View>
-              <View style={styles.codeRow}>
-                {Array.from({ length: codeLength }, (_, index) => (
-                  <TextInput
-                    key={index}
-                    ref={(input) => {
-                      codeInputs.current[index] = input;
-                    }}
-                    value={(code[index] || "").trim()}
-                    onChangeText={(value) => {
-                      const digits = value.replace(/\D/g, "");
-                      const nextCode = code.padEnd(codeLength, " ").split("");
-                      if (digits.length > 1) {
-                        const pasted = digits.slice(0, codeLength - index);
-                        pasted.split("").forEach((digit, offset) => {
-                          nextCode[index + offset] = digit;
-                        });
-                        focusCodeInput(index + pasted.length);
-                      } else {
-                        nextCode[index] = digits || " ";
-                        if (digits) focusCodeInput(index + 1);
-                      }
-                      setCode(nextCode.join("").trimEnd());
-                      if (codeError) setCodeError("");
-                    }}
-                    onKeyPress={({ nativeEvent }) => {
-                      if (
-                        nativeEvent.key === "Backspace" &&
-                        !code[index]?.trim() &&
-                        index > 0
-                      ) {
+            )}
+
+            {step === 2 && (
+              <View style={styles.stepContent}>
+                <Text style={styles.stepTitle}>Verify your email address</Text>
+                <StepNavigation step={step} onBack={goToPreviousStep} />
+                <Text style={styles.description}>
+                  We just sent a {codeLength}-digit code to{"\n"}
+                  {email || "your email"}, enter it below
+                </Text>
+                <View style={styles.fieldHeading}>
+                  <FieldLabel label="CODE" />
+                  <Pressable onPress={resendCode} style={styles.resendButton}>
+                    <RefreshCcw color="#171717" size={10} strokeWidth={2} />
+                    <Text style={styles.resendText}>RESEND CODE</Text>
+                  </Pressable>
+                </View>
+                <View style={styles.codeRow}>
+                  {Array.from({ length: codeLength }, (_, index) => (
+                    <TextInput
+                      key={index}
+                      ref={(input) => {
+                        codeInputs.current[index] = input;
+                      }}
+                      value={(code[index] || "").trim()}
+                      onChangeText={(value) => {
+                        const digits = value.replace(/\D/g, "");
                         const nextCode = code.padEnd(codeLength, " ").split("");
-                        nextCode[index - 1] = " ";
+                        if (digits.length > 1) {
+                          const pasted = digits.slice(0, codeLength - index);
+                          pasted.split("").forEach((digit, offset) => {
+                            nextCode[index + offset] = digit;
+                          });
+                          focusCodeInput(index + pasted.length);
+                        } else {
+                          nextCode[index] = digits || " ";
+                          if (digits) focusCodeInput(index + 1);
+                        }
                         setCode(nextCode.join("").trimEnd());
-                        focusCodeInput(index - 1);
-                      }
-                    }}
-                    selectTextOnFocus
-                    autoFocus={index === 0}
-                    keyboardType="number-pad"
-                    autoComplete="one-time-code"
-                    textContentType="oneTimeCode"
-                    maxLength={codeLength}
-                    style={styles.codeInput}
-                  />
-                ))}
+                        if (codeError) setCodeError("");
+                      }}
+                      onKeyPress={({ nativeEvent }) => {
+                        if (
+                          nativeEvent.key === "Backspace" &&
+                          !code[index]?.trim() &&
+                          index > 0
+                        ) {
+                          const nextCode = code
+                            .padEnd(codeLength, " ")
+                            .split("");
+                          nextCode[index - 1] = " ";
+                          setCode(nextCode.join("").trimEnd());
+                          focusCodeInput(index - 1);
+                        }
+                      }}
+                      selectTextOnFocus
+                      autoFocus={index === 0}
+                      keyboardType="number-pad"
+                      autoComplete="one-time-code"
+                      textContentType="oneTimeCode"
+                      maxLength={codeLength}
+                      style={styles.codeInput}
+                    />
+                  ))}
+                </View>
+                {!!codeError && (
+                  <Text style={styles.errorText}>{codeError}</Text>
+                )}
               </View>
-              {!!codeError && <Text style={styles.errorText}>{codeError}</Text>}
-            </View>
-          )}
+            )}
 
-          {step === 3 && (
-            <PasswordStep
-              password={password}
-              passwordVisible={passwordVisible}
-              setPassword={setPassword}
-              passwordError={passwordError}
-              setPasswordError={setPasswordError}
-              setPasswordVisible={setPasswordVisible}
-              onBack={goToPreviousStep}
-            />
-          )}
+            {step === 3 && (
+              <PasswordStep
+                password={password}
+                passwordVisible={passwordVisible}
+                setPassword={setPassword}
+                passwordError={passwordError}
+                setPasswordError={setPasswordError}
+                setPasswordVisible={setPasswordVisible}
+                onBack={goToPreviousStep}
+              />
+            )}
 
-          <Pressable
-            style={[styles.primaryButton, submitting && styles.buttonDisabled]}
-            disabled={submitting}
-            onPress={continueToNextStep}
-          >
-            <Text style={styles.primaryButtonText}>
-              {submitting ? "PLEASE WAIT..." : "CONTINUE"}
-            </Text>
-          </Pressable>
-          <AccountLink />
-        </>
-      )}
+            <Pressable
+              style={[
+                styles.primaryButton,
+                submitting && styles.buttonDisabled,
+              ]}
+              disabled={submitting}
+              onPress={continueToNextStep}
+            >
+              <Text style={styles.primaryButtonText}>
+                {submitting ? "PLEASE WAIT..." : "CONTINUE"}
+              </Text>
+            </Pressable>
+            <AccountLink />
+          </>
+        )}
+      </Reanimated.View>
     </AuthScreen>
   );
 }
 
 function StepIndicator({ step }: { step: number }) {
-  const [progress] = useState(() => new Animated.Value(step));
+  const [progress] = useState(() => new Animated.Value(step - 1));
 
   useEffect(() => {
     const animation = Animated.timing(progress, {
@@ -419,9 +433,8 @@ const styles = StyleSheet.create({
   stepContent: { width: inputWidth },
   stepTitle: {
     color: "#050505",
-    fontFamily: "Sora",
+    fontFamily: "SoraBold",
     fontSize: 12,
-    fontWeight: "700",
     textAlign: "center",
     marginBottom: 14,
   },
@@ -441,9 +454,8 @@ const styles = StyleSheet.create({
   },
   fieldLabel: {
     color: "#090909",
-    fontFamily: "Sora",
+    fontFamily: "SoraBold",
     fontSize: 9,
-    fontWeight: "700",
   },
   resendText: {
     color: "#171717",
@@ -531,12 +543,12 @@ const styles = StyleSheet.create({
     fontFamily: "SoraBold",
     textDecorationLine: "underline",
   },
+  stepWrap: { alignItems: "center" },
   completion: { alignItems: "center", width: inputWidth, marginTop: 96 },
   completionTitle: {
     color: "#050505",
-    fontFamily: "Sora",
+    fontFamily: "SoraBold",
     fontSize: 19,
-    fontWeight: "700",
     lineHeight: 25,
     textAlign: "center",
   },

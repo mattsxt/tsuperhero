@@ -6,6 +6,7 @@ import {
   type RentalRow,
   type RentalVehicleType,
 } from "@/api/v1/rentals/routes";
+import { unwrapCached } from "@/api/v1/cache";
 import { attempt, failure, unwrap, type Result } from "@/api/v1/result";
 
 export type CharterVehicle = "van" | "jeep" | "bus";
@@ -161,7 +162,8 @@ export async function requestRental(
 
 export function loadMyRentals(): Promise<Result<Rental[]>> {
   return attempt(async () => {
-    const rows: RentalRow[] = (await unwrap(rentalRoutes.listMine())) ?? [];
+    const rows: RentalRow[] =
+      (await unwrapCached("rentals", rentalRoutes.listMine())) ?? [];
     return rows.map(toRental);
   });
 }
@@ -173,7 +175,8 @@ export function cancelRental(id: string): Promise<Result<unknown>> {
 export function loadRentalRequests(): Promise<Result<Rental[]>> {
   return attempt(async () => {
     const rows: RentalRow[] =
-      (await unwrap(rentalRoutes.listForDriver())) ?? [];
+      (await unwrapCached("rental-requests", rentalRoutes.listForDriver())) ??
+      [];
     return rows.map(toRental);
   });
 }

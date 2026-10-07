@@ -6,7 +6,9 @@ import type {
   ProfileChanges,
   ProfileRow,
 } from "@/api/v1/profile/types";
+import { unwrapCached } from "@/api/v1/cache";
 import { attempt, failure, unwrap, type Result } from "@/api/v1/result";
+import { signedOutOrOffline } from "@/api/v1/session-route";
 import { Routes, type AppRoute } from "@/constants/routes";
 
 export type UserType = MobileUserType;
@@ -27,10 +29,32 @@ function getHomeRoute(userType: UserType) {
   return userType === "commuter" ? Routes.commuterHome : Routes.transitHome;
 }
 
+// Profile fetched while signing in, so the next screen can render right away
+// instead of showing a second loading state while it fetches the same row.
+let signedInProfile: {
+  userId: string;
+  profile: Pick<ProfileRow, "user_type" | "first_name"> | null;
+} | null = null;
+
+export function peekHomeName(userType: UserType): string | null {
+  const profile = signedInProfile?.profile;
+  return profile?.user_type === userType ? profile.first_name : null;
+}
+
+export function peekSetupUserId(): string | null {
+  return signedInProfile && !signedInProfile.profile
+    ? signedInProfile.userId
+    : null;
+}
+
 export async function getSignedInRoute(
   userId: string,
 ): Promise<AppRoute | null> {
-  const profile = await unwrap(profileRoutes.findProfile(userId));
+  const profile = await unwrapCached(
+    `profile:${userId}`,
+    profileRoutes.findProfile(userId),
+  );
+  signedInProfile = { userId, profile };
   if (!profile) return Routes.setup;
   if (!isMobileUserType(profile.user_type)) {
     await authRoutes.signOut();
@@ -46,7 +70,10 @@ export async function loadHome(
     const { session } = await unwrap(authRoutes.getSession());
     if (!session) return { redirect: Routes.login };
 
-    const profile = await unwrap(profileRoutes.findProfile(session.user.id));
+    const profile = await unwrapCached(
+      `profile:${session.user.id}`,
+      profileRoutes.findProfile(session.user.id),
+    );
     if (!profile) return { redirect: Routes.setup };
     if (!isMobileUserType(profile.user_type)) {
       await authRoutes.signOut();
@@ -57,8 +84,8 @@ export async function loadHome(
     }
 
     return { firstName: profile.first_name };
-  } catch {
-    return { redirect: Routes.login };
+  } catch (error) {
+    return { redirect: signedOutOrOffline(error) };
   }
 }
 
@@ -73,8 +100,8 @@ export async function checkSetupAccess(): Promise<
     if (route !== Routes.setup) return { redirect: route ?? Routes.login };
 
     return { userId: session.user.id };
-  } catch {
-    return { redirect: Routes.login };
+  } catch (error) {
+    return { redirect: signedOutOrOffline(error) };
   }
 }
 
@@ -90,8 +117,8 @@ export async function loadHomeRoute(): Promise<
     if (route === Routes.setup) return { redirect: route };
 
     return { homeRoute: route };
-  } catch {
-    return { redirect: Routes.login };
+  } catch (error) {
+    return { redirect: signedOutOrOffline(error) };
   }
 }
 
@@ -148,7 +175,8 @@ async function loadSignedInProfile(): Promise<
   const { session } = await unwrap(authRoutes.getSession());
   if (!session) return { redirect: Routes.login };
 
-  const profile = await unwrap(
+  const profile = await unwrapCached(
+    `profile-details:${session.user.id}`,
     profileRoutes.findProfileDetails(session.user.id),
   );
   if (!profile) return { redirect: Routes.setup };
@@ -179,8 +207,8 @@ export async function loadProfileSummary(): Promise<
       userTypeLabel: userTypeLabels[profile.user_type],
       homeRoute: getHomeRoute(profile.user_type),
     };
-  } catch {
-    return { redirect: Routes.login };
+  } catch (error) {
+    return { redirect: signedOutOrOffline(error) };
   }
 }
 
@@ -300,8 +328,8 @@ export async function loadEditableProfile(): Promise<
       picturePath: profile.profile_picture,
       pictureUrl: getPictureUrl(profile.profile_picture),
     };
-  } catch {
-    return { redirect: Routes.login };
+  } catch (error) {
+    return { redirect: signedOutOrOffline(error) };
   }
 }
 

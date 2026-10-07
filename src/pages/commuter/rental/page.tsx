@@ -37,7 +37,7 @@ import {
   type RentalTrip,
   type TripType,
 } from "@/api/v1/rentals/controllers";
-import { LoadingSprite } from "@/components/brand-logo";
+import { LoadingLogo } from "@/components/LoadingLogo";
 import { DateTimeField } from "@/components/date-time-field";
 import { EmptyState } from "@/components/empty-state";
 import {
@@ -52,10 +52,12 @@ import {
   VehiclePicker,
   type VehicleOption,
 } from "@/components/module-ui";
+import { ConnectionRequired } from "@/components/connection-required";
 import { PlaceSearchField } from "@/components/place-search-field";
 import { RentalCard } from "@/components/rental-card";
 import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
+import { checkOnline, useOnline } from "@/hooks/use-online";
 import { usePolling } from "@/hooks/use-polling";
 
 const { brandBlue, softBlue, text, error } = moduleColors;
@@ -143,6 +145,7 @@ export default function RentalScreen() {
   const [rentals, setRentals] = useState<Rental[]>([]);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
+  const online = useOnline();
 
   const refreshRentals = useCallback(async () => {
     const result = await loadMyRentals();
@@ -204,6 +207,12 @@ export default function RentalScreen() {
     if (!trip || !driver || sending) return;
     setSending(true);
     setProblem("");
+    if (!(await checkOnline())) {
+      setSending(false);
+      return setProblem(
+        "You're offline. Connect to the internet to send your request.",
+      );
+    }
     const result = await requestRental(driver, trip);
     setSending(false);
     if (!result.ok) {
@@ -570,7 +579,7 @@ export default function RentalScreen() {
                 title="Available drivers"
               />
               {drivers === null ? (
-                <LoadingSprite style={styles.loading} label="Finding drivers" />
+                <LoadingLogo style={styles.loading} label="Finding drivers" />
               ) : drivers.length === 0 ? (
                 <EmptyState
                   icon={
@@ -603,10 +612,17 @@ export default function RentalScreen() {
                       />
                     ))}
                   </View>
-                  <Problem message={problem} />
+                  {!online && <ConnectionRequired action="A rental request" />}
+                  {online && <Problem message={problem} />}
                   <ModuleButton
-                    label={sending ? "SENDING..." : "SEND REQUEST"}
-                    disabled={!driverId || sending}
+                    label={
+                      sending
+                        ? "SENDING..."
+                        : online
+                          ? "SEND REQUEST"
+                          : "OFFLINE"
+                    }
+                    disabled={!driverId || sending || !online}
                     onPress={sendRequest}
                   />
                 </>

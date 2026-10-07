@@ -15,7 +15,7 @@ import {
   recommendWaitingArea,
   type WaitingArea,
 } from "@/api/v1/waiting-areas/controllers";
-import { LoadingSprite } from "@/components/brand-logo";
+import { LoadingLogo } from "@/components/LoadingLogo";
 import { moduleColors } from "@/components/module-ui";
 import {
   TransitMap,
@@ -168,7 +168,7 @@ export function PinLocationPicker({
             ]}
           >
             {saving ? (
-              <LoadingSprite color="#ffffff" size={22} />
+              <LoadingLogo color="#ffffff" size={22} />
             ) : (
               <Text style={styles.confirmText}>USE THIS LOCATION</Text>
             )}

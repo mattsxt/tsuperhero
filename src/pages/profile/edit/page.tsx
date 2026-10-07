@@ -34,7 +34,7 @@ import {
 } from "@/api/v1/profile/controllers";
 import { useKeyboardVisible } from "@/components/auth-screen";
 import { DateTimeField } from "@/components/date-time-field";
-import { LoadingSprite } from "@/components/brand-logo";
+import { LoadingLogo } from "@/components/LoadingLogo";
 import { MiniToast, type MiniToastMessage } from "@/components/mini-toast";
 import {
   FieldLabel,
@@ -113,7 +113,7 @@ export default function EditProfileScreen() {
   if (!profile) {
     return (
       <View style={styles.loadingScreen}>
-        <LoadingSprite color={brandBlue} />
+        <LoadingLogo color={brandBlue} />
       </View>
     );
   }

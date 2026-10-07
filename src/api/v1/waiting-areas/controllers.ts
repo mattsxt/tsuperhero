@@ -1,4 +1,5 @@
-import { attempt, unwrap, type Result } from "@/api/v1/result";
+import { unwrapCached } from "@/api/v1/cache";
+import { attempt, type Result } from "@/api/v1/result";
 import { waitingAreaRoutes } from "@/api/v1/waiting-areas/routes";
 import type { WaitingAreaRow } from "@/api/v1/waiting-areas/types";
 import { getDistanceMeters, isNearPath, type Coordinates } from "@/utils/geo";
@@ -31,7 +32,8 @@ export const getKnownWaitingAreas = () => knownWaitingAreas;
 export async function loadWaitingAreas(): Promise<Result<WaitingArea[]>> {
   const result = await attempt(async (): Promise<WaitingArea[]> => {
     const rows: WaitingAreaRow[] =
-      (await unwrap(waitingAreaRoutes.listActive())) ?? [];
+      (await unwrapCached("waiting-areas", waitingAreaRoutes.listActive())) ??
+      [];
     return rows.map(({ id, name, lat, lng, route_id, vicinity, type }) => ({
       id,
       name,

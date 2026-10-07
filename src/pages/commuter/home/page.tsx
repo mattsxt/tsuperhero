@@ -13,10 +13,10 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { loadActivePickup } from "@/api/v1/pickups/controllers";
-import { loadHome } from "@/api/v1/profile/controllers";
+import { loadHome, peekHomeName } from "@/api/v1/profile/controllers";
 import { loadWaitingAreas } from "@/api/v1/waiting-areas/controllers";
 import { BottomNav, bottomNavHeight } from "@/components/bottom-nav";
-import { LoadingSprite } from "@/components/brand-logo";
+import { LoadingLogo } from "@/components/LoadingLogo";
 import {
   ActionCard,
   ActionRow,
@@ -40,7 +40,7 @@ export default function CommuterHomeScreen() {
   const insets = useSafeAreaInsets();
   const chrome = useScrollChrome();
   const blurTarget = useRef<View | null>(null);
-  const [firstName, setFirstName] = useState<string | null>(null);
+  const [firstName, setFirstName] = useState(() => peekHomeName("commuter"));
   const [searchOpen, setSearchOpen] = useState(false);
   const scrollRef = useAnimatedRef<Animated.ScrollView>();
   const minimizedHeaderHeight = chrome.collapsedHeaderHeight ?? insets.top + 56;
@@ -75,7 +75,7 @@ export default function CommuterHomeScreen() {
   if (firstName === null) {
     return (
       <View style={styles.loadingScreen}>
-        <LoadingSprite color={brandBlue} />
+        <LoadingLogo color={brandBlue} />
       </View>
     );
   }

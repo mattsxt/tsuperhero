@@ -42,11 +42,13 @@ import {
   SectionTitle,
   VehiclePicker,
 } from "@/components/module-ui";
+import { ConnectionRequired } from "@/components/connection-required";
 import { PlaceSearchField } from "@/components/place-search-field";
 import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { TransitMap, type TransitMapState } from "@/components/transit-map";
 import { Routes } from "@/constants/routes";
 import { usePolling } from "@/hooks/use-polling";
+import { checkOnline, useOnline } from "@/hooks/use-online";
 import { goBackOr } from "@/utils/navigation";
 
 import { ActivePickup } from "./active-pickup";
@@ -67,6 +69,7 @@ export default function PickupScreen() {
   const [place, setPlace] = useState<Place | null>(null);
   const [vehicle, setVehicle] = useState<PickupVehicle>("jeep");
   const [riders, setRiders] = useState<Rider[]>([]);
+  const online = useOnline();
   const [passengers, setPassengers] = useState(1);
   const [problem, setProblem] = useState("");
   const [busy, setBusy] = useState(false);
@@ -128,6 +131,12 @@ export default function PickupScreen() {
     if (busy) return;
     setBusy(true);
     setProblem("");
+    if (!(await checkOnline())) {
+      setBusy(false);
+      return setProblem(
+        "You're offline. Connect to the internet to send your request.",
+      );
+    }
     const result = await requestPickup({
       vehicle,
       passengers,
@@ -329,10 +338,11 @@ export default function PickupScreen() {
             </View>
           </View>
 
-          {!!problem && <Text style={styles.problem}>{problem}</Text>}
+          {!online && <ConnectionRequired action="A pickup request" />}
+          {!!problem && online && <Text style={styles.problem}>{problem}</Text>}
           <ModuleButton
-            label={busy ? "REQUESTING..." : "CONFIRM"}
-            disabled={busy}
+            label={busy ? "REQUESTING..." : online ? "CONFIRM" : "OFFLINE"}
+            disabled={busy || !online}
             onPress={confirm}
           />
         </View>

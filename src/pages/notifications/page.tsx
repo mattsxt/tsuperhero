@@ -34,7 +34,7 @@ import {
 import { dismissFromDevice } from "@/api/v1/notifications/device";
 import { loadHomeRoute } from "@/api/v1/profile/controllers";
 import { BottomNav, bottomNavHeight } from "@/components/bottom-nav";
-import { LoadingSprite } from "@/components/brand-logo";
+import { LoadingLogo } from "@/components/LoadingLogo";
 import {
   ExpandedOnly,
   headerLayoutTransition,
@@ -138,7 +138,7 @@ export default function NotificationsScreen() {
   if (!homeRoute) {
     return (
       <View style={styles.loadingScreen}>
-        <LoadingSprite color={brandBlue} />
+        <LoadingLogo color={brandBlue} />
       </View>
     );
   }
