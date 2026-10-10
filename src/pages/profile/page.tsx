@@ -15,10 +15,18 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { logout } from "@/api/v1/auth/controllers";
 import {
   loadProfileSummary,
+<<<<<<< HEAD
   type ProfileSummary,
 } from "@/api/v1/profile/controllers";
 import { BottomNav, bottomNavHeight } from "@/components/bottom-nav";
 import { LoadingLogo } from "@/components/LoadingLogo";
+=======
+  peekProfileSummary,
+  peekSignedInHomeRoute,
+  type ProfileSummary,
+} from "@/api/v1/profile/controllers";
+import { BottomNav, bottomNavHeight } from "@/components/bottom-nav";
+>>>>>>> origin/mapbox
 import {
   ExpandedOnly,
   headerLayoutTransition,
@@ -29,6 +37,10 @@ import {
 } from "@/components/scroll-chrome";
 import { LoadingScreen, signOutMessages } from "@/components/LoadingScreen";
 import { Routes } from "@/constants/routes";
+<<<<<<< HEAD
+=======
+import { useOnline } from "@/hooks/use-online";
+>>>>>>> origin/mapbox
 
 const brandBlue = "#193caf";
 const headerBlue = "#1034A6";
@@ -41,8 +53,16 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const chrome = useScrollChrome();
   const blurTarget = useRef<View | null>(null);
+<<<<<<< HEAD
   const [summary, setSummary] = useState<ProfileSummary | null>(null);
   const [signingOut, setSigningOut] = useState(false);
+=======
+  const [summary, setSummary] = useState<ProfileSummary | null>(
+    peekProfileSummary,
+  );
+  const [signingOut, setSigningOut] = useState(false);
+  const online = useOnline();
+>>>>>>> origin/mapbox
 
   useFocusEffect(
     useCallback(() => {
@@ -82,6 +102,7 @@ export default function ProfileScreen() {
 
   if (signingOut) return <LoadingScreen messages={signOutMessages} />;
 
+<<<<<<< HEAD
   if (!summary) {
     return (
       <View style={styles.loadingScreen}>
@@ -89,6 +110,9 @@ export default function ProfileScreen() {
       </View>
     );
   }
+=======
+  const homeRoute = summary?.homeRoute ?? peekSignedInHomeRoute();
+>>>>>>> origin/mapbox
 
   return (
     <View style={styles.screen}>
@@ -107,7 +131,14 @@ export default function ProfileScreen() {
             <Text style={styles.sectionLabel}>Configure your profile</Text>
             <Pressable
               accessibilityRole="button"
+<<<<<<< HEAD
               accessibilityLabel={`Edit profile of ${summary.fullName}`}
+=======
+              accessibilityLabel={
+                summary ? `Edit profile of ${summary.fullName}` : "Edit profile"
+              }
+              disabled={!summary || !online}
+>>>>>>> origin/mapbox
               onPress={() => router.push(Routes.profileEdit)}
               style={({ pressed }) => [
                 styles.card,
@@ -116,18 +147,29 @@ export default function ProfileScreen() {
               ]}
             >
               <View style={styles.avatar}>
+<<<<<<< HEAD
                 {summary.pictureUrl ? (
+=======
+                {summary?.pictureUrl ? (
+>>>>>>> origin/mapbox
                   <Image
                     source={{ uri: summary.pictureUrl }}
                     style={styles.avatarImage}
                     contentFit="cover"
                   />
                 ) : (
+<<<<<<< HEAD
                   <Text style={styles.avatarText}>{summary.initials}</Text>
+=======
+                  <Text style={styles.avatarText}>
+                    {summary?.initials ?? "…"}
+                  </Text>
+>>>>>>> origin/mapbox
                 )}
               </View>
               <View style={styles.profileText}>
                 <Text style={styles.profileName} numberOfLines={1}>
+<<<<<<< HEAD
                   {summary.fullName}
                 </Text>
                 <Text style={styles.profileDetail} numberOfLines={1}>
@@ -140,10 +182,36 @@ export default function ProfileScreen() {
               <View style={styles.userTypeBadge}>
                 <Text style={styles.userTypeText}>{summary.userTypeLabel}</Text>
               </View>
+=======
+                  {summary?.fullName ?? "Loading profile…"}
+                </Text>
+                <Text style={styles.profileDetail} numberOfLines={1}>
+                  {summary?.email ?? ""}
+                </Text>
+                <Text style={styles.profileDetail}>
+                  {summary?.contactNumber ?? ""}
+                </Text>
+              </View>
+              {summary && (
+                <View style={styles.userTypeBadge}>
+                  <Text style={styles.userTypeText}>
+                    {summary.userTypeLabel}
+                  </Text>
+                </View>
+              )}
+>>>>>>> origin/mapbox
               <ChevronRight color={brandBlue} size={20} strokeWidth={2.5} />
             </Pressable>
 
             <Text style={styles.sectionLabel}>Actions</Text>
+<<<<<<< HEAD
+=======
+            {!online && (
+              <Text style={styles.offlineNotice}>
+                Connect to the internet to edit your profile or sign out.
+              </Text>
+            )}
+>>>>>>> origin/mapbox
             <View style={styles.actions}>
               <ActionRow
                 label="Security"
@@ -152,7 +220,11 @@ export default function ProfileScreen() {
                   <ShieldCog color={brandBlue} size={18} strokeWidth={1.8} />
                 }
               />
+<<<<<<< HEAD
               {summary.userType === "transit_personnel" && (
+=======
+              {summary?.userType === "transit_personnel" && (
+>>>>>>> origin/mapbox
                 <ActionRow
                   label="Vehicles & Documents"
                   onPress={() => router.push(Routes.profileVehicles)}
@@ -164,7 +236,11 @@ export default function ProfileScreen() {
               <ActionRow
                 label="Sign out"
                 danger
+<<<<<<< HEAD
                 disabled={signingOut}
+=======
+                disabled={signingOut || !online}
+>>>>>>> origin/mapbox
                 onPress={signOut}
                 icon={<LogOut color={dangerRed} size={18} strokeWidth={1.8} />}
                 trailing={null}
@@ -218,12 +294,23 @@ export default function ProfileScreen() {
         </StickyHeader>
       </BlurTargetView>
 
+<<<<<<< HEAD
       <BottomNav
         active="profile"
         homeRoute={summary.homeRoute}
         blurTarget={blurTarget}
         hidden={chrome.navHidden}
       />
+=======
+      {homeRoute && (
+        <BottomNav
+          active="profile"
+          homeRoute={homeRoute}
+          blurTarget={blurTarget}
+          hidden={chrome.navHidden}
+        />
+      )}
+>>>>>>> origin/mapbox
     </View>
   );
 }
@@ -272,12 +359,15 @@ function ActionRow({
 }
 
 const styles = StyleSheet.create({
+<<<<<<< HEAD
   loadingScreen: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#ffffff",
   },
+=======
+>>>>>>> origin/mapbox
   screen: { flex: 1, backgroundColor: "#ffffff" },
   blurTarget: { flex: 1 },
   header: {
@@ -332,6 +422,15 @@ const styles = StyleSheet.create({
     marginTop: 18,
     marginBottom: 10,
   },
+<<<<<<< HEAD
+=======
+  offlineNotice: {
+    color: "#6b6b6b",
+    fontFamily: "Sora",
+    fontSize: 10,
+    marginBottom: 8,
+  },
+>>>>>>> origin/mapbox
   card: {
     flexDirection: "row",
     alignItems: "center",

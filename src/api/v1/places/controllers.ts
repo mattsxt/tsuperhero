@@ -23,7 +23,14 @@ export type PlaceSuggestion = {
 export const minPlaceQueryLength = 2;
 
 export function createPlacesSession() {
+<<<<<<< HEAD
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+=======
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (char) => {
+    const random = Math.floor(Math.random() * 16);
+    return (char === "x" ? random : (random & 0x3) | 0x8).toString(16);
+  });
+>>>>>>> origin/mapbox
 }
 
 export async function searchPlaces(
@@ -34,6 +41,7 @@ export async function searchPlaces(
 
   try {
     const response = await placesApi.autocomplete(query.trim(), sessionToken);
+<<<<<<< HEAD
     if (response.error) throw new Error(response.error.message);
 
     const remote = (response.suggestions ?? []).flatMap(
@@ -51,6 +59,18 @@ export async function searchPlaces(
               },
             ]
           : [],
+=======
+    if (!response.suggestions) {
+      throw new Error(response.message ?? "Place search failed.");
+    }
+
+    const remote = response.suggestions.map(
+      (suggestion): PlaceSuggestion => ({
+        id: suggestion.mapbox_id,
+        name: suggestion.name,
+        address: suggestion.place_formatted ?? suggestion.full_address ?? "",
+      }),
+>>>>>>> origin/mapbox
     );
     return { suggestions: remote };
   } catch (error) {
@@ -64,6 +84,7 @@ export async function resolvePlace(
 ): Promise<Result<Place>> {
   try {
     const details = await placesApi.details(suggestion.id, sessionToken);
+<<<<<<< HEAD
     if (details.error || !details.location) {
       throw new Error(details.error?.message ?? "Couldn't load that place.");
     }
@@ -73,6 +94,26 @@ export async function resolvePlace(
       address: details.formattedAddress ?? suggestion.address,
       lat: details.location.latitude,
       lng: details.location.longitude,
+=======
+    const feature = details.features?.[0];
+    const properties = feature?.properties;
+    const lng =
+      properties?.coordinates?.longitude ?? feature?.geometry?.coordinates[0];
+    const lat =
+      properties?.coordinates?.latitude ?? feature?.geometry?.coordinates[1];
+    if (lat === undefined || lng === undefined) {
+      throw new Error(details.message ?? "Couldn't load that place.");
+    }
+    return success({
+      id: suggestion.id,
+      name: properties?.name ?? suggestion.name,
+      address:
+        properties?.full_address ??
+        properties?.place_formatted ??
+        suggestion.address,
+      lat,
+      lng,
+>>>>>>> origin/mapbox
     });
   } catch (error) {
     return failure(getErrorMessage(error));

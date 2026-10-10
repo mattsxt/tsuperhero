@@ -18,7 +18,11 @@ import {
   type ShareInvite,
 } from "@/api/v1/pickups/controllers";
 import { LoadingLogo } from "@/components/LoadingLogo";
+<<<<<<< HEAD
 import { ModuleButton, moduleColors } from "@/components/module-ui";
+=======
+import { moduleColors } from "@/components/module-ui";
+>>>>>>> origin/mapbox
 import { useNotifications } from "@/hooks/use-notifications";
 
 const { brandBlue, mutedText, softBlue, text, error } = moduleColors;
@@ -151,12 +155,31 @@ export function ShareInviteModal() {
                 <Text style={styles.declineText}>Decline</Text>
               )}
             </Pressable>
+<<<<<<< HEAD
             <ModuleButton
               label={busy === "accept" ? "Accepting..." : "Accept"}
               disabled={!!busy}
               onPress={() => respond(true)}
               style={styles.accept}
             />
+=======
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !!busy, busy: busy === "accept" }}
+              disabled={!!busy}
+              onPress={() => respond(true)}
+              style={({ pressed }) => [
+                styles.accept,
+                (pressed || !!busy) && styles.pressed,
+              ]}
+            >
+              {busy === "accept" ? (
+                <LoadingLogo color="#ffffff" size={18} />
+              ) : (
+                <Text style={styles.acceptText}>Accept</Text>
+              )}
+            </Pressable>
+>>>>>>> origin/mapbox
           </View>
         </View>
       </View>
@@ -172,6 +195,12 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0, 0, 0, 0.45)",
   },
   card: {
+<<<<<<< HEAD
+=======
+    width: "100%",
+    maxWidth: 420,
+    alignSelf: "center",
+>>>>>>> origin/mapbox
     padding: 18,
     borderRadius: 16,
     backgroundColor: "#ffffff",
@@ -224,6 +253,10 @@ const styles = StyleSheet.create({
   actions: { flexDirection: "row", gap: 10, marginTop: 18 },
   decline: {
     flex: 1,
+<<<<<<< HEAD
+=======
+    minWidth: 0,
+>>>>>>> origin/mapbox
     alignItems: "center",
     justifyContent: "center",
     minHeight: 48,
@@ -232,6 +265,23 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   declineText: { color: brandBlue, fontFamily: "SoraBold", fontSize: 13 },
+<<<<<<< HEAD
   accept: { flex: 1 },
+=======
+  accept: {
+    flex: 1,
+    minWidth: 0,
+    height: 52,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 14,
+    backgroundColor: brandBlue,
+  },
+  acceptText: {
+    color: "#ffffff",
+    fontFamily: "SoraBold",
+    fontSize: 15,
+  },
+>>>>>>> origin/mapbox
   pressed: { opacity: 0.8 },
 });

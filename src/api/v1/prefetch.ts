@@ -1,3 +1,7 @@
+<<<<<<< HEAD
+=======
+import { saveOfflineMap } from "@/api/v1/offline-map";
+>>>>>>> origin/mapbox
 import {
   loadMyTrips,
   loadOperatorAssignment,
@@ -64,6 +68,10 @@ async function prepare() {
     loadWaitingAreas(),
     loadProfileSummary(),
   ]);
+<<<<<<< HEAD
+=======
+  if (routes.ok) saveOfflineMap(routes.data).catch(() => {});
+>>>>>>> origin/mapbox
 
   if (home.homeRoute === Routes.commuterHome) {
     await Promise.allSettled([

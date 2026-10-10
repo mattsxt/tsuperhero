@@ -32,9 +32,18 @@ import {
   type AppNotification,
 } from "@/api/v1/notifications/controllers";
 import { dismissFromDevice } from "@/api/v1/notifications/device";
+<<<<<<< HEAD
 import { loadHomeRoute } from "@/api/v1/profile/controllers";
 import { BottomNav, bottomNavHeight } from "@/components/bottom-nav";
 import { LoadingLogo } from "@/components/LoadingLogo";
+=======
+import {
+  loadHomeRoute,
+  loadProfileSummary,
+  peekSignedInHomeRoute,
+} from "@/api/v1/profile/controllers";
+import { BottomNav, bottomNavHeight } from "@/components/bottom-nav";
+>>>>>>> origin/mapbox
 import {
   ExpandedOnly,
   headerLayoutTransition,
@@ -93,12 +102,22 @@ export default function NotificationsScreen() {
   const chrome = useScrollChrome();
   const { collapsed } = chrome;
   const blurTarget = useRef<View | null>(null);
+<<<<<<< HEAD
   const [homeRoute, setHomeRoute] = useState<AppRoute | null>(null);
+=======
+  const [homeRoute, setHomeRoute] = useState<AppRoute | null>(
+    peekSignedInHomeRoute,
+  );
+>>>>>>> origin/mapbox
   const [refreshing, setRefreshing] = useState(false);
   const { notifications, unreadCount } = useNotifications();
 
   useEffect(() => {
     let active = true;
+<<<<<<< HEAD
+=======
+    void loadProfileSummary();
+>>>>>>> origin/mapbox
 
     const load = async () => {
       const result = await loadHomeRoute();
@@ -135,6 +154,7 @@ export default function NotificationsScreen() {
     if (result.ok) dismissFromDevice(result.data);
   };
 
+<<<<<<< HEAD
   if (!homeRoute) {
     return (
       <View style={styles.loadingScreen}>
@@ -143,6 +163,8 @@ export default function NotificationsScreen() {
     );
   }
 
+=======
+>>>>>>> origin/mapbox
   return (
     <View style={styles.screen}>
       <StatusBar style="light" />
@@ -264,12 +286,23 @@ export default function NotificationsScreen() {
         </StickyHeader>
       </BlurTargetView>
 
+<<<<<<< HEAD
       <BottomNav
         active="notifications"
         homeRoute={homeRoute}
         blurTarget={blurTarget}
         hidden={chrome.navHidden}
       />
+=======
+      {homeRoute && (
+        <BottomNav
+          active="notifications"
+          homeRoute={homeRoute}
+          blurTarget={blurTarget}
+          hidden={chrome.navHidden}
+        />
+      )}
+>>>>>>> origin/mapbox
     </View>
   );
 }
@@ -316,12 +349,15 @@ function NotificationRow({
 }
 
 const styles = StyleSheet.create({
+<<<<<<< HEAD
   loadingScreen: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#ffffff",
   },
+=======
+>>>>>>> origin/mapbox
   screen: { flex: 1, backgroundColor: "#ffffff" },
   blurTarget: { flex: 1 },
   pressed: { opacity: 0.7 },

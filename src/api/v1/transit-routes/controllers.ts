@@ -124,15 +124,42 @@ export function searchDestinations(query: string) {
   );
 }
 
+<<<<<<< HEAD
 export const nearDestinationMeters = 500;
 
 export type RouteNearPlace = { route: TransitRoute; distanceMeters: number };
 
+=======
+export const nearDestinationMeters = 100;
+
+export type RouteNearPlace = { route: TransitRoute; distanceMeters: number };
+
+export function findNearestRoute(
+  point: { lat: number; lng: number },
+  routes: TransitRoute[] = selectableRoutes,
+): RouteNearPlace | null {
+  return (
+    routes
+      .map((route) => ({
+        route,
+        distanceMeters: Math.min(
+          ...[route.waypoints, ...route.alternativePaths]
+            .filter((path) => path.length > 0)
+            .map((path) => distanceToPath(point, path)),
+        ),
+      }))
+      .filter(({ distanceMeters }) => Number.isFinite(distanceMeters))
+      .sort((a, b) => a.distanceMeters - b.distanceMeters)[0] ?? null
+  );
+}
+
+>>>>>>> origin/mapbox
 export function findRoutesNear(point: {
   lat: number;
   lng: number;
 }): RouteNearPlace[] {
   return selectableRoutes
+<<<<<<< HEAD
     .map((route) => ({
       route,
       distanceMeters: Math.min(
@@ -141,6 +168,10 @@ export function findRoutesNear(point: {
           .map((path) => distanceToPath(point, path)),
       ),
     }))
+=======
+    .map((route) => findNearestRoute(point, [route]))
+    .filter((item): item is RouteNearPlace => item !== null)
+>>>>>>> origin/mapbox
     .filter(({ distanceMeters }) => distanceMeters <= nearDestinationMeters)
     .sort((a, b) => a.distanceMeters - b.distanceMeters);
 }
@@ -175,7 +206,11 @@ function getRoadCacheKey(points: LatLng[]) {
   for (const character of JSON.stringify(points)) {
     hash = ((hash << 5) + hash + character.charCodeAt(0)) | 0;
   }
+<<<<<<< HEAD
   return `road-geometry:v1:${points.length}:${hash}`;
+=======
+  return `road-geometry:v2:${points.length}:${hash}`;
+>>>>>>> origin/mapbox
 }
 
 function followRoads(points: LatLng[]): Promise<LatLng[]> {
@@ -208,7 +243,11 @@ async function requestRoads(points: LatLng[]): Promise<LatLng[] | null> {
     }
     return legs.flatMap((leg, index): LatLng[] => {
       const straight: LatLng[] = [points[index], points[index + 1]];
+<<<<<<< HEAD
       const coordinates = leg.polyline?.geoJsonLinestring?.coordinates;
+=======
+      const coordinates = leg.geometry?.coordinates;
+>>>>>>> origin/mapbox
       if (
         !coordinates?.length ||
         isDetour(
@@ -248,9 +287,15 @@ export async function loadEtaRoute(
   return attempt(async () => {
     const response = await transitRouteApi.etaRoute(from, to);
     const route = response.routes?.[0];
+<<<<<<< HEAD
     const seconds = Number.parseFloat(route?.duration ?? "");
     const coordinates = route?.polyline?.geoJsonLinestring?.coordinates;
     if (!route || !Number.isFinite(seconds) || !coordinates?.length) {
+=======
+    const seconds = route?.durationSeconds;
+    const coordinates = route?.geometry?.coordinates;
+    if (!route || seconds === undefined || !coordinates?.length) {
+>>>>>>> origin/mapbox
       throw new Error(response.error?.message ?? "No route found.");
     }
     return {
@@ -261,6 +306,29 @@ export async function loadEtaRoute(
   });
 }
 
+<<<<<<< HEAD
+=======
+export async function loadWalkingRoute(
+  from: LatLng,
+  to: LatLng,
+): Promise<Result<EtaRoute>> {
+  return attempt(async () => {
+    const response = await transitRouteApi.walkingRoute(from, to);
+    const route = response.routes?.[0];
+    const seconds = route?.durationSeconds;
+    const coordinates = route?.geometry?.coordinates;
+    if (!route || seconds === undefined || !coordinates?.length) {
+      throw new Error(response.error?.message ?? "No walking route found.");
+    }
+    return {
+      path: coordinates.map(([lng, lat]): LatLng => [lat, lng]),
+      durationSeconds: seconds,
+      distanceMeters: route.distanceMeters ?? 0,
+    };
+  });
+}
+
+>>>>>>> origin/mapbox
 export const vehicleStatusLabels: Record<string, string> = {
   "on-trip": "In Transit",
   loading: "Loading/Unloading",
@@ -276,6 +344,10 @@ export type LiveVehicle = {
   status: string;
   maxCapacity: number;
   currentCapacity: number;
+<<<<<<< HEAD
+=======
+  isFull: boolean;
+>>>>>>> origin/mapbox
   occupancy: OccupancyLevel;
   lat: number;
   lng: number;
@@ -295,7 +367,14 @@ export function loadLiveVehicles(): Promise<Result<LiveVehicle[]>> {
       status: vehicleStatusLabels[row.vehicle_status] ?? row.vehicle_status,
       maxCapacity: row.max_capacity,
       currentCapacity: row.current_capacity,
+<<<<<<< HEAD
       occupancy: getOccupancyLevel(row.current_capacity, row.max_capacity),
+=======
+      isFull: row.is_full,
+      occupancy: row.is_full
+        ? "Full"
+        : getOccupancyLevel(row.current_capacity, row.max_capacity),
+>>>>>>> origin/mapbox
       lat: row.latitude,
       lng: row.longitude,
       routeId: row.route_id,

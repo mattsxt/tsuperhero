@@ -10,6 +10,10 @@ import { unwrapCached } from "@/api/v1/cache";
 import { attempt, failure, unwrap, type Result } from "@/api/v1/result";
 import { signedOutOrOffline } from "@/api/v1/session-route";
 import { Routes, type AppRoute } from "@/constants/routes";
+<<<<<<< HEAD
+=======
+import { checkOnline } from "@/hooks/use-online";
+>>>>>>> origin/mapbox
 
 export type UserType = MobileUserType;
 
@@ -29,8 +33,11 @@ function getHomeRoute(userType: UserType) {
   return userType === "commuter" ? Routes.commuterHome : Routes.transitHome;
 }
 
+<<<<<<< HEAD
 // Profile fetched while signing in, so the next screen can render right away
 // instead of showing a second loading state while it fetches the same row.
+=======
+>>>>>>> origin/mapbox
 let signedInProfile: {
   userId: string;
   profile: Pick<ProfileRow, "user_type" | "first_name"> | null;
@@ -50,6 +57,12 @@ export function peekSetupUserId(): string | null {
 export async function getSignedInRoute(
   userId: string,
 ): Promise<AppRoute | null> {
+<<<<<<< HEAD
+=======
+  if (signedInProfileSummary?.userId !== userId) {
+    signedInProfileSummary = null;
+  }
+>>>>>>> origin/mapbox
   const profile = await unwrapCached(
     `profile:${userId}`,
     profileRoutes.findProfile(userId),
@@ -133,6 +146,23 @@ export type ProfileSummary = {
   homeRoute: AppRoute;
 };
 
+<<<<<<< HEAD
+=======
+let signedInProfileSummary: { userId: string; summary: ProfileSummary } | null =
+  null;
+
+export function peekProfileSummary(): ProfileSummary | null {
+  return signedInProfileSummary?.userId === signedInProfile?.userId
+    ? signedInProfileSummary.summary
+    : null;
+}
+
+export function peekSignedInHomeRoute(): AppRoute | null {
+  const userType = signedInProfile?.profile?.user_type;
+  return userType && isMobileUserType(userType) ? getHomeRoute(userType) : null;
+}
+
+>>>>>>> origin/mapbox
 const userTypeLabels: Record<UserType, string> = {
   commuter: "COMMUTER",
   transit_personnel: "TRANSIT PERSONNEL",
@@ -181,6 +211,16 @@ async function loadSignedInProfile(): Promise<
   );
   if (!profile) return { redirect: Routes.setup };
   const { user_type: userType } = profile;
+<<<<<<< HEAD
+=======
+  if (signedInProfileSummary?.userId !== session.user.id) {
+    signedInProfileSummary = null;
+  }
+  signedInProfile = {
+    userId: session.user.id,
+    profile: { user_type: userType, first_name: profile.first_name },
+  };
+>>>>>>> origin/mapbox
   if (!isMobileUserType(userType)) {
     await authRoutes.signOut();
     return { redirect: Routes.login };
@@ -197,7 +237,11 @@ export async function loadProfileSummary(): Promise<
     if ("redirect" in result) return result;
     const { user, profile } = result;
 
+<<<<<<< HEAD
     return {
+=======
+    const summary: ProfileSummary = {
+>>>>>>> origin/mapbox
       fullName: `${profile.first_name} ${profile.last_name}`,
       initials: getInitials(profile.first_name, profile.last_name),
       email: user.email ?? "",
@@ -207,6 +251,11 @@ export async function loadProfileSummary(): Promise<
       userTypeLabel: userTypeLabels[profile.user_type],
       homeRoute: getHomeRoute(profile.user_type),
     };
+<<<<<<< HEAD
+=======
+    signedInProfileSummary = { userId: user.id, summary };
+    return summary;
+>>>>>>> origin/mapbox
   } catch (error) {
     return { redirect: signedOutOrOffline(error) };
   }
@@ -274,6 +323,12 @@ export async function submitProfile(
   if (Object.keys(fieldErrors).length > 0 || !form.birthdate) {
     return { ...failure("Please complete the form."), fieldErrors };
   }
+<<<<<<< HEAD
+=======
+  if (!(await checkOnline())) {
+    return failure("Connect to the internet to update your profile.");
+  }
+>>>>>>> origin/mapbox
 
   const { birthdate, contact } = form;
   return attempt(async () => {
@@ -379,6 +434,12 @@ export async function saveProfileChanges(
   if (Object.keys(fieldErrors).length > 0 || !form.birthDate) {
     return { ...failure("Please check the form."), fieldErrors };
   }
+<<<<<<< HEAD
+=======
+  if (!(await checkOnline())) {
+    return failure("Connect to the internet to update your profile.");
+  }
+>>>>>>> origin/mapbox
 
   const { birthDate, contact, picture } = form;
   return attempt(async () => {

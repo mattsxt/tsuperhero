@@ -21,10 +21,18 @@ export const pickupRoutes = {
   findActiveRequest: (commuterId: string) =>
     requestTable()
       .select(
+<<<<<<< HEAD
         "request_id, request_status, device_latitude, device_longitude, pickup(pickup_id, pickup_destination, number_of_passengers)",
       )
       .eq("commuter_id", commuterId)
       .eq("request_type", "Pickup")
+=======
+        "request_id, request_status, device_latitude, device_longitude, pickup(pickup_id, pickup_destination, number_of_passengers, requested_vehicle_type)",
+      )
+      .eq("commuter_id", commuterId)
+      .eq("request_type", "Pickup")
+      .eq("is_draft", false)
+>>>>>>> origin/mapbox
       .in("request_status", ["pending", "accepted"])
       .order("request_date", { ascending: false })
       .limit(1)
@@ -41,12 +49,60 @@ export const pickupRoutes = {
       .select("request_id, request_status")
       .single(),
 
+<<<<<<< HEAD
   createPickup: (requestId: string, destination: string, passengers: number) =>
+=======
+  savePickupDraft: (
+    requestId: string | null,
+    latitude: number,
+    longitude: number,
+    destination: string,
+    passengers: number,
+    vehicleType: "Jeepney" | "Tricycle",
+  ) =>
+    getSupabaseClient().rpc("save_pickup_draft", {
+      p_request_id: requestId,
+      p_latitude: latitude,
+      p_longitude: longitude,
+      p_destination: destination,
+      p_passengers: passengers,
+      p_vehicle_type: vehicleType,
+    }),
+
+  findMyPickupDraft: () => getSupabaseClient().rpc("get_my_pickup_draft"),
+
+  findPickupCompanionStatuses: (requestId: string) =>
+    getSupabaseClient().rpc("get_pickup_companion_statuses", {
+      p_request_id: requestId,
+    }),
+
+  publishPickupDraft: (requestId: string) =>
+    getSupabaseClient().rpc("publish_pickup_draft", {
+      p_request_id: requestId,
+    }),
+
+  removePickupCompanion: (requestId: string, userId: string) =>
+    getSupabaseClient().rpc("remove_pickup_companion", {
+      p_request_id: requestId,
+      p_user_id: userId,
+    }),
+
+  createPickup: (
+    requestId: string,
+    destination: string,
+    passengers: number,
+    requestedVehicleType: "Jeepney" | "Tricycle",
+  ) =>
+>>>>>>> origin/mapbox
     pickupTable().insert({
       request_id: requestId,
       pickup_destination: destination,
       pickup_date: new Date().toISOString(),
       number_of_passengers: passengers,
+<<<<<<< HEAD
+=======
+      requested_vehicle_type: requestedVehicleType,
+>>>>>>> origin/mapbox
     }),
 
   deletePickup: (requestId: string) =>
@@ -62,7 +118,11 @@ export const pickupRoutes = {
   findMyTripHistory: () => getSupabaseClient().rpc("get_my_trip_history"),
 
   searchCommuters: (query: string) =>
+<<<<<<< HEAD
     getSupabaseClient().rpc("search_commuters", { p_query: query }),
+=======
+    getSupabaseClient().rpc("search_available_commuters", { p_query: query }),
+>>>>>>> origin/mapbox
 
   addCompanions: (requestId: string, userIds: string[]) =>
     getSupabaseClient().rpc("add_pickup_companions", {
@@ -70,6 +130,15 @@ export const pickupRoutes = {
       p_user_ids: userIds,
     }),
 
+<<<<<<< HEAD
+=======
+  addCompanion: (requestId: string, userId: string) =>
+    getSupabaseClient().rpc("add_pickup_companions", {
+      p_request_id: requestId,
+      p_user_ids: [userId],
+    }),
+
+>>>>>>> origin/mapbox
   findShareInvites: () => getSupabaseClient().rpc("get_my_share_invites"),
 
   respondToShareInvite: (requestId: string, accept: boolean) =>

@@ -78,13 +78,24 @@ export function ModuleHeader({
   onBack,
   collapsed = false,
   children,
+<<<<<<< HEAD
+=======
+  titleStyle,
+>>>>>>> origin/mapbox
 }: {
   title: string;
   subtitle: string;
   icon: ReactNode;
+<<<<<<< HEAD
   onBack: () => void;
   collapsed?: boolean;
   children?: ReactNode;
+=======
+  onBack?: () => void;
+  collapsed?: boolean;
+  children?: ReactNode;
+  titleStyle?: StyleProp<TextStyle>;
+>>>>>>> origin/mapbox
 }) {
   const insets = useSafeAreaInsets();
 
@@ -98,6 +109,7 @@ export function ModuleHeader({
       ]}
     >
       <View style={[styles.headerRow, collapsed && styles.headerRowCollapsed]}>
+<<<<<<< HEAD
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Go back"
@@ -108,10 +120,28 @@ export function ModuleHeader({
           <ChevronLeft color="#ffffff" size={22} strokeWidth={2.5} />
         </Pressable>
         <View style={styles.headerText}>
+=======
+        {onBack && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            hitSlop={10}
+            onPress={onBack}
+            style={[styles.backButton, collapsed && styles.backButtonCollapsed]}
+          >
+            <ChevronLeft color="#ffffff" size={22} strokeWidth={2.5} />
+          </Pressable>
+        )}
+        <View style={[styles.headerText, !onBack && styles.headerTextNoBack]}>
+>>>>>>> origin/mapbox
           <Animated.Text
             style={[
               styles.title,
               collapsed && styles.titleCollapsed,
+<<<<<<< HEAD
+=======
+              titleStyle,
+>>>>>>> origin/mapbox
               headerTitleTransition,
             ]}
             numberOfLines={collapsed ? 1 : undefined}
@@ -418,6 +448,10 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255, 255, 255, 0.7)",
   },
   headerText: { flex: 1, marginLeft: 12, marginRight: 8 },
+<<<<<<< HEAD
+=======
+  headerTextNoBack: { marginLeft: 0 },
+>>>>>>> origin/mapbox
   title: {
     color: "#ffffff",
     fontFamily: "SoraBold",

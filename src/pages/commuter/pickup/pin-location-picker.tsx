@@ -1,6 +1,10 @@
 import ArrowLeft from "lucide-react-native/icons/arrow-left";
+<<<<<<< HEAD
 import PersonStanding from "lucide-react-native/icons/person-standing";
 import { useEffect, useMemo, useState } from "react";
+=======
+import { useEffect, useMemo, useRef, useState } from "react";
+>>>>>>> origin/mapbox
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
@@ -10,11 +14,26 @@ import {
   getLastKnownPoint,
   type Place,
 } from "@/api/v1/places/controllers";
+<<<<<<< HEAD
 import {
   formatDistance,
   recommendWaitingArea,
   type WaitingArea,
 } from "@/api/v1/waiting-areas/controllers";
+=======
+import type { WaitingArea } from "@/api/v1/waiting-areas/controllers";
+import {
+  findFirstWaitingAreaAlongPath,
+  findNearestWaitingArea,
+  findWaitingAreasOnRoute,
+  type WaitingAreaRecommendation,
+} from "@/api/v1/waiting-areas/controllers";
+import {
+  findNearestRoute,
+  loadWalkingRoute,
+  type TransitRoute,
+} from "@/api/v1/transit-routes/controllers";
+>>>>>>> origin/mapbox
 import { LoadingLogo } from "@/components/LoadingLogo";
 import { moduleColors } from "@/components/module-ui";
 import {
@@ -22,8 +41,15 @@ import {
   type MapCenter,
   type TransitMapState,
 } from "@/components/transit-map";
+<<<<<<< HEAD
 
 const { brandBlue, headerBlue, mutedText, softBlue, text } = moduleColors;
+=======
+import { waitingAreaPinColors } from "@/constants/waiting-area";
+import { getDistanceMeters } from "@/utils/geo";
+
+const { brandBlue, headerBlue, softBlue } = moduleColors;
+>>>>>>> origin/mapbox
 const pinRed = "#c81e1e";
 const pinSize = 32;
 const pickZoom = 17;
@@ -31,41 +57,214 @@ const defaultCenter: MapCenter = { lat: 13.6218, lng: 123.1948 };
 
 export function PinLocationPicker({
   initial,
+<<<<<<< HEAD
   stops,
+=======
+  waitingAreas,
+  routes,
+>>>>>>> origin/mapbox
   onPick,
   onClose,
 }: {
   initial: MapCenter | null;
+<<<<<<< HEAD
   stops: WaitingArea[];
   onPick: (place: Place) => void;
+=======
+  waitingAreas: WaitingArea[];
+  routes: TransitRoute[];
+  onPick: (place: Place, preferredWaitingAreaId?: string | null) => void;
+>>>>>>> origin/mapbox
   onClose: () => void;
 }) {
   const insets = useSafeAreaInsets();
   const [start, setStart] = useState<MapCenter | null>(initial);
   const [center, setCenter] = useState<MapCenter | null>(initial);
   const [saving, setSaving] = useState(false);
+<<<<<<< HEAD
+=======
+  const [checkingRoute, setCheckingRoute] = useState(false);
+  const [walkingPath, setWalkingPath] = useState<[number, number][]>([]);
+  const [routedRecommendation, setRoutedRecommendation] = useState<{
+    key: string;
+    area: WaitingAreaRecommendation;
+  } | null>(null);
+  const isDragging = useRef(false);
+>>>>>>> origin/mapbox
 
   useEffect(() => {
     if (initial) return;
     let active = true;
     getLastKnownPoint().then((point) => {
       if (!active) return;
+<<<<<<< HEAD
       setStart(point ?? defaultCenter);
+=======
+      const location = point ?? defaultCenter;
+      setStart(location);
+      setCenter(location);
+>>>>>>> origin/mapbox
     });
     return () => {
       active = false;
     };
   }, [initial]);
 
+<<<<<<< HEAD
   const nearest = useMemo(
     () => (center ? recommendWaitingArea(center, stops) : null),
     [center, stops],
   );
+=======
+  const pickupCenter = useMemo(() => center ?? start, [center, start]);
+  const nearestRoute = useMemo(() => {
+    if (!pickupCenter) return null;
+    return findNearestRoute(pickupCenter, routes);
+  }, [pickupCenter, routes]);
+  const routePaths = useMemo(
+    () =>
+      nearestRoute
+        ? [
+            nearestRoute.route.waypoints,
+            ...nearestRoute.route.alternativePaths,
+          ].filter((path) => path.length > 0)
+        : [],
+    [nearestRoute],
+  );
+  const routeAreas = useMemo(
+    () =>
+      nearestRoute
+        ? findWaitingAreasOnRoute(
+            waitingAreas,
+            nearestRoute.route.id,
+            routePaths,
+            nearestRoute.route.vicinity,
+          )
+        : [],
+    [nearestRoute, routePaths, waitingAreas],
+  );
+  const baseRecommendation = useMemo<WaitingAreaRecommendation | null>(() => {
+    if (!nearestRoute || !pickupCenter) return null;
+    return findNearestWaitingArea(
+      pickupCenter,
+      routeAreas,
+      nearestRoute.route.id,
+      routePaths,
+      nearestRoute.route.vicinity,
+    );
+  }, [nearestRoute, pickupCenter, routeAreas, routePaths]);
+  const recommendationKey = baseRecommendation && pickupCenter
+    ? `${baseRecommendation.id}:${pickupCenter.lat}:${pickupCenter.lng}`
+    : "";
+  const recommendedArea =
+    routedRecommendation?.key === recommendationKey
+      ? routedRecommendation.area
+      : baseRecommendation;
+  const redirectedToRouteArea =
+    !!recommendedArea && recommendedArea.id !== baseRecommendation?.id;
+
+  useEffect(() => {
+    if (
+      !pickupCenter ||
+      !baseRecommendation ||
+      getDistanceMeters(pickupCenter, baseRecommendation) >= 200
+    ) {
+      setCheckingRoute(false);
+      setRoutedRecommendation(null);
+      setWalkingPath([]);
+      return;
+    }
+    let active = true;
+    setCheckingRoute(true);
+    const origin: [number, number] = [pickupCenter.lat, pickupCenter.lng];
+    const directDestination: [number, number] = [
+      baseRecommendation.lat,
+      baseRecommendation.lng,
+    ];
+    const key = `${baseRecommendation.id}:${pickupCenter.lat}:${pickupCenter.lng}`;
+    setWalkingPath([origin, directDestination]);
+    const timer = setTimeout(() => {
+      void loadWalkingRoute(origin, directDestination).then((result) => {
+        if (!active) return;
+        if (!result.ok) {
+          setRoutedRecommendation(null);
+          setCheckingRoute(false);
+          return;
+        }
+
+        const firstArea = findFirstWaitingAreaAlongPath(
+          result.data.path,
+          routeAreas,
+          baseRecommendation.id,
+        );
+        const destinationArea = firstArea ?? baseRecommendation;
+        const recommendation = {
+          ...destinationArea,
+          distanceMeters: getDistanceMeters(pickupCenter, destinationArea),
+        };
+        setRoutedRecommendation({ key, area: recommendation });
+
+        if (destinationArea.id === baseRecommendation.id) {
+          setWalkingPath(result.data.path);
+          setCheckingRoute(false);
+          return;
+        }
+
+        const priorityDestination: [number, number] = [
+          destinationArea.lat,
+          destinationArea.lng,
+        ];
+        void loadWalkingRoute(origin, priorityDestination).then(
+          (priorityResult) => {
+            if (!active) return;
+            setWalkingPath(
+              priorityResult.ok ? priorityResult.data.path : result.data.path,
+            );
+            setCheckingRoute(false);
+          },
+        );
+      });
+    }, 500);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [baseRecommendation, pickupCenter, routeAreas]);
+
+  const mapFocus = useMemo(() => {
+    if (!pickupCenter) return null;
+    if (!recommendedArea) {
+      return {
+        key: `pin-start-${pickupCenter.lat}-${pickupCenter.lng}`,
+        lat: pickupCenter.lat,
+        lng: pickupCenter.lng,
+        zoom: pickZoom,
+      };
+    }
+    const zoom =
+      recommendedArea.distanceMeters < 300
+        ? 16.5
+        : recommendedArea.distanceMeters < 800
+          ? 15.5
+          : recommendedArea.distanceMeters < 1_500
+            ? 14.5
+            : recommendedArea.distanceMeters < 3_000
+              ? 13.5
+              : 12;
+    return {
+      key: `waiting-${recommendedArea.id}-${pickupCenter.lat}-${pickupCenter.lng}`,
+      lat: pickupCenter.lat,
+      lng: pickupCenter.lng,
+      zoom,
+    };
+  }, [pickupCenter, recommendedArea]);
+>>>>>>> origin/mapbox
 
   const mapState = useMemo<TransitMapState>(
     () => ({
       routeId: null,
       route: null,
+<<<<<<< HEAD
       vehicles: [],
       waitingAreas: stops.map(({ id, name, lat, lng }) => ({
         id,
@@ -88,6 +287,29 @@ export function PinLocationPicker({
       padBottom: 0,
     }),
     [stops, center, nearest, start],
+=======
+      waitingAreas: waitingAreas.map(
+        ({ id, name, lat, lng, vicinity, type }) => ({
+          id,
+          name,
+          lat,
+          lng,
+          tag: vicinity,
+          kind: type,
+        }),
+      ),
+      showStops: true,
+      vehicles: [],
+      pickupLine: walkingPath,
+      pickupLineColor: recommendedArea
+        ? waitingAreaPinColors[recommendedArea.type]
+        : waitingAreaPinColors.stop,
+      focus: mapFocus,
+      padTop: 0,
+      padBottom: 0,
+    }),
+    [waitingAreas, walkingPath, mapFocus],
+>>>>>>> origin/mapbox
   );
 
   const confirm = async () => {
@@ -95,7 +317,11 @@ export function PinLocationPicker({
     setSaving(true);
     const place = await describePoint(center.lat, center.lng);
     setSaving(false);
+<<<<<<< HEAD
     onPick(place);
+=======
+    onPick(place, recommendedArea?.id ?? null);
+>>>>>>> origin/mapbox
   };
 
   return (
@@ -106,7 +332,21 @@ export function PinLocationPicker({
       onRequestClose={onClose}
     >
       <View style={styles.screen}>
+<<<<<<< HEAD
         <TransitMap state={mapState} onCenterChange={setCenter} />
+=======
+        <TransitMap
+          state={mapState}
+          onDrag={() => {
+            isDragging.current = true;
+          }}
+          onCenterChange={(next) => {
+            if (!isDragging.current) return;
+            isDragging.current = false;
+            setCenter(next);
+          }}
+        />
+>>>>>>> origin/mapbox
 
         <View pointerEvents="none" style={styles.pinLayer}>
           <View style={styles.pin}>
@@ -134,6 +374,7 @@ export function PinLocationPicker({
         </View>
 
         <View style={[styles.card, { paddingBottom: insets.bottom + 16 }]}>
+<<<<<<< HEAD
           {nearest ? (
             <View style={styles.preview}>
               <View style={styles.previewIcon}>
@@ -168,6 +409,28 @@ export function PinLocationPicker({
             ]}
           >
             {saving ? (
+=======
+          {recommendedArea && (
+            <Text style={styles.routeNote}>
+              {checkingRoute
+                ? "Checking your route for a waiting area along the way…"
+                : redirectedToRouteArea
+                  ? `Your walking route reaches ${recommendedArea.name} first. You’ll be directed there.`
+                  : `You’re being routed to the nearest recommended waiting area: ${recommendedArea.name}.`}
+            </Text>
+          )}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Use this pickup location"
+            disabled={!center || saving || checkingRoute}
+            onPress={confirm}
+            style={({ pressed }) => [
+              styles.confirm,
+              (pressed || !center || saving || checkingRoute) && styles.pressed,
+            ]}
+          >
+            {saving || checkingRoute ? (
+>>>>>>> origin/mapbox
               <LoadingLogo color="#ffffff" size={22} />
             ) : (
               <Text style={styles.confirmText}>USE THIS LOCATION</Text>
@@ -254,6 +517,7 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: -2 },
   },
+<<<<<<< HEAD
   preview: {
     flexDirection: "row",
     alignItems: "center",
@@ -293,6 +557,17 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: "#fee2e2",
   },
+=======
+  routeNote: {
+    color: brandBlue,
+    fontFamily: "Sora",
+    fontSize: 11,
+    lineHeight: 16,
+    padding: 10,
+    borderRadius: 10,
+    backgroundColor: softBlue,
+  },
+>>>>>>> origin/mapbox
   confirm: {
     height: 50,
     alignItems: "center",

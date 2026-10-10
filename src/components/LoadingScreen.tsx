@@ -83,7 +83,10 @@ export function LoadingScreen({
           <LoadingLogo size={44} color="#ffffff" label={message} />
         </View>
 
+<<<<<<< HEAD
         {/* Fade-in lives on the wrapper so it doesn't fight the pulse's opacity. */}
+=======
+>>>>>>> origin/mapbox
         <Animated.View key={message} entering={FadeIn.duration(250)}>
           <Animated.Text
             accessibilityRole="text"

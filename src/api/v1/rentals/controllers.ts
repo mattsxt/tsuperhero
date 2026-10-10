@@ -8,6 +8,10 @@ import {
 } from "@/api/v1/rentals/routes";
 import { unwrapCached } from "@/api/v1/cache";
 import { attempt, failure, unwrap, type Result } from "@/api/v1/result";
+<<<<<<< HEAD
+=======
+import { checkOnline } from "@/hooks/use-online";
+>>>>>>> origin/mapbox
 
 export type CharterVehicle = "van" | "jeep" | "bus";
 export type TripType = "one_way" | "round_trip";
@@ -132,6 +136,12 @@ export async function requestRental(
   driver: RentalDriver,
   trip: RentalTrip,
 ): Promise<Result<string>> {
+<<<<<<< HEAD
+=======
+  if (!(await checkOnline())) {
+    return failure("You're offline. Connect to the internet to request a rental.");
+  }
+>>>>>>> origin/mapbox
   if (trip.pickupTime.getTime() <= Date.now()) {
     return failure("Choose a pickup time in the future.");
   }

@@ -22,6 +22,10 @@ export type AssignmentRow = {
 export type TripStateParams = {
   p_status: VehicleStatus;
   p_current_capacity: number;
+<<<<<<< HEAD
+=======
+  p_is_full: boolean;
+>>>>>>> origin/mapbox
 };
 
 export type LocationParams = {

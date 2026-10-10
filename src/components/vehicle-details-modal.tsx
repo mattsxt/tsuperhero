@@ -27,10 +27,16 @@ export function VehicleCard({
   width: number;
   onPress: () => void;
 }) {
+<<<<<<< HEAD
   const fill = Math.min(
     vehicle.currentCapacity / Math.max(vehicle.maxCapacity, 1),
     1,
   );
+=======
+  const fill = vehicle.isFull
+    ? 1
+    : Math.min(vehicle.currentCapacity / Math.max(vehicle.maxCapacity, 1), 1);
+>>>>>>> origin/mapbox
   const occupancyColor = occupancyColors[vehicle.occupancy];
   return (
     <Pressable
@@ -95,7 +101,13 @@ export function VehicleDetailsModal({
   onClose: () => void;
 }) {
   const fill = vehicle
+<<<<<<< HEAD
     ? Math.min(vehicle.currentCapacity / Math.max(vehicle.maxCapacity, 1), 1)
+=======
+    ? vehicle.isFull
+      ? 1
+      : Math.min(vehicle.currentCapacity / Math.max(vehicle.maxCapacity, 1), 1)
+>>>>>>> origin/mapbox
     : 0;
   const occupancyColor = vehicle ? occupancyColors[vehicle.occupancy] : text;
 
