@@ -31,6 +31,7 @@ import {
 } from "@/api/v1/places/controllers";
 import {
   findRoutesNear,
+  findNearestRoute,
   nearDestinationMeters,
   searchDestinations,
   type RouteNearPlace,
@@ -53,7 +54,11 @@ const bottomMargin = 16;
 const borderAllowance = 3;
 const placeSearchDelayMs = 300;
 
-type ChosenPlace = { place: Place; routes: RouteNearPlace[] };
+type ChosenPlace = {
+  place: Place;
+  routes: RouteNearPlace[];
+  nearestRoute: RouteNearPlace | null;
+};
 
 function useKeyboardHeight() {
   const [height, setHeight] = useState(0);
@@ -179,6 +184,7 @@ export function DestinationSearchPanel({
             routeId: route.id,
             destLat: String(place.lat),
             destLng: String(place.lng),
+            destName: place.name,
           }
         : { routeId: route.id },
     });
@@ -201,7 +207,11 @@ export function DestinationSearchPanel({
       return;
     }
     Keyboard.dismiss();
-    setChosen({ place: result.data, routes: nearby });
+    setChosen({
+      place: result.data,
+      routes: nearby,
+      nearestRoute: findNearestRoute(result.data),
+    });
   };
 
   const changeQuery = (next: string) => {
@@ -443,7 +453,7 @@ function buildResultItems({
 }
 
 function buildChosenItems(
-  { place, routes }: ChosenPlace,
+  { place, routes, nearestRoute }: ChosenPlace,
   onOpenRoute: (route: TransitRoute, place: Place) => void,
   onBack: () => void,
 ): { items: ReactElement[]; stickyIndices: number[] } {
@@ -471,6 +481,16 @@ function buildChosenItems(
         {place.name} yet.
       </Text>,
     );
+    if (nearestRoute && nearestRoute.distanceMeters > 200) {
+      items.push(
+        <Text key="tricycle-suggestion" style={styles.routeSuggestion}>
+          {place.name} is {formatDistance(nearestRoute.distanceMeters)} from
+          {" "}
+          {nearestRoute.route.name}. Consider taking a tricycle to reach this
+          destination.
+        </Text>,
+      );
+    }
   }
   routes.forEach(({ route, distanceMeters }) =>
     items.push(
@@ -545,6 +565,16 @@ const styles = StyleSheet.create({
     fontSize: 10,
     paddingVertical: 16,
     textAlign: "center",
+  },
+  routeSuggestion: {
+    color: brandBlue,
+    fontFamily: "SoraBold",
+    fontSize: 10,
+    lineHeight: 15,
+    marginBottom: 10,
+    padding: 10,
+    borderRadius: 8,
+    backgroundColor: softBlue,
   },
   rowMain: { flexDirection: "row", alignItems: "center", gap: 10 },
   routeRow: { paddingVertical: 8 },

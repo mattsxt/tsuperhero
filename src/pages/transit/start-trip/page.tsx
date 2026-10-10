@@ -19,9 +19,16 @@ import {
   View,
 } from "react-native";
 import Animated, {
+  cancelAnimation,
+  Easing,
   FadeInDown,
   FadeOutDown,
   LinearTransition,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withRepeat,
+  withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -53,7 +60,6 @@ import {
 import {
   clearOutbox,
   sendLocation,
-  usePendingSync,
 } from "@/api/v1/operator/outbox";
 import { watchLocation } from "@/api/v1/places/controllers";
 import { EmptyState } from "@/components/empty-state";
@@ -62,7 +68,6 @@ import { VehicleIcon } from "@/components/module-icons";
 import { ModuleHeader, moduleColors } from "@/components/module-ui";
 import { TransitMap, type TransitMapState } from "@/components/transit-map";
 import { Routes } from "@/constants/routes";
-import { useOnline } from "@/hooks/use-online";
 import { getDistanceMeters, getPairDistanceMeters } from "@/utils/geo";
 import { goBackOr } from "@/utils/navigation";
 
@@ -168,6 +173,8 @@ function Trip({ details }: { details: AssignmentDetails }) {
   const { assignment, route, vehicleLabel, coverageTitle } = details;
   const { vehicle } = assignment;
   const capacity = vehicle.max_capacity;
+  const reduceMotion = useReducedMotion();
+  const sharingPulse = useSharedValue(1);
 
   const [headerHeight, setHeaderHeight] = useState(140);
   const [panelHeight, setPanelHeight] = useState(240);
@@ -202,11 +209,31 @@ function Trip({ details }: { details: AssignmentDetails }) {
   const passedPickups = useRef(new Set<string>());
 
   const onTrip = status !== "idle";
-  const online = useOnline();
-  const pendingSync = usePendingSync();
-  const syncing = !online || pendingSync > 0;
   const full = markedFull || count >= capacity;
   const occupancy = markedFull ? "Full" : getOccupancyLevel(count, capacity);
+
+  useEffect(() => {
+    if (!onTrip || reduceMotion) {
+      cancelAnimation(sharingPulse);
+      sharingPulse.set(1);
+      return;
+    }
+
+    sharingPulse.set(0.45);
+    sharingPulse.set(
+      withRepeat(
+        withTiming(1, { duration: 800, easing: Easing.inOut(Easing.ease) }),
+        -1,
+        true,
+      ),
+    );
+    return () => cancelAnimation(sharingPulse);
+  }, [onTrip, reduceMotion, sharingPulse]);
+
+  const sharingPulseStyle = useAnimatedStyle(() => ({
+    opacity: sharingPulse.get(),
+    transform: [{ scale: 0.85 + sharingPulse.get() * 0.15 }],
+  }));
 
   useEffect(() => {
     if (!route) return;
@@ -747,24 +774,17 @@ function Trip({ details }: { details: AssignmentDetails }) {
             style={[
               styles.sharing,
               onTrip && styles.sharingOn,
-              onTrip && syncing && styles.sharingPending,
             ]}
           >
-            <View
+            <Animated.View
               style={[
                 styles.sharingDot,
                 onTrip && styles.sharingDotOn,
-                onTrip && syncing && styles.sharingDotPending,
+                onTrip && sharingPulseStyle,
               ]}
             />
             <Text style={styles.sharingText}>
-              {!onTrip
-                ? "Location Not Shared"
-                : !online
-                  ? "Offline · Will Sync"
-                  : pendingSync > 0
-                    ? "Syncing..."
-                    : "Location Shared"}
+              {onTrip ? "Location Shared" : "Location Not Shared"}
             </Text>
           </View>
         </View>
@@ -1202,8 +1222,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#9ca3af",
   },
   sharingDotOn: { backgroundColor: "#4ade80" },
-  sharingPending: { backgroundColor: "rgba(251, 191, 36, 0.25)" },
-  sharingDotPending: { backgroundColor: "#fbbf24" },
   sharingText: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 8 },
   infoRow: {
     flexDirection: "row",

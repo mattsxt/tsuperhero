@@ -1,4 +1,18 @@
 export type RequestStatus = "pending" | "accepted" | "rejected" | "completed";
+export type CompanionStatus = "pending" | "accepted" | "rejected";
+
+export type PickupDraftRow = {
+  request_id: string;
+  device_latitude: number;
+  device_longitude: number;
+  pickup_destination: string;
+  number_of_passengers: number;
+  requested_vehicle_type: "Jeepney" | "Tricycle";
+};
+
+export type PickupCompanionStatusRow = RiderRow & {
+  companion_status: CompanionStatus;
+};
 
 export type PickupRow = {
   pickup_id: string;

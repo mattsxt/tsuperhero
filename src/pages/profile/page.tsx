@@ -30,6 +30,7 @@ import {
 } from "@/components/scroll-chrome";
 import { LoadingScreen, signOutMessages } from "@/components/LoadingScreen";
 import { Routes } from "@/constants/routes";
+import { useOnline } from "@/hooks/use-online";
 
 const brandBlue = "#193caf";
 const headerBlue = "#1034A6";
@@ -46,6 +47,7 @@ export default function ProfileScreen() {
     peekProfileSummary,
   );
   const [signingOut, setSigningOut] = useState(false);
+  const online = useOnline();
 
   useFocusEffect(
     useCallback(() => {
@@ -107,7 +109,7 @@ export default function ProfileScreen() {
               accessibilityLabel={
                 summary ? `Edit profile of ${summary.fullName}` : "Edit profile"
               }
-              disabled={!summary}
+              disabled={!summary || !online}
               onPress={() => router.push(Routes.profileEdit)}
               style={({ pressed }) => [
                 styles.card,
@@ -150,6 +152,11 @@ export default function ProfileScreen() {
             </Pressable>
 
             <Text style={styles.sectionLabel}>Actions</Text>
+            {!online && (
+              <Text style={styles.offlineNotice}>
+                Connect to the internet to edit your profile or sign out.
+              </Text>
+            )}
             <View style={styles.actions}>
               <ActionRow
                 label="Security"
@@ -170,7 +177,7 @@ export default function ProfileScreen() {
               <ActionRow
                 label="Sign out"
                 danger
-                disabled={signingOut}
+                disabled={signingOut || !online}
                 onPress={signOut}
                 icon={<LogOut color={dangerRed} size={18} strokeWidth={1.8} />}
                 trailing={null}
@@ -333,6 +340,12 @@ const styles = StyleSheet.create({
     fontSize: 10,
     marginTop: 18,
     marginBottom: 10,
+  },
+  offlineNotice: {
+    color: "#6b6b6b",
+    fontFamily: "Sora",
+    fontSize: 10,
+    marginBottom: 8,
   },
   card: {
     flexDirection: "row",

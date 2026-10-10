@@ -45,6 +45,7 @@ import {
 } from "@/components/module-ui";
 import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
+import { useOnline } from "@/hooks/use-online";
 import { goBackOr } from "@/utils/navigation";
 
 const { brandBlue, error: errorRed, mutedText, text } = moduleColors;
@@ -53,6 +54,7 @@ const minimumBirthDate = new Date(1900, 0, 1);
 
 export default function EditProfileScreen() {
   const insets = useSafeAreaInsets();
+  const online = useOnline();
   const chrome = useScrollChrome();
   const keyboardVisible = useKeyboardVisible();
   const [profile, setProfile] = useState<EditableProfile | null>(null);
@@ -280,10 +282,15 @@ export default function EditProfileScreen() {
             </Field>
 
             {!!saveError && <Text style={styles.saveError}>{saveError}</Text>}
+            {!online && (
+              <Text style={styles.offlineHint}>
+                Connect to the internet before changing your profile.
+              </Text>
+            )}
 
             <ModuleButton
               label={saving ? "SAVING..." : "SAVE CHANGES"}
-              disabled={saving || !hasChanges}
+              disabled={saving || !hasChanges || !online}
               onPress={save}
               style={styles.saveButton}
             />
@@ -411,6 +418,13 @@ const styles = StyleSheet.create({
     fontSize: 10,
     textAlign: "center",
     marginTop: 18,
+  },
+  offlineHint: {
+    color: "#6b6b6b",
+    fontFamily: "Sora",
+    fontSize: 10,
+    textAlign: "center",
+    marginTop: 12,
   },
   saveButton: { marginTop: 28 },
 });

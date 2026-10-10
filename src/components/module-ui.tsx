@@ -78,13 +78,15 @@ export function ModuleHeader({
   onBack,
   collapsed = false,
   children,
+  titleStyle,
 }: {
   title: string;
   subtitle: string;
   icon: ReactNode;
-  onBack: () => void;
+  onBack?: () => void;
   collapsed?: boolean;
   children?: ReactNode;
+  titleStyle?: StyleProp<TextStyle>;
 }) {
   const insets = useSafeAreaInsets();
 
@@ -98,20 +100,23 @@ export function ModuleHeader({
       ]}
     >
       <View style={[styles.headerRow, collapsed && styles.headerRowCollapsed]}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-          hitSlop={10}
-          onPress={onBack}
-          style={[styles.backButton, collapsed && styles.backButtonCollapsed]}
-        >
-          <ChevronLeft color="#ffffff" size={22} strokeWidth={2.5} />
-        </Pressable>
-        <View style={styles.headerText}>
+        {onBack && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            hitSlop={10}
+            onPress={onBack}
+            style={[styles.backButton, collapsed && styles.backButtonCollapsed]}
+          >
+            <ChevronLeft color="#ffffff" size={22} strokeWidth={2.5} />
+          </Pressable>
+        )}
+        <View style={[styles.headerText, !onBack && styles.headerTextNoBack]}>
           <Animated.Text
             style={[
               styles.title,
               collapsed && styles.titleCollapsed,
+              titleStyle,
               headerTitleTransition,
             ]}
             numberOfLines={collapsed ? 1 : undefined}
@@ -418,6 +423,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255, 255, 255, 0.7)",
   },
   headerText: { flex: 1, marginLeft: 12, marginRight: 8 },
+  headerTextNoBack: { marginLeft: 0 },
   title: {
     color: "#ffffff",
     fontFamily: "SoraBold",

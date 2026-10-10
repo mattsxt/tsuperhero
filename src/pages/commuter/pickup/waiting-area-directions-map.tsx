@@ -23,12 +23,14 @@ export function WaitingAreaDirectionsMap({
   onLocationError,
   padTop = 0,
   padBottom = 0,
+  showRouting = true,
 }: {
   area: WaitingArea;
   onLocationChange?: (location: Coordinates | null) => void;
   onLocationError?: (message: string | null) => void;
   padTop?: number;
   padBottom?: number;
+  showRouting?: boolean;
 }) {
   const [location, setLocation] = useState<Coordinates | null>(null);
   const [fitOrigin, setFitOrigin] = useState<Coordinates | null>(null);
@@ -58,7 +60,7 @@ export function WaitingAreaDirectionsMap({
   }, [onLocationChange, onLocationError]);
 
   useEffect(() => {
-    if (!location) {
+    if (!showRouting || !location) {
       setWalkingPath([]);
       return;
     }
@@ -80,7 +82,7 @@ export function WaitingAreaDirectionsMap({
     return () => {
       active = false;
     };
-  }, [location, area.lat, area.lng]);
+  }, [location, area.lat, area.lng, showRouting]);
 
   useEffect(() => {
     onLocationChange?.(location);
@@ -109,7 +111,7 @@ export function WaitingAreaDirectionsMap({
       showStops: true,
       vehicles: [],
       userLocation: location,
-      pickupLine: walkingPath,
+      pickupLine: showRouting ? walkingPath : [],
       pickupLineColor: waitingAreaPinColors[area.type],
       focus: null,
       fit: {
@@ -119,7 +121,7 @@ export function WaitingAreaDirectionsMap({
       padTop,
       padBottom,
     };
-  }, [area, fitOrigin, location, walkingPath, padTop, padBottom]);
+  }, [area, fitOrigin, location, walkingPath, padTop, padBottom, showRouting]);
 
   return <TransitMap state={mapState} />;
 }

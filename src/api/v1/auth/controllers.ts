@@ -7,6 +7,7 @@ import {
 import { getErrorMessage } from "@/api/v1/client";
 import { signedOutOrOffline } from "@/api/v1/session-route";
 import { forgetPushToken } from "@/api/v1/notifications/controllers";
+import { cancelActivePickupBeforeSignOut } from "@/api/v1/pickups/controllers";
 import {
   getSignedInRoute,
   unsupportedAccountMessage,
@@ -19,6 +20,7 @@ import {
   type Result,
 } from "@/api/v1/result";
 import { Routes, type AppRoute } from "@/constants/routes";
+import { checkOnline } from "@/hooks/use-online";
 
 export {
   codeLength,
@@ -78,8 +80,13 @@ export async function verifySignUpCode(
 export async function completeSignUp(password: string): Promise<Result> {
   const problem = getPasswordProblem(password);
   if (problem) return failure(problem);
+  if (!(await checkOnline())) {
+    return failure("Connect to the internet to finish creating your account.");
+  }
   return attempt(async () => {
     await unwrap(authRoutes.updatePassword(password));
+    const cancellation = await cancelActivePickupBeforeSignOut();
+    if (!cancellation.ok) throw new Error(cancellation.error);
     await forgetPushToken();
     const { error } = await authRoutes.signOut();
     if (error) throw error;
@@ -87,7 +94,12 @@ export async function completeSignUp(password: string): Promise<Result> {
 }
 
 export async function logout(): Promise<Result> {
+  if (!(await checkOnline())) {
+    return failure("Connect to the internet before signing out.");
+  }
   return attempt(async () => {
+    const cancellation = await cancelActivePickupBeforeSignOut();
+    if (!cancellation.ok) throw new Error(cancellation.error);
     await forgetPushToken();
     const { error } = await authRoutes.signOut();
     if (error) throw error;
@@ -101,6 +113,9 @@ export type PasswordFormErrors = Partial<Record<PasswordFormField, string>>;
 export async function changePassword(
   form: PasswordForm,
 ): Promise<Result & { fieldErrors?: PasswordFormErrors }> {
+  if (!(await checkOnline())) {
+    return failure("Connect to the internet to change your password.");
+  }
   const fieldErrors: PasswordFormErrors = {};
   if (!form.current) fieldErrors.current = "Enter your current password.";
   const problem = getPasswordProblem(form.next);

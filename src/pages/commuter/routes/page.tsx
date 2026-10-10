@@ -88,6 +88,7 @@ export default function RoutesScreen() {
     routeId?: string;
     destLat?: string;
     destLng?: string;
+    destName?: string;
   }>();
   const transitRoutes = useTransitRoutes();
   const initialRoute = findRoute(params.routeId);
@@ -96,6 +97,8 @@ export default function RoutesScreen() {
     const lng = Number.parseFloat(params.destLng ?? "");
     return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
   }, [params.destLat, params.destLng]);
+  const destinationName =
+    typeof params.destName === "string" ? params.destName : "";
 
   const [headerHeight, setHeaderHeight] = useState(140);
   const [panelHeight, setPanelHeight] = useState(insets.bottom + 84);
@@ -212,7 +215,9 @@ export default function RoutesScreen() {
         occupancy: vehicle.occupancy,
         isFull: vehicle.isFull,
       })),
-      pickups: destination ? [{ id: "destination", ...destination }] : [],
+      pickups: destination
+        ? [{ id: "destination", ...destination, label: destinationName }]
+        : [],
       focus: null,
       padTop: headerHeight + 30,
       padBottom: panelHeight + 70,
@@ -220,6 +225,7 @@ export default function RoutesScreen() {
     [
       vehiclesOnRoute,
       destination,
+      destinationName,
       routeId,
       path,
       alternativePaths,

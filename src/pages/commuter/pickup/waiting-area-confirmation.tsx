@@ -12,23 +12,26 @@ import {
 import { ModuleButton, ModuleHeader, moduleColors } from "@/components/module-ui";
 import { getDistanceMeters } from "@/utils/geo";
 
+import { PickupAlert } from "./pickup-alert";
 import {
   waitingAreaArrivalMeters,
   WaitingAreaDirectionsMap,
 } from "./waiting-area-directions-map";
 
-const { brandBlue, error, mutedText, text } = moduleColors;
+const { brandBlue, mutedText, text } = moduleColors;
 
 export function WaitingAreaConfirmation({
   area,
   busy,
   problem,
+  problemSource,
   onRequest,
   onBack,
 }: {
   area: WaitingAreaRecommendation;
   busy: boolean;
   problem: string;
+  problemSource: string;
   onRequest: () => void;
   onBack: () => void;
 }) {
@@ -56,10 +59,10 @@ export function WaitingAreaConfirmation({
 
       <View style={styles.headerWrap}>
         <ModuleHeader
-          title="Go to the waiting area"
-          subtitle="Follow the route to the recommended pickup point."
+          title="Head to your pickup point"
+          subtitle="Follow the route to your pickup point."
           icon={<MapPin color="#ffffff" size={42} strokeWidth={1.8} />}
-          onBack={onBack}
+          titleStyle={styles.headerTitle}
         />
       </View>
 
@@ -67,11 +70,20 @@ export function WaitingAreaConfirmation({
         <Text style={styles.label}>RECOMMENDED WAITING AREA</Text>
         <Text style={styles.areaName}>{area.name}</Text>
         {distance === null ? (
-          <Text style={styles.message}>
-            {locationError
-              ? `${locationError} Allow location access to see the route and request pickup at this waiting area.`
-              : "Getting your current location. Allow location access to see the route and request pickup at this waiting area."}
-          </Text>
+          <>
+            <Text style={styles.message}>
+              {locationError
+                ? "We couldn’t get your location to show directions."
+                : "Finding your location to show directions to the waiting area…"}
+            </Text>
+            {!!locationError && (
+              <PickupAlert
+                source="Current location"
+                message={locationError}
+                compact
+              />
+            )}
+          </>
         ) : arrived ? (
           <Text style={styles.arrivedMessage}>
             You’re at the waiting area. You can now send your pickup request to
@@ -84,7 +96,13 @@ export function WaitingAreaConfirmation({
             there.
           </Text>
         )}
-        {!!problem && <Text style={styles.problem}>{problem}</Text>}
+        {!!problem && (
+          <PickupAlert
+            source={problemSource}
+            message={problem}
+            compact
+          />
+        )}
         <ModuleButton
           label={busy ? "SENDING REQUEST..." : "REQUEST PICKUP"}
           disabled={!arrived || busy}
@@ -106,6 +124,7 @@ export function WaitingAreaConfirmation({
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#e8eaed" },
   headerWrap: { position: "absolute", top: 0, left: 0, right: 0 },
+  headerTitle: { fontSize: 23, lineHeight: 29 },
   card: {
     position: "absolute",
     left: 0,
@@ -134,12 +153,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 16,
     marginBottom: 6,
-  },
-  problem: {
-    color: error,
-    fontFamily: "Sora",
-    fontSize: 10,
-    textAlign: "center",
   },
   backButton: {
     flexDirection: "row",

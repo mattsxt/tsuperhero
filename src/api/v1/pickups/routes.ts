@@ -25,6 +25,7 @@ export const pickupRoutes = {
       )
       .eq("commuter_id", commuterId)
       .eq("request_type", "Pickup")
+      .eq("is_draft", false)
       .in("request_status", ["pending", "accepted"])
       .order("request_date", { ascending: false })
       .limit(1)
@@ -40,6 +41,41 @@ export const pickupRoutes = {
       })
       .select("request_id, request_status")
       .single(),
+
+  savePickupDraft: (
+    requestId: string | null,
+    latitude: number,
+    longitude: number,
+    destination: string,
+    passengers: number,
+    vehicleType: "Jeepney" | "Tricycle",
+  ) =>
+    getSupabaseClient().rpc("save_pickup_draft", {
+      p_request_id: requestId,
+      p_latitude: latitude,
+      p_longitude: longitude,
+      p_destination: destination,
+      p_passengers: passengers,
+      p_vehicle_type: vehicleType,
+    }),
+
+  findMyPickupDraft: () => getSupabaseClient().rpc("get_my_pickup_draft"),
+
+  findPickupCompanionStatuses: (requestId: string) =>
+    getSupabaseClient().rpc("get_pickup_companion_statuses", {
+      p_request_id: requestId,
+    }),
+
+  publishPickupDraft: (requestId: string) =>
+    getSupabaseClient().rpc("publish_pickup_draft", {
+      p_request_id: requestId,
+    }),
+
+  removePickupCompanion: (requestId: string, userId: string) =>
+    getSupabaseClient().rpc("remove_pickup_companion", {
+      p_request_id: requestId,
+      p_user_id: userId,
+    }),
 
   createPickup: (
     requestId: string,
@@ -68,12 +104,18 @@ export const pickupRoutes = {
   findMyTripHistory: () => getSupabaseClient().rpc("get_my_trip_history"),
 
   searchCommuters: (query: string) =>
-    getSupabaseClient().rpc("search_commuters", { p_query: query }),
+    getSupabaseClient().rpc("search_available_commuters", { p_query: query }),
 
   addCompanions: (requestId: string, userIds: string[]) =>
     getSupabaseClient().rpc("add_pickup_companions", {
       p_request_id: requestId,
       p_user_ids: userIds,
+    }),
+
+  addCompanion: (requestId: string, userId: string) =>
+    getSupabaseClient().rpc("add_pickup_companions", {
+      p_request_id: requestId,
+      p_user_ids: [userId],
     }),
 
   findShareInvites: () => getSupabaseClient().rpc("get_my_share_invites"),

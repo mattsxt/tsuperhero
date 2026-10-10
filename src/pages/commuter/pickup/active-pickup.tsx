@@ -28,6 +28,7 @@ import { BrandLogo } from "@/components/brand-logo";
 import { LoadingLogo } from "@/components/LoadingLogo";
 import type { WaitingArea } from "@/api/v1/waiting-areas/controllers";
 
+import { PickupAlert } from "./pickup-alert";
 import {
   waitingAreaArrivalMeters,
   WaitingAreaDirectionsMap,
@@ -55,12 +56,14 @@ export function ActivePickup({
   request,
   busy,
   problem,
+  problemSource,
   onCancel,
   onBack,
 }: {
   request: PickupRequest;
   busy: boolean;
   problem: string;
+  problemSource: string;
   onCancel: () => void;
   onBack: () => void;
 }) {
@@ -251,7 +254,13 @@ export function ActivePickup({
                     : `Please go to ${request.pickupName} and stay there so your driver can find you.`}
               </Text>
             )}
-            {!!problem && <Text style={styles.problem}>{problem}</Text>}
+            {!!problem && (
+              <PickupAlert
+                source={problemSource}
+                message={problem}
+                compact
+              />
+            )}
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Cancel pickup request"
@@ -365,13 +374,6 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontFamily: "SoraBold",
     fontSize: 16,
-  },
-  problem: {
-    color: "#fca5a5",
-    fontFamily: "Sora",
-    fontSize: 10,
-    marginTop: 12,
-    textAlign: "center",
   },
   waitingAreaMessage: {
     color: "#ffffff",

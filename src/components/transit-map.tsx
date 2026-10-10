@@ -84,7 +84,7 @@ const mapHtml = `<!DOCTYPE html>
     background: #e3ecfb; color: #193caf; font: bold 9px sans-serif;
   }
   .waiting.hub .waiting-icon { border-radius: 6px; }
-  .pickup { line-height: 0; filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.35)); }
+  .pickup { position: relative; line-height: 0; filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.35)); }
   .me {
     width: 14px; height: 14px; border-radius: 50%;
     background: #1a73e8; border: 3px solid #ffffff;
@@ -93,6 +93,13 @@ const mapHtml = `<!DOCTYPE html>
   .pickup-count {
     position: absolute; top: 9px; left: 0; width: 100%;
     font: bold 13px/14px sans-serif; color: #c81e1e; text-align: center;
+  }
+  .pickup-label {
+    position: absolute; top: 100%; left: 50%; margin-top: 3px;
+    max-width: 170px; overflow: hidden; padding: 3px 7px;
+    border-radius: 6px; background: #ffffff; color: #193caf;
+    font: bold 10px/13px sans-serif; text-align: center;
+    white-space: nowrap; text-overflow: ellipsis; transform: translateX(-50%);
   }
 </style>
 </head>
@@ -220,6 +227,12 @@ const mapHtml = `<!DOCTYPE html>
           count.className = "pickup-count";
           count.textContent = String(pickup.passengers);
           content.appendChild(count);
+        }
+        if (pickup.label) {
+          var label = document.createElement("span");
+          label.className = "pickup-label";
+          label.textContent = pickup.label;
+          content.appendChild(label);
         }
         pickupMarkers.push(markerAt(content, pickup.lat, pickup.lng, 800));
       });

@@ -124,7 +124,7 @@ export function searchDestinations(query: string) {
   );
 }
 
-export const nearDestinationMeters = 500;
+export const nearDestinationMeters = 100;
 
 export type RouteNearPlace = { route: TransitRoute; distanceMeters: number };
 

@@ -38,7 +38,13 @@ export type TransitMapState = {
   } | null;
   padTop: number;
   padBottom: number;
-  pickups?: { id: string; lat: number; lng: number; passengers?: number }[];
+  pickups?: {
+    id: string;
+    lat: number;
+    lng: number;
+    passengers?: number;
+    label?: string;
+  }[];
   pickupLine?: [number, number][] | null;
   pickupLineColor?: string;
   userLocation?: { lat: number; lng: number } | null;

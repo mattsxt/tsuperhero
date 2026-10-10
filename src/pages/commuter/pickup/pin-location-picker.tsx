@@ -11,7 +11,9 @@ import {
 } from "@/api/v1/places/controllers";
 import type { WaitingArea } from "@/api/v1/waiting-areas/controllers";
 import {
+  findFirstWaitingAreaAlongPath,
   findNearestWaitingArea,
+  findWaitingAreasOnRoute,
   type WaitingAreaRecommendation,
 } from "@/api/v1/waiting-areas/controllers";
 import {
@@ -19,7 +21,6 @@ import {
   loadWalkingRoute,
   type TransitRoute,
 } from "@/api/v1/transit-routes/controllers";
-import type { PickupVehicle } from "@/api/v1/pickups/controllers";
 import { LoadingLogo } from "@/components/LoadingLogo";
 import { moduleColors } from "@/components/module-ui";
 import {
@@ -28,6 +29,7 @@ import {
   type TransitMapState,
 } from "@/components/transit-map";
 import { waitingAreaPinColors } from "@/constants/waiting-area";
+import { getDistanceMeters } from "@/utils/geo";
 
 const { brandBlue, headerBlue, softBlue } = moduleColors;
 const pinRed = "#c81e1e";
@@ -39,22 +41,25 @@ export function PinLocationPicker({
   initial,
   waitingAreas,
   routes,
-  vehicle,
   onPick,
   onClose,
 }: {
   initial: MapCenter | null;
   waitingAreas: WaitingArea[];
   routes: TransitRoute[];
-  vehicle: PickupVehicle;
-  onPick: (place: Place) => void;
+  onPick: (place: Place, preferredWaitingAreaId?: string | null) => void;
   onClose: () => void;
 }) {
   const insets = useSafeAreaInsets();
   const [start, setStart] = useState<MapCenter | null>(initial);
   const [center, setCenter] = useState<MapCenter | null>(initial);
   const [saving, setSaving] = useState(false);
+  const [checkingRoute, setCheckingRoute] = useState(false);
   const [walkingPath, setWalkingPath] = useState<[number, number][]>([]);
+  const [routedRecommendation, setRoutedRecommendation] = useState<{
+    key: string;
+    area: WaitingAreaRecommendation;
+  } | null>(null);
   const isDragging = useRef(false);
 
   useEffect(() => {
@@ -72,43 +77,119 @@ export function PinLocationPicker({
   }, [initial]);
 
   const pickupCenter = useMemo(() => center ?? start, [center, start]);
-  const recommendedArea = useMemo<WaitingAreaRecommendation | null>(() => {
-    if (vehicle !== "jeep" || !pickupCenter) return null;
-    const nearestRoute = findNearestRoute(pickupCenter, routes);
-    if (!nearestRoute) return null;
+  const nearestRoute = useMemo(() => {
+    if (!pickupCenter) return null;
+    return findNearestRoute(pickupCenter, routes);
+  }, [pickupCenter, routes]);
+  const routePaths = useMemo(
+    () =>
+      nearestRoute
+        ? [
+            nearestRoute.route.waypoints,
+            ...nearestRoute.route.alternativePaths,
+          ].filter((path) => path.length > 0)
+        : [],
+    [nearestRoute],
+  );
+  const routeAreas = useMemo(
+    () =>
+      nearestRoute
+        ? findWaitingAreasOnRoute(
+            waitingAreas,
+            nearestRoute.route.id,
+            routePaths,
+            nearestRoute.route.vicinity,
+          )
+        : [],
+    [nearestRoute, routePaths, waitingAreas],
+  );
+  const baseRecommendation = useMemo<WaitingAreaRecommendation | null>(() => {
+    if (!nearestRoute || !pickupCenter) return null;
     return findNearestWaitingArea(
       pickupCenter,
-      waitingAreas,
+      routeAreas,
       nearestRoute.route.id,
-      [nearestRoute.route.waypoints, ...nearestRoute.route.alternativePaths].filter(
-        (path) => path.length > 0,
-      ),
+      routePaths,
       nearestRoute.route.vicinity,
     );
-  }, [vehicle, pickupCenter, routes, waitingAreas]);
+  }, [nearestRoute, pickupCenter, routeAreas, routePaths]);
+  const recommendationKey = baseRecommendation && pickupCenter
+    ? `${baseRecommendation.id}:${pickupCenter.lat}:${pickupCenter.lng}`
+    : "";
+  const recommendedArea =
+    routedRecommendation?.key === recommendationKey
+      ? routedRecommendation.area
+      : baseRecommendation;
+  const redirectedToRouteArea =
+    !!recommendedArea && recommendedArea.id !== baseRecommendation?.id;
 
   useEffect(() => {
-    if (!pickupCenter || !recommendedArea) {
+    if (
+      !pickupCenter ||
+      !baseRecommendation ||
+      getDistanceMeters(pickupCenter, baseRecommendation) >= 200
+    ) {
+      setCheckingRoute(false);
+      setRoutedRecommendation(null);
       setWalkingPath([]);
       return;
     }
     let active = true;
+    setCheckingRoute(true);
     const origin: [number, number] = [pickupCenter.lat, pickupCenter.lng];
-    const destination: [number, number] = [
-      recommendedArea.lat,
-      recommendedArea.lng,
+    const directDestination: [number, number] = [
+      baseRecommendation.lat,
+      baseRecommendation.lng,
     ];
-    setWalkingPath([origin, destination]);
+    const key = `${baseRecommendation.id}:${pickupCenter.lat}:${pickupCenter.lng}`;
+    setWalkingPath([origin, directDestination]);
     const timer = setTimeout(() => {
-      void loadWalkingRoute(origin, destination).then((result) => {
-        if (active && result.ok) setWalkingPath(result.data.path);
+      void loadWalkingRoute(origin, directDestination).then((result) => {
+        if (!active) return;
+        if (!result.ok) {
+          setRoutedRecommendation(null);
+          setCheckingRoute(false);
+          return;
+        }
+
+        const firstArea = findFirstWaitingAreaAlongPath(
+          result.data.path,
+          routeAreas,
+          baseRecommendation.id,
+        );
+        const destinationArea = firstArea ?? baseRecommendation;
+        const recommendation = {
+          ...destinationArea,
+          distanceMeters: getDistanceMeters(pickupCenter, destinationArea),
+        };
+        setRoutedRecommendation({ key, area: recommendation });
+
+        if (destinationArea.id === baseRecommendation.id) {
+          setWalkingPath(result.data.path);
+          setCheckingRoute(false);
+          return;
+        }
+
+        const priorityDestination: [number, number] = [
+          destinationArea.lat,
+          destinationArea.lng,
+        ];
+        void loadWalkingRoute(origin, priorityDestination).then(
+          (priorityResult) => {
+            if (!active) return;
+            setWalkingPath(
+              priorityResult.ok ? priorityResult.data.path : result.data.path,
+            );
+            setCheckingRoute(false);
+          },
+        );
       });
     }, 500);
     return () => {
       active = false;
       clearTimeout(timer);
     };
-  }, [pickupCenter, recommendedArea]);
+  }, [baseRecommendation, pickupCenter, routeAreas]);
 
   const mapFocus = useMemo(() => {
     if (!pickupCenter) return null;
@@ -170,7 +251,7 @@ export function PinLocationPicker({
     setSaving(true);
     const place = await describePoint(center.lat, center.lng);
     setSaving(false);
-    onPick(place);
+    onPick(place, recommendedArea?.id ?? null);
   };
 
   return (
@@ -219,17 +300,26 @@ export function PinLocationPicker({
         </View>
 
         <View style={[styles.card, { paddingBottom: insets.bottom + 16 }]}>
+          {recommendedArea && (
+            <Text style={styles.routeNote}>
+              {checkingRoute
+                ? "Checking your route for a waiting area along the way…"
+                : redirectedToRouteArea
+                  ? `Your walking route reaches ${recommendedArea.name} first. You’ll be directed there.`
+                  : `You’re being routed to the nearest recommended waiting area: ${recommendedArea.name}.`}
+            </Text>
+          )}
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Use this pickup location"
-            disabled={!center || saving}
+            disabled={!center || saving || checkingRoute}
             onPress={confirm}
             style={({ pressed }) => [
               styles.confirm,
-              (pressed || !center || saving) && styles.pressed,
+              (pressed || !center || saving || checkingRoute) && styles.pressed,
             ]}
           >
-            {saving ? (
+            {saving || checkingRoute ? (
               <LoadingLogo color="#ffffff" size={22} />
             ) : (
               <Text style={styles.confirmText}>USE THIS LOCATION</Text>
@@ -315,6 +405,15 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: -2 },
+  },
+  routeNote: {
+    color: brandBlue,
+    fontFamily: "Sora",
+    fontSize: 11,
+    lineHeight: 16,
+    padding: 10,
+    borderRadius: 10,
+    backgroundColor: softBlue,
   },
   confirm: {
     height: 50,

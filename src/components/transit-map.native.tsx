@@ -216,20 +216,31 @@ function PickupMarker({
 }) {
   const counted = typeof pickup.passengers === "number";
   const size = counted ? 38 : 32;
+  const label = pickup.label?.trim();
   return (
     <MarkerView
       coordinate={[pickup.lng, pickup.lat]}
       anchor={{ x: 0.5, y: 1 }}
       allowOverlap
     >
-      <View style={{ width: size, height: size }} pointerEvents="none">
-        <SvgXml
-          xml={counted ? COUNTED_PIN_SVG : MAP_PIN_SVG}
-          width={size}
-          height={size}
-        />
-        {counted ? (
-          <Text style={styles.pickupCount}>{pickup.passengers}</Text>
+      <View
+        style={{ width: label ? 150 : size, height: size }}
+        pointerEvents="none"
+      >
+        <View style={{ width: size, height: size, alignSelf: "center" }}>
+          <SvgXml
+            xml={counted ? COUNTED_PIN_SVG : MAP_PIN_SVG}
+            width={size}
+            height={size}
+          />
+          {counted ? (
+            <Text style={styles.pickupCount}>{pickup.passengers}</Text>
+          ) : null}
+        </View>
+        {label ? (
+          <Text numberOfLines={1} style={styles.pickupLabel}>
+            {label}
+          </Text>
         ) : null}
       </View>
     </MarkerView>
@@ -572,6 +583,21 @@ const styles = StyleSheet.create({
     lineHeight: 14,
     fontWeight: "bold",
     color: pinRed,
+    textAlign: "center",
+  },
+  pickupLabel: {
+    position: "absolute",
+    top: 36,
+    alignSelf: "center",
+    maxWidth: 150,
+    overflow: "hidden",
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: "#ffffff",
+    color: "#193caf",
+    fontFamily: "SoraBold",
+    fontSize: 9,
     textAlign: "center",
   },
   meHalo: {

@@ -1,8 +1,16 @@
 import { authRoutes } from "@/api/v1/auth/routes";
 import { getSupabaseClient } from "@/api/v1/client";
+import {
+  readCache,
+  unwrapCached,
+  writeCache,
+} from "@/api/v1/cache";
 import { pickupRoutes } from "@/api/v1/pickups/routes";
 import type {
   BookingRow,
+  CompanionStatus,
+  PickupCompanionStatusRow,
+  PickupDraftRow,
   PickupDriverRow,
   PickupRequestRow,
   RequestStatus,
@@ -11,8 +19,18 @@ import type {
 } from "@/api/v1/pickups/types";
 import { getKnownWaitingAreas } from "@/api/v1/waiting-areas/controllers";
 import type { WaitingAreaType } from "@/constants/waiting-area";
-import { unwrapCached } from "@/api/v1/cache";
-import { attempt, failure, unwrap, type Result } from "@/api/v1/result";
+import {
+  attempt,
+  failure,
+  success,
+  unwrap,
+  type Result,
+} from "@/api/v1/result";
+import {
+  checkOnline,
+  isOnline,
+  subscribeToOnline,
+} from "@/hooks/use-online";
 import {
   getOccupancyLevel,
   toVehicleType,
@@ -59,17 +77,82 @@ export async function getCommuterId() {
 let knownActivePickup: PickupRequest | null = null;
 let knownUserId: string | null = null;
 let watchingAuth = false;
+let watchingNetwork = false;
+let flushingPickupCancellations: Promise<void> | null = null;
+
+const pendingPickupCancellationKey = (userId: string) =>
+  `pending-pickup-cancellations:${userId}`;
+
 export const getKnownActivePickup = () => knownActivePickup;
+
+async function deletePickupRequest(requestId: string) {
+  await unwrap(pickupRoutes.deletePickup(requestId));
+  await unwrap(pickupRoutes.deleteRequest(requestId));
+}
+
+async function flushPickupCancellations() {
+  if (flushingPickupCancellations || !isOnline()) return;
+  flushingPickupCancellations = (async () => {
+    const { data } = await getSupabaseClient().auth.getSession();
+    const userId = data.session?.user.id;
+    if (!userId) return;
+
+    const key = pendingPickupCancellationKey(userId);
+    const requestIds = readCache<string[]>(key) ?? [];
+    const remaining: string[] = [];
+    for (const requestId of requestIds) {
+      try {
+        await deletePickupRequest(requestId);
+        if (knownActivePickup?.id === requestId) knownActivePickup = null;
+      } catch {
+        remaining.push(requestId);
+      }
+    }
+    writeCache(key, remaining);
+  })().catch(() => {}).finally(() => {
+    flushingPickupCancellations = null;
+  });
+  await flushingPickupCancellations;
+}
+
+export async function queuePickupCancellation(
+  request: PickupRequest,
+): Promise<void> {
+  const { data } = await getSupabaseClient().auth.getSession().catch(() => ({
+    data: { session: null },
+  }));
+  const userId = data.session?.user.id;
+  if (!userId) return;
+
+  const key = pendingPickupCancellationKey(userId);
+  const requestIds = readCache<string[]>(key) ?? [];
+  if (!requestIds.includes(request.id)) {
+    writeCache(key, [...requestIds, request.id]);
+  }
+  if (knownActivePickup?.id === request.id) knownActivePickup = null;
+  await flushPickupCancellations();
+}
 
 function watchAuthChanges() {
   if (watchingAuth) return;
   watchingAuth = true;
+  if (!watchingNetwork) {
+    watchingNetwork = true;
+    subscribeToOnline(() => {
+      if (isOnline()) void flushPickupCancellations();
+      else if (knownActivePickup) {
+        void queuePickupCancellation(knownActivePickup);
+      }
+    });
+  }
+  void flushPickupCancellations();
   getSupabaseClient().auth.onAuthStateChange((_event, session) => {
     const userId = session?.user.id ?? null;
     if (userId !== knownUserId) {
       knownUserId = userId;
       knownActivePickup = null;
     }
+    if (userId) void flushPickupCancellations();
   });
 }
 
@@ -121,6 +204,7 @@ type PickupForm = {
   passengers: number;
   location: PickupPoint | null;
   riders: Rider[];
+  draftRequestId?: string | null;
 };
 
 export async function requestPickup(
@@ -129,69 +213,82 @@ export async function requestPickup(
   const { vehicle, passengers, location, riders } = form;
 
   if (!location) {
-    return failure("Choose where you are so drivers can find you.");
+    return failure("Select a pickup location so drivers know where to find you.");
   }
   if (passengers < minPickupPassengers || passengers > maxPickupPassengers) {
     return failure(
       `Choose between ${minPickupPassengers} and ${maxPickupPassengers} passengers.`,
     );
   }
-  if (riders.length + 1 > passengers) {
+  const acceptedRiders = riders.filter(
+    (rider) => rider.inviteStatus === "accepted",
+  );
+  if (acceptedRiders.length + 1 > passengers) {
     return failure(
-      `You're riding with ${riders.length} ${riders.length === 1 ? "person" : "people"}, so choose at least ${riders.length + 1} passengers.`,
+      `Set the passenger count to at least ${acceptedRiders.length + 1} to include everyone in this shared ride.`,
+    );
+  }
+  if (!(await checkOnline())) {
+    return failure(
+      "Reconnect to the internet before requesting a pickup.",
     );
   }
 
   const point = location;
 
   return attempt(async () => {
-    const commuterId = await getCommuterId();
-    const request: {
-      request_id: string;
-      request_status: RequestStatus;
-    } | null = await unwrap(
-      pickupRoutes.createRequest(commuterId, point.lat, point.lng),
-    );
-    if (!request) throw new Error("Your pickup request could not be saved.");
-
-    try {
-      await unwrap(
-        pickupRoutes.createPickup(
-          request.request_id,
+    let requestId = form.draftRequestId ?? null;
+    if (requestId) {
+      const draftId: string | null = await unwrap(
+        pickupRoutes.savePickupDraft(
+          requestId,
+          point.lat,
+          point.lng,
           point.name,
           passengers,
           vehicle === "jeep" ? "Jeepney" : "Tricycle",
         ),
       );
-    } catch (error) {
-      await pickupRoutes.deleteRequest(request.request_id);
-      throw error;
-    }
-
-    if (riders.length > 0) {
+      if (!draftId) throw new Error("Your pickup draft could not be saved.");
+      requestId = draftId;
+      await unwrap(pickupRoutes.publishPickupDraft(requestId));
+    } else {
+      if (acceptedRiders.length > 0) {
+        throw new Error("Send invitations to your accepted companions again.");
+      }
+      const commuterId = await getCommuterId();
+      const request: {
+        request_id: string;
+        request_status: RequestStatus;
+      } | null = await unwrap(
+        pickupRoutes.createRequest(commuterId, point.lat, point.lng),
+      );
+      if (!request) throw new Error("Your pickup request could not be saved.");
+      requestId = request.request_id;
       try {
         await unwrap(
-          pickupRoutes.addCompanions(
-            request.request_id,
-            riders.map((rider) => rider.userId),
+          pickupRoutes.createPickup(
+            requestId,
+            point.name,
+            passengers,
+            vehicle === "jeep" ? "Jeepney" : "Tricycle",
           ),
         );
       } catch (error) {
-        await pickupRoutes.deletePickup(request.request_id);
-        await pickupRoutes.deleteRequest(request.request_id);
+        await pickupRoutes.deleteRequest(requestId);
         throw error;
       }
     }
 
     knownActivePickup = {
-      id: request.request_id,
+      id: requestId,
       pickupName: point.name,
       vehicle,
       waitingAreaType: point.waitingAreaType,
       lat: point.lat,
       lng: point.lng,
       passengers,
-      status: request.request_status,
+      status: "pending",
     };
     return knownActivePickup;
   });
@@ -204,11 +301,29 @@ export async function cancelPickup(
   request: PickupRequest,
 ): Promise<Result<void>> {
   if (!canCancelPickup(request)) {
-    return failure("A driver already accepted this request.");
+    return failure(
+      "A driver has already accepted this pickup, so it can’t be cancelled here.",
+    );
+  }
+  if (!(await checkOnline())) {
+    return failure("Reconnect to the internet before cancelling this pickup.");
   }
   return attempt(async () => {
-    await unwrap(pickupRoutes.deletePickup(request.id));
-    await unwrap(pickupRoutes.deleteRequest(request.id));
+    await deletePickupRequest(request.id);
+    knownActivePickup = null;
+  });
+}
+
+export async function cancelActivePickupBeforeSignOut(): Promise<Result<void>> {
+  if (!(await checkOnline())) {
+    return failure("Connect to the internet before signing out.");
+  }
+  const result = await fetchActivePickup();
+  if (!result.ok) return result;
+  if (!result.data) return success(undefined);
+  const request = result.data;
+  return attempt(async () => {
+    await deletePickupRequest(request.id);
     knownActivePickup = null;
   });
 }
@@ -353,6 +468,7 @@ export type Rider = {
   name: string;
   initials: string;
   picture: string | null;
+  inviteStatus?: CompanionStatus;
 };
 
 const toRider = (row: RiderRow): Rider => {
@@ -367,6 +483,76 @@ const toRider = (row: RiderRow): Rider => {
 };
 
 export const maxRiders = maxPickupPassengers - 1;
+
+export function savePickupDraft(
+  requestId: string | null,
+  location: PickupPoint,
+  passengers: number,
+  vehicle: PickupVehicle,
+): Promise<Result<string>> {
+  return attempt(async () => {
+    const id: string | null = await unwrap(
+      pickupRoutes.savePickupDraft(
+        requestId,
+        location.lat,
+        location.lng,
+        location.name,
+        passengers,
+        vehicle === "jeep" ? "Jeepney" : "Tricycle",
+      ),
+    );
+    if (!id) throw new Error("Your pickup draft could not be saved.");
+    return id;
+  });
+}
+
+export function loadMyPickupDraft(): Promise<Result<PickupDraftRow | null>> {
+  return attempt(async () => {
+    const data: PickupDraftRow | PickupDraftRow[] | null = await unwrap(
+      pickupRoutes.findMyPickupDraft(),
+    );
+    return Array.isArray(data) ? (data[0] ?? null) : data;
+  });
+}
+
+export function loadPickupCompanionStatuses(
+  requestId: string,
+): Promise<Result<Rider[]>> {
+  return attempt(async () => {
+    const rows: PickupCompanionStatusRow[] =
+      (await unwrap(pickupRoutes.findPickupCompanionStatuses(requestId))) ?? [];
+    return rows.map((row) => ({
+      ...toRider(row),
+      inviteStatus: row.companion_status,
+    }));
+  });
+}
+
+export function sendPickupCompanionInvite(
+  requestId: string,
+  userId: string,
+): Promise<Result<void>> {
+  return attempt(async () => {
+    if (!(await checkOnline())) {
+      throw new Error("Reconnect to the internet before sending an invitation.");
+    }
+    await unwrap(pickupRoutes.addCompanion(requestId, userId));
+  });
+}
+
+export function removePickupCompanion(
+  requestId: string,
+  userId: string,
+): Promise<Result<number | null>> {
+  return attempt(async () => {
+    if (!(await checkOnline())) {
+      throw new Error("Reconnect to the internet before removing a companion.");
+    }
+    return (await unwrap(
+      pickupRoutes.removePickupCompanion(requestId, userId),
+    )) as number | null;
+  });
+}
 
 export function searchRiders(query: string): Promise<Result<Rider[]>> {
   return attempt(async () => {

@@ -10,6 +10,7 @@ import { unwrapCached } from "@/api/v1/cache";
 import { attempt, failure, unwrap, type Result } from "@/api/v1/result";
 import { signedOutOrOffline } from "@/api/v1/session-route";
 import { Routes, type AppRoute } from "@/constants/routes";
+import { checkOnline } from "@/hooks/use-online";
 
 export type UserType = MobileUserType;
 
@@ -298,6 +299,9 @@ export async function submitProfile(
   if (Object.keys(fieldErrors).length > 0 || !form.birthdate) {
     return { ...failure("Please complete the form."), fieldErrors };
   }
+  if (!(await checkOnline())) {
+    return failure("Connect to the internet to update your profile.");
+  }
 
   const { birthdate, contact } = form;
   return attempt(async () => {
@@ -402,6 +406,9 @@ export async function saveProfileChanges(
 
   if (Object.keys(fieldErrors).length > 0 || !form.birthDate) {
     return { ...failure("Please check the form."), fieldErrors };
+  }
+  if (!(await checkOnline())) {
+    return failure("Connect to the internet to update your profile.");
   }
 
   const { birthDate, contact, picture } = form;

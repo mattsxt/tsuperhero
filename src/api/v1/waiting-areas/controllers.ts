@@ -63,6 +63,102 @@ export type WaitingAreaRecommendation = WaitingArea & {
   distanceMeters: number;
 };
 
+type PathPosition = {
+  distanceMeters: number;
+  alongPathMeters: number;
+};
+
+function measurePathPosition(
+  point: Coordinates,
+  path: [number, number][],
+): PathPosition | null {
+  if (path.length === 0) return null;
+  if (path.length === 1) {
+    return {
+      distanceMeters: getDistanceMeters(point, {
+        lat: path[0][0],
+        lng: path[0][1],
+      }),
+      alongPathMeters: 0,
+    };
+  }
+
+  const radians = (degrees: number) => (degrees * Math.PI) / 180;
+  const metersPerLatitude = 111_320;
+  let traversedMeters = 0;
+  let nearest: PathPosition = {
+    distanceMeters: Number.POSITIVE_INFINITY,
+    alongPathMeters: 0,
+  };
+
+  for (let index = 1; index < path.length; index += 1) {
+    const [startLat, startLng] = path[index - 1];
+    const [endLat, endLng] = path[index];
+    const metersPerLongitude =
+      metersPerLatitude * Math.cos(radians(point.lat));
+    const pointX = (point.lng - startLng) * metersPerLongitude;
+    const pointY = (point.lat - startLat) * metersPerLatitude;
+    const endX = (endLng - startLng) * metersPerLongitude;
+    const endY = (endLat - startLat) * metersPerLatitude;
+    const lengthSquared = endX * endX + endY * endY;
+    const fraction = lengthSquared
+      ? Math.max(0, Math.min(1, (pointX * endX + pointY * endY) / lengthSquared))
+      : 0;
+    const projected = {
+      lat: startLat + (endLat - startLat) * fraction,
+      lng: startLng + (endLng - startLng) * fraction,
+    };
+    const distanceMeters = getDistanceMeters(point, projected);
+    const segmentMeters = getDistanceMeters(
+      { lat: startLat, lng: startLng },
+      { lat: endLat, lng: endLng },
+    );
+
+    if (distanceMeters < nearest.distanceMeters) {
+      nearest = {
+        distanceMeters,
+        alongPathMeters: traversedMeters + segmentMeters * fraction,
+      };
+    }
+    traversedMeters += segmentMeters;
+  }
+
+  return nearest;
+}
+
+export function findFirstWaitingAreaAlongPath(
+  path: [number, number][],
+  areas: WaitingArea[],
+  destinationId: string,
+  maxDistanceMeters = 40,
+): WaitingArea | null {
+  const destination = areas.find((area) => area.id === destinationId);
+  if (!destination) return null;
+
+  const destinationPosition = measurePathPosition(destination, path);
+  if (!destinationPosition) return null;
+
+  return areas
+    .filter((area) => area.id !== destinationId)
+    .map((area) => ({
+      area,
+      position: measurePathPosition(area, path),
+    }))
+    .filter(
+      (
+        candidate,
+      ): candidate is { area: WaitingArea; position: PathPosition } =>
+        !!candidate.position &&
+        candidate.position.distanceMeters <= maxDistanceMeters &&
+        candidate.position.alongPathMeters <
+          destinationPosition.alongPathMeters - maxDistanceMeters,
+    )
+    .sort(
+      (left, right) =>
+        left.position.alongPathMeters - right.position.alongPathMeters,
+    )[0]?.area ?? null;
+}
+
 export function findNearestWaitingArea(
   origin: Coordinates,
   areas: WaitingArea[],

@@ -36,7 +36,6 @@ yarn-error.*
 
 example
 
-/ios
 /android
 
 .env
