@@ -1,6 +1,4 @@
 export type RequestStatus = "pending" | "accepted" | "rejected" | "completed";
-<<<<<<< HEAD
-=======
 export type CompanionStatus = "pending" | "accepted" | "rejected";
 
 export type PickupDraftRow = {
@@ -15,16 +13,12 @@ export type PickupDraftRow = {
 export type PickupCompanionStatusRow = RiderRow & {
   companion_status: CompanionStatus;
 };
->>>>>>> origin/mapbox
 
 export type PickupRow = {
   pickup_id: string;
   pickup_destination: string;
   number_of_passengers: number;
-<<<<<<< HEAD
-=======
   requested_vehicle_type: "Jeepney" | "Tricycle";
->>>>>>> origin/mapbox
 };
 
 export type BookingRow = {

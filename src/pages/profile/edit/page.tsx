@@ -45,10 +45,7 @@ import {
 } from "@/components/module-ui";
 import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
-<<<<<<< HEAD
-=======
 import { useOnline } from "@/hooks/use-online";
->>>>>>> origin/mapbox
 import { goBackOr } from "@/utils/navigation";
 
 const { brandBlue, error: errorRed, mutedText, text } = moduleColors;
@@ -57,10 +54,7 @@ const minimumBirthDate = new Date(1900, 0, 1);
 
 export default function EditProfileScreen() {
   const insets = useSafeAreaInsets();
-<<<<<<< HEAD
-=======
   const online = useOnline();
->>>>>>> origin/mapbox
   const chrome = useScrollChrome();
   const keyboardVisible = useKeyboardVisible();
   const [profile, setProfile] = useState<EditableProfile | null>(null);
@@ -288,12 +282,6 @@ export default function EditProfileScreen() {
             </Field>
 
             {!!saveError && <Text style={styles.saveError}>{saveError}</Text>}
-<<<<<<< HEAD
-
-            <ModuleButton
-              label={saving ? "SAVING..." : "SAVE CHANGES"}
-              disabled={saving || !hasChanges}
-=======
             {!online && (
               <Text style={styles.offlineHint}>
                 Connect to the internet before changing your profile.
@@ -303,7 +291,6 @@ export default function EditProfileScreen() {
             <ModuleButton
               label={saving ? "SAVING..." : "SAVE CHANGES"}
               disabled={saving || !hasChanges || !online}
->>>>>>> origin/mapbox
               onPress={save}
               style={styles.saveButton}
             />
@@ -432,8 +419,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 18,
   },
-<<<<<<< HEAD
-=======
   offlineHint: {
     color: "#6b6b6b",
     fontFamily: "Sora",
@@ -441,6 +426,5 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 12,
   },
->>>>>>> origin/mapbox
   saveButton: { marginTop: 28 },
 });

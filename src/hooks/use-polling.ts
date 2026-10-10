@@ -19,12 +19,6 @@ export function usePolling(
   useEffect(() => {
     if (!active) return;
     let timer: ReturnType<typeof setInterval> | null = null;
-<<<<<<< HEAD
-    const start = () => {
-      if (timer) return;
-      taskRef.current();
-      timer = setInterval(() => taskRef.current(), intervalMs);
-=======
     let running = false;
     const run = () => {
       if (running) return;
@@ -40,7 +34,6 @@ export function usePolling(
       if (timer) return;
       run();
       timer = setInterval(run, intervalMs);
->>>>>>> origin/mapbox
     };
     const stop = () => {
       if (timer) clearInterval(timer);

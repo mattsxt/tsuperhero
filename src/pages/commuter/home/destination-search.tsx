@@ -31,10 +31,7 @@ import {
 } from "@/api/v1/places/controllers";
 import {
   findRoutesNear,
-<<<<<<< HEAD
-=======
   findNearestRoute,
->>>>>>> origin/mapbox
   nearDestinationMeters,
   searchDestinations,
   type RouteNearPlace,
@@ -57,15 +54,11 @@ const bottomMargin = 16;
 const borderAllowance = 3;
 const placeSearchDelayMs = 300;
 
-<<<<<<< HEAD
-type ChosenPlace = { place: Place; routes: RouteNearPlace[] };
-=======
 type ChosenPlace = {
   place: Place;
   routes: RouteNearPlace[];
   nearestRoute: RouteNearPlace | null;
 };
->>>>>>> origin/mapbox
 
 function useKeyboardHeight() {
   const [height, setHeight] = useState(0);
@@ -191,10 +184,7 @@ export function DestinationSearchPanel({
             routeId: route.id,
             destLat: String(place.lat),
             destLng: String(place.lng),
-<<<<<<< HEAD
-=======
             destName: place.name,
->>>>>>> origin/mapbox
           }
         : { routeId: route.id },
     });
@@ -217,15 +207,11 @@ export function DestinationSearchPanel({
       return;
     }
     Keyboard.dismiss();
-<<<<<<< HEAD
-    setChosen({ place: result.data, routes: nearby });
-=======
     setChosen({
       place: result.data,
       routes: nearby,
       nearestRoute: findNearestRoute(result.data),
     });
->>>>>>> origin/mapbox
   };
 
   const changeQuery = (next: string) => {
@@ -467,11 +453,7 @@ function buildResultItems({
 }
 
 function buildChosenItems(
-<<<<<<< HEAD
-  { place, routes }: ChosenPlace,
-=======
   { place, routes, nearestRoute }: ChosenPlace,
->>>>>>> origin/mapbox
   onOpenRoute: (route: TransitRoute, place: Place) => void,
   onBack: () => void,
 ): { items: ReactElement[]; stickyIndices: number[] } {
@@ -499,8 +481,6 @@ function buildChosenItems(
         {place.name} yet.
       </Text>,
     );
-<<<<<<< HEAD
-=======
     if (nearestRoute && nearestRoute.distanceMeters > 200) {
       items.push(
         <Text key="tricycle-suggestion" style={styles.routeSuggestion}>
@@ -511,7 +491,6 @@ function buildChosenItems(
         </Text>,
       );
     }
->>>>>>> origin/mapbox
   }
   routes.forEach(({ route, distanceMeters }) =>
     items.push(
@@ -587,8 +566,6 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     textAlign: "center",
   },
-<<<<<<< HEAD
-=======
   routeSuggestion: {
     color: brandBlue,
     fontFamily: "SoraBold",
@@ -599,7 +576,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: softBlue,
   },
->>>>>>> origin/mapbox
   rowMain: { flexDirection: "row", alignItems: "center", gap: 10 },
   routeRow: { paddingVertical: 8 },
   rowIcon: {

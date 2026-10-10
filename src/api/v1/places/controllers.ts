@@ -23,14 +23,10 @@ export type PlaceSuggestion = {
 export const minPlaceQueryLength = 2;
 
 export function createPlacesSession() {
-<<<<<<< HEAD
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-=======
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (char) => {
     const random = Math.floor(Math.random() * 16);
     return (char === "x" ? random : (random & 0x3) | 0x8).toString(16);
   });
->>>>>>> origin/mapbox
 }
 
 export async function searchPlaces(
@@ -41,25 +37,6 @@ export async function searchPlaces(
 
   try {
     const response = await placesApi.autocomplete(query.trim(), sessionToken);
-<<<<<<< HEAD
-    if (response.error) throw new Error(response.error.message);
-
-    const remote = (response.suggestions ?? []).flatMap(
-      ({ placePrediction }): PlaceSuggestion[] =>
-        placePrediction
-          ? [
-              {
-                id: placePrediction.placeId,
-                name:
-                  placePrediction.structuredFormat?.mainText?.text ??
-                  placePrediction.text?.text ??
-                  "",
-                address:
-                  placePrediction.structuredFormat?.secondaryText?.text ?? "",
-              },
-            ]
-          : [],
-=======
     if (!response.suggestions) {
       throw new Error(response.message ?? "Place search failed.");
     }
@@ -70,7 +47,6 @@ export async function searchPlaces(
         name: suggestion.name,
         address: suggestion.place_formatted ?? suggestion.full_address ?? "",
       }),
->>>>>>> origin/mapbox
     );
     return { suggestions: remote };
   } catch (error) {
@@ -84,17 +60,6 @@ export async function resolvePlace(
 ): Promise<Result<Place>> {
   try {
     const details = await placesApi.details(suggestion.id, sessionToken);
-<<<<<<< HEAD
-    if (details.error || !details.location) {
-      throw new Error(details.error?.message ?? "Couldn't load that place.");
-    }
-    return success({
-      id: suggestion.id,
-      name: details.displayName?.text ?? suggestion.name,
-      address: details.formattedAddress ?? suggestion.address,
-      lat: details.location.latitude,
-      lng: details.location.longitude,
-=======
     const feature = details.features?.[0];
     const properties = feature?.properties;
     const lng =
@@ -113,7 +78,6 @@ export async function resolvePlace(
         suggestion.address,
       lat,
       lng,
->>>>>>> origin/mapbox
     });
   } catch (error) {
     return failure(getErrorMessage(error));

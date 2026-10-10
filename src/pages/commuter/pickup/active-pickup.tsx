@@ -26,8 +26,6 @@ import { usePolling } from "@/hooks/use-polling";
 import { getDistanceMeters } from "@/utils/geo";
 import { BrandLogo } from "@/components/brand-logo";
 import { LoadingLogo } from "@/components/LoadingLogo";
-<<<<<<< HEAD
-=======
 import type { WaitingArea } from "@/api/v1/waiting-areas/controllers";
 
 import { PickupAlert } from "./pickup-alert";
@@ -35,7 +33,6 @@ import {
   waitingAreaArrivalMeters,
   WaitingAreaDirectionsMap,
 } from "./waiting-area-directions-map";
->>>>>>> origin/mapbox
 
 const panelNavy = "#1d3354";
 const routeCyan = "#7fd4f7";
@@ -59,20 +56,14 @@ export function ActivePickup({
   request,
   busy,
   problem,
-<<<<<<< HEAD
-=======
   problemSource,
->>>>>>> origin/mapbox
   onCancel,
   onBack,
 }: {
   request: PickupRequest;
   busy: boolean;
   problem: string;
-<<<<<<< HEAD
-=======
   problemSource: string;
->>>>>>> origin/mapbox
   onCancel: () => void;
   onBack: () => void;
 }) {
@@ -90,10 +81,6 @@ export function ActivePickup({
     [request.lat, request.lng],
   );
   const driverLocation = matched ? (driver?.location ?? null) : null;
-<<<<<<< HEAD
-
-  useEffect(() => {
-=======
   const waitingArea = useMemo<WaitingArea>(
     () => ({
       id: `pickup-waiting-area-${request.id}`,
@@ -109,7 +96,6 @@ export function ActivePickup({
 
   useEffect(() => {
     if (request.vehicle === "jeep") return;
->>>>>>> origin/mapbox
     let active = true;
     let subscription: { remove: () => void } | null = null;
     watchLocation(({ coords }) =>
@@ -123,11 +109,7 @@ export function ActivePickup({
       active = false;
       subscription?.remove();
     };
-<<<<<<< HEAD
-  }, []);
-=======
   }, [request.vehicle]);
->>>>>>> origin/mapbox
 
   usePolling(
     async () => {
@@ -215,9 +197,6 @@ export function ActivePickup({
   return (
     <View style={styles.screen}>
       <StatusBar style="light" />
-<<<<<<< HEAD
-      <TransitMap state={mapState} />
-=======
       {request.vehicle === "jeep" ? (
         <WaitingAreaDirectionsMap
           area={waitingArea}
@@ -228,7 +207,6 @@ export function ActivePickup({
       ) : (
         <TransitMap state={mapState} />
       )}
->>>>>>> origin/mapbox
 
       <View
         style={styles.headerWrap}
@@ -267,9 +245,6 @@ export function ActivePickup({
                 label="Waiting for a driver"
               />
             </View>
-<<<<<<< HEAD
-            {!!problem && <Text style={styles.problem}>{problem}</Text>}
-=======
             {request.vehicle === "jeep" && (
               <Text style={styles.waitingAreaMessage}>
                 {!me
@@ -286,7 +261,6 @@ export function ActivePickup({
                 compact
               />
             )}
->>>>>>> origin/mapbox
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Cancel pickup request"
@@ -401,21 +375,12 @@ const styles = StyleSheet.create({
     fontFamily: "SoraBold",
     fontSize: 16,
   },
-<<<<<<< HEAD
-  problem: {
-    color: "#fca5a5",
-    fontFamily: "Sora",
-    fontSize: 10,
-    marginTop: 12,
-    textAlign: "center",
-=======
   waitingAreaMessage: {
     color: "#ffffff",
     fontFamily: "Sora",
     fontSize: 10,
     lineHeight: 15,
     marginTop: 12,
->>>>>>> origin/mapbox
   },
   cancelButton: {
     height: 50,

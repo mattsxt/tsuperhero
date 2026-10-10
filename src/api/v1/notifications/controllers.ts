@@ -49,11 +49,7 @@ export function notificationTarget(type: unknown): AppRoute | null {
 
 const toNotification = (row: NotificationRow): AppNotification => ({
   id: row.notification_id,
-<<<<<<< HEAD
-  type: row.type,
-=======
   type: row.notification_type,
->>>>>>> origin/mapbox
   title: row.title,
   body: row.body,
   data: row.data ?? {},

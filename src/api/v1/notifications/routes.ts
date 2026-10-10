@@ -5,11 +5,7 @@ import { getSupabaseClient } from "@/api/v1/client";
 export type NotificationRow = {
   notification_id: string;
   user_id: string;
-<<<<<<< HEAD
-  type: string;
-=======
   notification_type: string;
->>>>>>> origin/mapbox
   title: string;
   body: string;
   data: Record<string, unknown> | null;
@@ -25,11 +21,7 @@ export const notificationRoutes = {
   list: () =>
     notificationTable()
       .select(
-<<<<<<< HEAD
-        "notification_id, user_id, type, title, body, data, created_at, read_at",
-=======
         "notification_id, user_id, notification_type, title, body, data, created_at, read_at",
->>>>>>> origin/mapbox
       )
       .order("created_at", { ascending: false })
       .limit(pageSize),

@@ -19,11 +19,6 @@ import {
   View,
 } from "react-native";
 import Animated, {
-<<<<<<< HEAD
-  FadeInDown,
-  FadeOutDown,
-  LinearTransition,
-=======
   cancelAnimation,
   Easing,
   FadeInDown,
@@ -34,7 +29,6 @@ import Animated, {
   useSharedValue,
   withRepeat,
   withTiming,
->>>>>>> origin/mapbox
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -54,10 +48,7 @@ import {
   type TripStatus,
 } from "@/api/v1/operator/controllers";
 import {
-<<<<<<< HEAD
-=======
   loadAlternativeGeometry,
->>>>>>> origin/mapbox
   getOccupancyLevel,
   loadRouteGeometry,
   type LatLng,
@@ -69,10 +60,6 @@ import {
 import {
   clearOutbox,
   sendLocation,
-<<<<<<< HEAD
-  usePendingSync,
-=======
->>>>>>> origin/mapbox
 } from "@/api/v1/operator/outbox";
 import { watchLocation } from "@/api/v1/places/controllers";
 import { EmptyState } from "@/components/empty-state";
@@ -81,10 +68,6 @@ import { VehicleIcon } from "@/components/module-icons";
 import { ModuleHeader, moduleColors } from "@/components/module-ui";
 import { TransitMap, type TransitMapState } from "@/components/transit-map";
 import { Routes } from "@/constants/routes";
-<<<<<<< HEAD
-import { useOnline } from "@/hooks/use-online";
-=======
->>>>>>> origin/mapbox
 import { getDistanceMeters, getPairDistanceMeters } from "@/utils/geo";
 import { goBackOr } from "@/utils/navigation";
 
@@ -190,19 +173,13 @@ function Trip({ details }: { details: AssignmentDetails }) {
   const { assignment, route, vehicleLabel, coverageTitle } = details;
   const { vehicle } = assignment;
   const capacity = vehicle.max_capacity;
-<<<<<<< HEAD
-=======
   const reduceMotion = useReducedMotion();
   const sharingPulse = useSharedValue(1);
->>>>>>> origin/mapbox
 
   const [headerHeight, setHeaderHeight] = useState(140);
   const [panelHeight, setPanelHeight] = useState(240);
   const [routePath, setRoutePath] = useState<LatLng[] | null>(null);
-<<<<<<< HEAD
-=======
   const [alternativePaths, setAlternativePaths] = useState<LatLng[][]>([]);
->>>>>>> origin/mapbox
   const [status, setStatus] = useState<TripStatus>("idle");
   const [starting, setStarting] = useState(false);
   const [backgroundSharing, setBackgroundSharing] = useState(false);
@@ -232,22 +209,10 @@ function Trip({ details }: { details: AssignmentDetails }) {
   const passedPickups = useRef(new Set<string>());
 
   const onTrip = status !== "idle";
-<<<<<<< HEAD
-  const online = useOnline();
-  const pendingSync = usePendingSync();
-  const syncing = !online || pendingSync > 0;
-=======
->>>>>>> origin/mapbox
   const full = markedFull || count >= capacity;
   const occupancy = markedFull ? "Full" : getOccupancyLevel(count, capacity);
 
   useEffect(() => {
-<<<<<<< HEAD
-    if (!route) return;
-    let active = true;
-    loadRouteGeometry(route).then((geometry) => {
-      if (active) setRoutePath(geometry);
-=======
     if (!onTrip || reduceMotion) {
       cancelAnimation(sharingPulse);
       sharingPulse.set(1);
@@ -280,7 +245,6 @@ function Trip({ details }: { details: AssignmentDetails }) {
       if (!active) return;
       setRoutePath(geometry);
       setAlternativePaths(alternatives);
->>>>>>> origin/mapbox
     });
     return () => {
       active = false;
@@ -339,16 +303,6 @@ function Trip({ details }: { details: AssignmentDetails }) {
 
   useEffect(() => {
     if (!onTrip || backgroundSharing) return;
-<<<<<<< HEAD
-    const ping = async () => {
-      if (!latestCoords.current) return;
-      const result = await sendLocation(latestCoords.current);
-      if (result.status !== "failed") {
-        shareFailing.current = false;
-      } else if (tripActive.current && !shareFailing.current) {
-        shareFailing.current = true;
-        setToast(nextToast("Couldn't share your location.", "danger"));
-=======
     let sending = false;
     const ping = async () => {
       if (sending || !latestCoords.current) return;
@@ -363,7 +317,6 @@ function Trip({ details }: { details: AssignmentDetails }) {
         }
       } finally {
         sending = false;
->>>>>>> origin/mapbox
       }
     };
     ping();
@@ -373,34 +326,6 @@ function Trip({ details }: { details: AssignmentDetails }) {
 
   useEffect(() => {
     if (!onTrip) return;
-<<<<<<< HEAD
-    const poll = async () => {
-      const result = await loadNearbyPickups();
-      if (!result.ok || !tripActive.current) return;
-      const nearby = new Set(result.data.map((pickup) => pickup.id));
-      seenPickups.current.forEach((id) => {
-        if (!nearby.has(id)) passedPickups.current.add(id);
-      });
-      const visible = result.data.filter(
-        (pickup) => !passedPickups.current.has(pickup.id),
-      );
-      const fresh = visible.filter(
-        (pickup) => !seenPickups.current.has(pickup.id),
-      );
-      visible.forEach((pickup) => seenPickups.current.add(pickup.id));
-      setPickups(visible);
-      if (fresh.length > 0) {
-        const passengers = fresh.reduce(
-          (total, pickup) => total + pickup.passengers,
-          0,
-        );
-        setToast(
-          nextToast(
-            `Pickup request nearby: ${passengers} passenger${passengers === 1 ? "" : "s"}`,
-            "success",
-          ),
-        );
-=======
     let loading = false;
     const poll = async () => {
       if (loading) return;
@@ -434,7 +359,6 @@ function Trip({ details }: { details: AssignmentDetails }) {
         }
       } finally {
         loading = false;
->>>>>>> origin/mapbox
       }
     };
     const timer = setInterval(poll, pickupPollMs);
@@ -480,27 +404,16 @@ function Trip({ details }: { details: AssignmentDetails }) {
 
   useEffect(() => {
     if (starting || finalizing) return;
-<<<<<<< HEAD
-    const key = `${status}:${count}`;
-    if (key === savedState.current) return;
-    savedState.current = key;
-    queueTripState(status, count).then((result) => {
-=======
     const key = `${status}:${count}:${markedFull}`;
     if (key === savedState.current) return;
     savedState.current = key;
     queueTripState(status, count, markedFull).then((result) => {
->>>>>>> origin/mapbox
       if (result.status === "failed")
         setToast(
           nextToast(`Couldn't update your trip: ${result.error}`, "danger"),
         );
     });
-<<<<<<< HEAD
-  }, [starting, finalizing, status, count]);
-=======
   }, [starting, finalizing, status, count, markedFull]);
->>>>>>> origin/mapbox
 
   useEffect(
     () => () => {
@@ -539,22 +452,14 @@ function Trip({ details }: { details: AssignmentDetails }) {
   }, [onTrip]);
 
   const addPassenger = () => {
-<<<<<<< HEAD
-    if (!onTrip || count >= capacity) return;
-=======
     if (!onTrip || markedFull || count >= capacity) return;
->>>>>>> origin/mapbox
     const next = count + 1;
     setCount(next);
     if (next >= capacity) setToast(nextToast("Vehicle is Full!", "danger"));
   };
 
   const removePassenger = () => {
-<<<<<<< HEAD
-    if (onTrip && count > 0) setCount(count - 1);
-=======
     if (onTrip && !markedFull && count > 0) setCount(count - 1);
->>>>>>> origin/mapbox
   };
 
   const start = async () => {
@@ -573,11 +478,7 @@ function Trip({ details }: { details: AssignmentDetails }) {
       return;
     }
     clearOutbox();
-<<<<<<< HEAD
-    savedState.current = "in-transit:0";
-=======
     savedState.current = "in-transit:0:false";
->>>>>>> origin/mapbox
     lastMovedAt.current = Date.now();
     shareFailing.current = false;
     tripActive.current = true;
@@ -668,9 +569,6 @@ function Trip({ details }: { details: AssignmentDetails }) {
   };
 
   const toggleFull = () => {
-<<<<<<< HEAD
-    if (count >= capacity) return;
-=======
     if (count >= capacity) {
       setMarkedFull(true);
       setToast(
@@ -681,7 +579,6 @@ function Trip({ details }: { details: AssignmentDetails }) {
       );
       return;
     }
->>>>>>> origin/mapbox
     if (markedFull) {
       setMarkedFull(false);
       setToast(nextToast("Accepting Passengers Again", "info"));
@@ -707,10 +604,7 @@ function Trip({ details }: { details: AssignmentDetails }) {
     () => ({
       routeId: route?.id ?? null,
       route: route ? routePath : null,
-<<<<<<< HEAD
-=======
       alternativeRoutes: alternativePaths,
->>>>>>> origin/mapbox
       vehicles: coords
         ? [
             {
@@ -718,11 +612,8 @@ function Trip({ details }: { details: AssignmentDetails }) {
               lat: coords.latitude,
               lng: coords.longitude,
               type: vehicle.vehicle_type,
-<<<<<<< HEAD
-=======
               occupancy,
               isFull: full,
->>>>>>> origin/mapbox
             },
           ]
         : [],
@@ -751,21 +642,15 @@ function Trip({ details }: { details: AssignmentDetails }) {
       accepted,
       route,
       routePath,
-<<<<<<< HEAD
-=======
       alternativePaths,
->>>>>>> origin/mapbox
       coords,
       fix,
       following,
       recenters,
       zoomAt,
       vehicle,
-<<<<<<< HEAD
-=======
       occupancy,
       full,
->>>>>>> origin/mapbox
       headerHeight,
       panelHeight,
     ],
@@ -889,26 +774,6 @@ function Trip({ details }: { details: AssignmentDetails }) {
             style={[
               styles.sharing,
               onTrip && styles.sharingOn,
-<<<<<<< HEAD
-              onTrip && syncing && styles.sharingPending,
-            ]}
-          >
-            <View
-              style={[
-                styles.sharingDot,
-                onTrip && styles.sharingDotOn,
-                onTrip && syncing && styles.sharingDotPending,
-              ]}
-            />
-            <Text style={styles.sharingText}>
-              {!onTrip
-                ? "Location Not Shared"
-                : !online
-                  ? "Offline · Will Sync"
-                  : pendingSync > 0
-                    ? "Syncing..."
-                    : "Location Shared"}
-=======
             ]}
           >
             <Animated.View
@@ -920,7 +785,6 @@ function Trip({ details }: { details: AssignmentDetails }) {
             />
             <Text style={styles.sharingText}>
               {onTrip ? "Location Shared" : "Location Not Shared"}
->>>>>>> origin/mapbox
             </Text>
           </View>
         </View>
@@ -955,11 +819,7 @@ function Trip({ details }: { details: AssignmentDetails }) {
           <View style={styles.counter}>
             <CounterButton
               label="Remove a passenger"
-<<<<<<< HEAD
-              disabled={!onTrip || count === 0}
-=======
               disabled={!onTrip || markedFull || count === 0}
->>>>>>> origin/mapbox
               onPress={removePassenger}
             >
               <Minus color="#ffffff" size={30} strokeWidth={3} />
@@ -967,11 +827,7 @@ function Trip({ details }: { details: AssignmentDetails }) {
             <Text style={styles.count}>{count}</Text>
             <CounterButton
               label="Add a passenger"
-<<<<<<< HEAD
-              disabled={!onTrip || count >= capacity}
-=======
               disabled={!onTrip || markedFull || count >= capacity}
->>>>>>> origin/mapbox
               onPress={addPassenger}
             >
               <Plus color="#ffffff" size={30} strokeWidth={3} />
@@ -1366,11 +1222,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#9ca3af",
   },
   sharingDotOn: { backgroundColor: "#4ade80" },
-<<<<<<< HEAD
-  sharingPending: { backgroundColor: "rgba(251, 191, 36, 0.25)" },
-  sharingDotPending: { backgroundColor: "#fbbf24" },
-=======
->>>>>>> origin/mapbox
   sharingText: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 8 },
   infoRow: {
     flexDirection: "row",

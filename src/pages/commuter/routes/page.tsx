@@ -1,17 +1,9 @@
 import { useLocalSearchParams } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-<<<<<<< HEAD
-import Bus from "lucide-react-native/icons/bus";
-import ChevronsDown from "lucide-react-native/icons/chevrons-down";
-import ChevronsUp from "lucide-react-native/icons/chevrons-up";
-import MapPin from "lucide-react-native/icons/map-pin";
-import PersonStanding from "lucide-react-native/icons/person-standing";
-=======
 import ChevronsDown from "lucide-react-native/icons/chevrons-down";
 import ChevronsUp from "lucide-react-native/icons/chevrons-up";
 import MapPin from "lucide-react-native/icons/map-pin";
 import MapPinned from "lucide-react-native/icons/map-pinned";
->>>>>>> origin/mapbox
 import Search from "lucide-react-native/icons/search";
 import X from "lucide-react-native/icons/x";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
@@ -96,10 +88,7 @@ export default function RoutesScreen() {
     routeId?: string;
     destLat?: string;
     destLng?: string;
-<<<<<<< HEAD
-=======
     destName?: string;
->>>>>>> origin/mapbox
   }>();
   const transitRoutes = useTransitRoutes();
   const initialRoute = findRoute(params.routeId);
@@ -108,11 +97,8 @@ export default function RoutesScreen() {
     const lng = Number.parseFloat(params.destLng ?? "");
     return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
   }, [params.destLat, params.destLng]);
-<<<<<<< HEAD
-=======
   const destinationName =
     typeof params.destName === "string" ? params.destName : "";
->>>>>>> origin/mapbox
 
   const [headerHeight, setHeaderHeight] = useState(140);
   const [panelHeight, setPanelHeight] = useState(insets.bottom + 84);
@@ -124,10 +110,6 @@ export default function RoutesScreen() {
   const [query, setQuery] = useState(initialRoute?.name ?? "");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [panelExpanded, setPanelExpanded] = useState(false);
-<<<<<<< HEAD
-  const [showTerminals, setShowTerminals] = useState(true);
-=======
->>>>>>> origin/mapbox
   const [showWaitingAreas, setShowWaitingAreas] = useState(true);
 
   const route = findRoute(routeId);
@@ -211,20 +193,6 @@ export default function RoutesScreen() {
       routeId,
       route: path,
       alternativeRoutes: alternativePaths,
-<<<<<<< HEAD
-      waitingAreas: routeWaitingAreas
-        .filter(({ type }) =>
-          type === "terminal" ? showTerminals : showWaitingAreas,
-        )
-        .map(({ id, name, lat, lng, vicinity, type }) => ({
-          id,
-          name,
-          lat,
-          lng,
-          tag: findVicinity(route?.vicinity ?? [], vicinity),
-          kind: type,
-        })),
-=======
       waitingAreas: showWaitingAreas
         ? routeWaitingAreas.map(
             ({ id, name, lat, lng, vicinity, type }) => ({
@@ -238,25 +206,18 @@ export default function RoutesScreen() {
           )
         : [],
       showStops: showWaitingAreas,
->>>>>>> origin/mapbox
       vehicles: vehiclesOnRoute.map((vehicle) => ({
         id: vehicle.id,
         lat: vehicle.lat,
         lng: vehicle.lng,
         type: vehicle.type,
         label: vehicle.routeName,
-<<<<<<< HEAD
-        muted: !!routeId && vehicle.routeId !== routeId,
-      })),
-      pickups: destination ? [{ id: "destination", ...destination }] : [],
-=======
         occupancy: vehicle.occupancy,
         isFull: vehicle.isFull,
       })),
       pickups: destination
         ? [{ id: "destination", ...destination, label: destinationName }]
         : [],
->>>>>>> origin/mapbox
       focus: null,
       padTop: headerHeight + 30,
       padBottom: panelHeight + 70,
@@ -264,20 +225,13 @@ export default function RoutesScreen() {
     [
       vehiclesOnRoute,
       destination,
-<<<<<<< HEAD
-=======
       destinationName,
->>>>>>> origin/mapbox
       routeId,
       path,
       alternativePaths,
       route,
       routeWaitingAreas,
       showWaitingAreas,
-<<<<<<< HEAD
-      showTerminals,
-=======
->>>>>>> origin/mapbox
       headerHeight,
       panelHeight,
     ],
@@ -330,29 +284,12 @@ export default function RoutesScreen() {
       {route && (
         <View style={[styles.layerFilters, { top: headerHeight + 12 }]}>
           <FilterChip
-<<<<<<< HEAD
-            label="Terminals"
-            text="Terminals"
-            active={showTerminals}
-            onPress={() => setShowTerminals((current) => !current)}
-          >
-            <Bus color="#000000" size={20} strokeWidth={2} />
-          </FilterChip>
-          <FilterChip
-            label="Waiting areas"
-            text="Waiting Areas"
-            active={showWaitingAreas}
-            onPress={() => setShowWaitingAreas((current) => !current)}
-          >
-            <PersonStanding color="#000000" size={20} strokeWidth={2} />
-=======
             label="Waiting areas"
             text="Waiting areas"
             active={showWaitingAreas}
             onPress={() => setShowWaitingAreas((current) => !current)}
           >
             <MapPinned color="#000000" size={20} strokeWidth={2} />
->>>>>>> origin/mapbox
           </FilterChip>
         </View>
       )}

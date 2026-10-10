@@ -225,19 +225,11 @@ export function PlaceSearchField({
 
           {!searching && !!searchError && (
             <Text style={[styles.statusText, styles.errorText]}>
-<<<<<<< HEAD
-              Google place search is unavailable.
-            </Text>
-          )}
-          {suggestions.length > 0 && (
-            <Text style={styles.attribution}>Powered by Google</Text>
-=======
               Place search is unavailable.
             </Text>
           )}
           {suggestions.length > 0 && (
             <Text style={styles.attribution}>Powered by Mapbox</Text>
->>>>>>> origin/mapbox
           )}
         </Animated.View>
       )}

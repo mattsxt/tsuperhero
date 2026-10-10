@@ -84,23 +84,11 @@ export function NotificationSync() {
   }, []);
 
   useEffect(() => {
-<<<<<<< HEAD
-=======
     let active = true;
->>>>>>> origin/mapbox
     let userId: string | null = null;
     let stopSync: (() => void) | null = null;
     let usesPush = false;
     let stopPreparing: (() => void) | null = null;
-<<<<<<< HEAD
-
-    const start = async (nextUserId: string) => {
-      await requestDevicePermission();
-      const token = await getPushToken();
-      if (userId !== nextUserId) return;
-      usesPush = !!token && (await savePushToken(token, Platform.OS));
-      if (userId !== nextUserId) return;
-=======
     let startTimer: ReturnType<typeof setTimeout> | null = null;
 
     const start = async (nextUserId: string) => {
@@ -111,7 +99,6 @@ export function NotificationSync() {
       if (!active || userId !== nextUserId) return;
       usesPush = !!token && (await savePushToken(token, Platform.OS));
       if (!active || userId !== nextUserId) return;
->>>>>>> origin/mapbox
       stopSync = startNotificationSync({
         userId: nextUserId,
         onReceived: (item) => {
@@ -148,11 +135,6 @@ export function NotificationSync() {
       (_event, session) => {
         const nextUserId = session?.user.id ?? null;
         if (nextUserId === userId) return;
-<<<<<<< HEAD
-        if (userId) stop();
-        userId = nextUserId;
-        if (nextUserId) setTimeout(() => start(nextUserId), 0);
-=======
         if (startTimer) clearTimeout(startTimer);
         startTimer = null;
         if (userId) stop();
@@ -163,16 +145,12 @@ export function NotificationSync() {
             void start(nextUserId);
           }, 0);
         }
->>>>>>> origin/mapbox
       },
     );
 
     return () => {
-<<<<<<< HEAD
-=======
       active = false;
       if (startTimer) clearTimeout(startTimer);
->>>>>>> origin/mapbox
       data.subscription.unsubscribe();
       stopSync?.();
       stopPreparing?.();
