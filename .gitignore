@@ -1,32 +1,17 @@
-<<<<<<< HEAD
-# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
-
-# dependencies
-=======
->>>>>>> origin/mapbox
 node_modules/
 
+.agents
+.claude
 .idea
 .codex
 .env.example
 AGENTS.md
 CLAUDE.md
-
-<<<<<<< HEAD
-# Expo
-=======
->>>>>>> origin/mapbox
+expo-env.d.ts
+skills-lock.json
 .expo/
 .vscode/
-.claude
-dist/
-web-build/
-expo-env.d.ts
 
-<<<<<<< HEAD
-# Native
-=======
->>>>>>> origin/mapbox
 .kotlin/
 *.orig.*
 *.jks
@@ -35,51 +20,25 @@ expo-env.d.ts
 *.key
 *.mobileprovision
 
-<<<<<<< HEAD
-# Metro
 .metro-health-check*
 
-# debug
-=======
-.metro-health-check*
-
->>>>>>> origin/mapbox
 npm-debug.*
 yarn-debug.*
 yarn-error.*
 
-<<<<<<< HEAD
-# macOS
-.DS_Store
-*.pem
-
-# local env files
-.env*.local
-
-# typescript
-=======
 .DS_Store
 *.pem
 
 .env*.local
 
->>>>>>> origin/mapbox
 *.tsbuildinfo
 
 example
 
-<<<<<<< HEAD
-# generated native folders
-/ios
-=======
->>>>>>> origin/mapbox
 /android
 
 .env
 
-<<<<<<< HEAD
-supabase/
-=======
 supabase/
 .mcp.json
->>>>>>> origin/mapbox
+dist/
