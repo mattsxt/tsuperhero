@@ -4,20 +4,13 @@ import type { TransitRoute } from "@/api/v1/transit-routes/controllers";
 import { mapStyleUrl } from "@/constants/mapbox";
 
 const packName = "service-area-v1";
-// About 2 km of map around the outermost route points.
 const marginDegrees = 0.02;
-// Skip the download if the routes span more than about 55 km, so a stray
-// waypoint can't trigger a huge pack.
 const maxSpanDegrees = 0.5;
-// Vector tiles stay sharp when zoomed past the stored level, so stopping at
-// 15 keeps the pack small.
 const minZoom = 10;
 const maxZoom = 15;
 
 let saving: Promise<void> | null = null;
 
-// Downloads the map tiles around the transit routes once, so the base map
-// still shows in mobile data dead zones. An unfinished download resumes.
 export function saveOfflineMap(routes: TransitRoute[]): Promise<void> {
   saving ??= save(routes).finally(() => {
     saving = null;

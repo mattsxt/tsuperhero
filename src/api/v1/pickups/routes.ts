@@ -21,7 +21,7 @@ export const pickupRoutes = {
   findActiveRequest: (commuterId: string) =>
     requestTable()
       .select(
-        "request_id, request_status, device_latitude, device_longitude, pickup(pickup_id, pickup_destination, number_of_passengers)",
+        "request_id, request_status, device_latitude, device_longitude, pickup(pickup_id, pickup_destination, number_of_passengers, requested_vehicle_type)",
       )
       .eq("commuter_id", commuterId)
       .eq("request_type", "Pickup")
@@ -41,12 +41,18 @@ export const pickupRoutes = {
       .select("request_id, request_status")
       .single(),
 
-  createPickup: (requestId: string, destination: string, passengers: number) =>
+  createPickup: (
+    requestId: string,
+    destination: string,
+    passengers: number,
+    requestedVehicleType: "Jeepney" | "Tricycle",
+  ) =>
     pickupTable().insert({
       request_id: requestId,
       pickup_destination: destination,
       pickup_date: new Date().toISOString(),
       number_of_passengers: passengers,
+      requested_vehicle_type: requestedVehicleType,
     }),
 
   deletePickup: (requestId: string) =>

@@ -84,17 +84,21 @@ export function NotificationSync() {
   }, []);
 
   useEffect(() => {
+    let active = true;
     let userId: string | null = null;
     let stopSync: (() => void) | null = null;
     let usesPush = false;
     let stopPreparing: (() => void) | null = null;
+    let startTimer: ReturnType<typeof setTimeout> | null = null;
 
     const start = async (nextUserId: string) => {
+      if (!active || userId !== nextUserId) return;
       await requestDevicePermission();
+      if (!active || userId !== nextUserId) return;
       const token = await getPushToken();
-      if (userId !== nextUserId) return;
+      if (!active || userId !== nextUserId) return;
       usesPush = !!token && (await savePushToken(token, Platform.OS));
-      if (userId !== nextUserId) return;
+      if (!active || userId !== nextUserId) return;
       stopSync = startNotificationSync({
         userId: nextUserId,
         onReceived: (item) => {
@@ -131,13 +135,22 @@ export function NotificationSync() {
       (_event, session) => {
         const nextUserId = session?.user.id ?? null;
         if (nextUserId === userId) return;
+        if (startTimer) clearTimeout(startTimer);
+        startTimer = null;
         if (userId) stop();
         userId = nextUserId;
-        if (nextUserId) setTimeout(() => start(nextUserId), 0);
+        if (nextUserId) {
+          startTimer = setTimeout(() => {
+            startTimer = null;
+            void start(nextUserId);
+          }, 0);
+        }
       },
     );
 
     return () => {
+      active = false;
+      if (startTimer) clearTimeout(startTimer);
       data.subscription.unsubscribe();
       stopSync?.();
       stopPreparing?.();

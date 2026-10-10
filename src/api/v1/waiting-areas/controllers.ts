@@ -2,9 +2,13 @@ import { unwrapCached } from "@/api/v1/cache";
 import { attempt, type Result } from "@/api/v1/result";
 import { waitingAreaRoutes } from "@/api/v1/waiting-areas/routes";
 import type { WaitingAreaRow } from "@/api/v1/waiting-areas/types";
+import {
+  parseWaitingAreaType,
+  type WaitingAreaType,
+} from "@/constants/waiting-area";
 import { getDistanceMeters, isNearPath, type Coordinates } from "@/utils/geo";
 
-export type WaitingAreaType = "stop" | "terminal";
+export type { WaitingAreaType } from "@/constants/waiting-area";
 
 export type WaitingArea = {
   id: string;
@@ -16,15 +20,7 @@ export type WaitingArea = {
   vicinity: string | null;
 };
 
-type NearbyWaitingArea = WaitingArea & {
-  distanceMeters: number;
-  walkMinutes: number;
-};
-
-const maxWalkMeters = 1000;
 const onRouteMeters = 40;
-
-const walkMetersPerMinute = 80;
 
 let knownWaitingAreas: WaitingArea[] = [];
 export const getKnownWaitingAreas = () => knownWaitingAreas;
@@ -37,8 +33,7 @@ export async function loadWaitingAreas(): Promise<Result<WaitingArea[]>> {
     return rows.map((row) => ({
       id: row.area_id,
       name: row.area_name,
-      type:
-        row.area_type?.trim().toLowerCase() === "terminal" ? "terminal" : "stop",
+      type: parseWaitingAreaType(row.area_type),
       lat: row.area_latitude,
       lng: row.area_longitude,
       routeId: row.route_id ?? null,
@@ -64,34 +59,25 @@ export function findWaitingAreasOnRoute(
   );
 }
 
-function findNearestWaitingAreas(
-  origin: Coordinates,
-  areas: WaitingArea[],
-  routeId?: string | null,
-): NearbyWaitingArea[] {
-  return areas
-    .filter((area) => !routeId || area.routeId === routeId)
-    .map((area) => {
-      const distanceMeters = getDistanceMeters(origin, area);
-      return {
-        ...area,
-        distanceMeters,
-        walkMinutes: Math.max(
-          1,
-          Math.round(distanceMeters / walkMetersPerMinute),
-        ),
-      };
-    })
-    .sort((a, b) => a.distanceMeters - b.distanceMeters);
-}
+export type WaitingAreaRecommendation = WaitingArea & {
+  distanceMeters: number;
+};
 
-export function recommendWaitingArea(
+export function findNearestWaitingArea(
   origin: Coordinates,
   areas: WaitingArea[],
-  routeId?: string | null,
-) {
-  const [nearest] = findNearestWaitingAreas(origin, areas, routeId);
-  return nearest && nearest.distanceMeters <= maxWalkMeters ? nearest : null;
+  routeId: string,
+  paths: [number, number][][],
+  routeVicinity: string[] = [],
+): WaitingAreaRecommendation | null {
+  return (
+    findWaitingAreasOnRoute(areas, routeId, paths, routeVicinity)
+      .map((area) => ({
+        ...area,
+        distanceMeters: getDistanceMeters(origin, area),
+      }))
+      .sort((a, b) => a.distanceMeters - b.distanceMeters)[0] ?? null
+  );
 }
 
 export function formatDistance(meters: number) {

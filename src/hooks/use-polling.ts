@@ -19,10 +19,21 @@ export function usePolling(
   useEffect(() => {
     if (!active) return;
     let timer: ReturnType<typeof setInterval> | null = null;
+    let running = false;
+    const run = () => {
+      if (running) return;
+      running = true;
+      void Promise.resolve()
+        .then(() => taskRef.current())
+        .catch(() => {})
+        .finally(() => {
+          running = false;
+        });
+    };
     const start = () => {
       if (timer) return;
-      taskRef.current();
-      timer = setInterval(() => taskRef.current(), intervalMs);
+      run();
+      timer = setInterval(run, intervalMs);
     };
     const stop = () => {
       if (timer) clearInterval(timer);

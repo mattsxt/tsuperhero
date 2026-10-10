@@ -41,6 +41,7 @@ import {
   type TripStatus,
 } from "@/api/v1/operator/controllers";
 import {
+  loadAlternativeGeometry,
   getOccupancyLevel,
   loadRouteGeometry,
   type LatLng,
@@ -171,6 +172,7 @@ function Trip({ details }: { details: AssignmentDetails }) {
   const [headerHeight, setHeaderHeight] = useState(140);
   const [panelHeight, setPanelHeight] = useState(240);
   const [routePath, setRoutePath] = useState<LatLng[] | null>(null);
+  const [alternativePaths, setAlternativePaths] = useState<LatLng[][]>([]);
   const [status, setStatus] = useState<TripStatus>("idle");
   const [starting, setStarting] = useState(false);
   const [backgroundSharing, setBackgroundSharing] = useState(false);
@@ -209,8 +211,13 @@ function Trip({ details }: { details: AssignmentDetails }) {
   useEffect(() => {
     if (!route) return;
     let active = true;
-    loadRouteGeometry(route).then((geometry) => {
-      if (active) setRoutePath(geometry);
+    Promise.all([
+      loadRouteGeometry(route),
+      loadAlternativeGeometry(route),
+    ]).then(([geometry, alternatives]) => {
+      if (!active) return;
+      setRoutePath(geometry);
+      setAlternativePaths(alternatives);
     });
     return () => {
       active = false;
@@ -269,14 +276,20 @@ function Trip({ details }: { details: AssignmentDetails }) {
 
   useEffect(() => {
     if (!onTrip || backgroundSharing) return;
+    let sending = false;
     const ping = async () => {
-      if (!latestCoords.current) return;
-      const result = await sendLocation(latestCoords.current);
-      if (result.status !== "failed") {
-        shareFailing.current = false;
-      } else if (tripActive.current && !shareFailing.current) {
-        shareFailing.current = true;
-        setToast(nextToast("Couldn't share your location.", "danger"));
+      if (sending || !latestCoords.current) return;
+      sending = true;
+      try {
+        const result = await sendLocation(latestCoords.current);
+        if (result.status !== "failed") {
+          shareFailing.current = false;
+        } else if (tripActive.current && !shareFailing.current) {
+          shareFailing.current = true;
+          setToast(nextToast("Couldn't share your location.", "danger"));
+        }
+      } finally {
+        sending = false;
       }
     };
     ping();
@@ -286,32 +299,39 @@ function Trip({ details }: { details: AssignmentDetails }) {
 
   useEffect(() => {
     if (!onTrip) return;
+    let loading = false;
     const poll = async () => {
-      const result = await loadNearbyPickups();
-      if (!result.ok || !tripActive.current) return;
-      const nearby = new Set(result.data.map((pickup) => pickup.id));
-      seenPickups.current.forEach((id) => {
-        if (!nearby.has(id)) passedPickups.current.add(id);
-      });
-      const visible = result.data.filter(
-        (pickup) => !passedPickups.current.has(pickup.id),
-      );
-      const fresh = visible.filter(
-        (pickup) => !seenPickups.current.has(pickup.id),
-      );
-      visible.forEach((pickup) => seenPickups.current.add(pickup.id));
-      setPickups(visible);
-      if (fresh.length > 0) {
-        const passengers = fresh.reduce(
-          (total, pickup) => total + pickup.passengers,
-          0,
+      if (loading) return;
+      loading = true;
+      try {
+        const result = await loadNearbyPickups();
+        if (!result.ok || !tripActive.current) return;
+        const nearby = new Set(result.data.map((pickup) => pickup.id));
+        seenPickups.current.forEach((id) => {
+          if (!nearby.has(id)) passedPickups.current.add(id);
+        });
+        const visible = result.data.filter(
+          (pickup) => !passedPickups.current.has(pickup.id),
         );
-        setToast(
-          nextToast(
-            `Pickup request nearby: ${passengers} passenger${passengers === 1 ? "" : "s"}`,
-            "success",
-          ),
+        const fresh = visible.filter(
+          (pickup) => !seenPickups.current.has(pickup.id),
         );
+        visible.forEach((pickup) => seenPickups.current.add(pickup.id));
+        setPickups(visible);
+        if (fresh.length > 0) {
+          const passengers = fresh.reduce(
+            (total, pickup) => total + pickup.passengers,
+            0,
+          );
+          setToast(
+            nextToast(
+              `Pickup request nearby: ${passengers} passenger${passengers === 1 ? "" : "s"}`,
+              "success",
+            ),
+          );
+        }
+      } finally {
+        loading = false;
       }
     };
     const timer = setInterval(poll, pickupPollMs);
@@ -357,16 +377,16 @@ function Trip({ details }: { details: AssignmentDetails }) {
 
   useEffect(() => {
     if (starting || finalizing) return;
-    const key = `${status}:${count}`;
+    const key = `${status}:${count}:${markedFull}`;
     if (key === savedState.current) return;
     savedState.current = key;
-    queueTripState(status, count).then((result) => {
+    queueTripState(status, count, markedFull).then((result) => {
       if (result.status === "failed")
         setToast(
           nextToast(`Couldn't update your trip: ${result.error}`, "danger"),
         );
     });
-  }, [starting, finalizing, status, count]);
+  }, [starting, finalizing, status, count, markedFull]);
 
   useEffect(
     () => () => {
@@ -405,14 +425,14 @@ function Trip({ details }: { details: AssignmentDetails }) {
   }, [onTrip]);
 
   const addPassenger = () => {
-    if (!onTrip || count >= capacity) return;
+    if (!onTrip || markedFull || count >= capacity) return;
     const next = count + 1;
     setCount(next);
     if (next >= capacity) setToast(nextToast("Vehicle is Full!", "danger"));
   };
 
   const removePassenger = () => {
-    if (onTrip && count > 0) setCount(count - 1);
+    if (onTrip && !markedFull && count > 0) setCount(count - 1);
   };
 
   const start = async () => {
@@ -431,7 +451,7 @@ function Trip({ details }: { details: AssignmentDetails }) {
       return;
     }
     clearOutbox();
-    savedState.current = "in-transit:0";
+    savedState.current = "in-transit:0:false";
     lastMovedAt.current = Date.now();
     shareFailing.current = false;
     tripActive.current = true;
@@ -522,7 +542,16 @@ function Trip({ details }: { details: AssignmentDetails }) {
   };
 
   const toggleFull = () => {
-    if (count >= capacity) return;
+    if (count >= capacity) {
+      setMarkedFull(true);
+      setToast(
+        nextToast(
+          "The vehicle is already full. You can't mark it as not full.",
+          "danger",
+        ),
+      );
+      return;
+    }
     if (markedFull) {
       setMarkedFull(false);
       setToast(nextToast("Accepting Passengers Again", "info"));
@@ -548,6 +577,7 @@ function Trip({ details }: { details: AssignmentDetails }) {
     () => ({
       routeId: route?.id ?? null,
       route: route ? routePath : null,
+      alternativeRoutes: alternativePaths,
       vehicles: coords
         ? [
             {
@@ -555,6 +585,8 @@ function Trip({ details }: { details: AssignmentDetails }) {
               lat: coords.latitude,
               lng: coords.longitude,
               type: vehicle.vehicle_type,
+              occupancy,
+              isFull: full,
             },
           ]
         : [],
@@ -583,12 +615,15 @@ function Trip({ details }: { details: AssignmentDetails }) {
       accepted,
       route,
       routePath,
+      alternativePaths,
       coords,
       fix,
       following,
       recenters,
       zoomAt,
       vehicle,
+      occupancy,
+      full,
       headerHeight,
       panelHeight,
     ],
@@ -764,7 +799,7 @@ function Trip({ details }: { details: AssignmentDetails }) {
           <View style={styles.counter}>
             <CounterButton
               label="Remove a passenger"
-              disabled={!onTrip || count === 0}
+              disabled={!onTrip || markedFull || count === 0}
               onPress={removePassenger}
             >
               <Minus color="#ffffff" size={30} strokeWidth={3} />
@@ -772,7 +807,7 @@ function Trip({ details }: { details: AssignmentDetails }) {
             <Text style={styles.count}>{count}</Text>
             <CounterButton
               label="Add a passenger"
-              disabled={!onTrip || count >= capacity}
+              disabled={!onTrip || markedFull || count >= capacity}
               onPress={addPassenger}
             >
               <Plus color="#ffffff" size={30} strokeWidth={3} />

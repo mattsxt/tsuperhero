@@ -23,10 +23,6 @@ const navGap = 12;
 
 type Tab = "home" | "notifications" | "profile";
 
-const tabOrder: Record<Tab, number> = { notifications: 0, home: 1, profile: 2 };
-
-export type TabTransition = "forward" | "back";
-
 export function BottomNav({
   active,
   homeRoute,
@@ -47,11 +43,7 @@ export function BottomNav({
 
   const goTo = (tab: Tab, route: AppRoute) => {
     if (tab === active) return;
-    const transition: TabTransition =
-      tabOrder[tab] < tabOrder[active] ? "back" : "forward";
-    router.replace({ pathname: route, params: { transition } } as Parameters<
-      typeof router.replace
-    >[0]);
+    router.replace({ pathname: route } as Parameters<typeof router.replace>[0]);
   };
 
   const tabs: {

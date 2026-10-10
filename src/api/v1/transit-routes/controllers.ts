@@ -128,19 +128,32 @@ export const nearDestinationMeters = 500;
 
 export type RouteNearPlace = { route: TransitRoute; distanceMeters: number };
 
+export function findNearestRoute(
+  point: { lat: number; lng: number },
+  routes: TransitRoute[] = selectableRoutes,
+): RouteNearPlace | null {
+  return (
+    routes
+      .map((route) => ({
+        route,
+        distanceMeters: Math.min(
+          ...[route.waypoints, ...route.alternativePaths]
+            .filter((path) => path.length > 0)
+            .map((path) => distanceToPath(point, path)),
+        ),
+      }))
+      .filter(({ distanceMeters }) => Number.isFinite(distanceMeters))
+      .sort((a, b) => a.distanceMeters - b.distanceMeters)[0] ?? null
+  );
+}
+
 export function findRoutesNear(point: {
   lat: number;
   lng: number;
 }): RouteNearPlace[] {
   return selectableRoutes
-    .map((route) => ({
-      route,
-      distanceMeters: Math.min(
-        ...[route.waypoints, ...route.alternativePaths]
-          .filter((path) => path.length > 0)
-          .map((path) => distanceToPath(point, path)),
-      ),
-    }))
+    .map((route) => findNearestRoute(point, [route]))
+    .filter((item): item is RouteNearPlace => item !== null)
     .filter(({ distanceMeters }) => distanceMeters <= nearDestinationMeters)
     .sort((a, b) => a.distanceMeters - b.distanceMeters);
 }
@@ -261,6 +274,26 @@ export async function loadEtaRoute(
   });
 }
 
+export async function loadWalkingRoute(
+  from: LatLng,
+  to: LatLng,
+): Promise<Result<EtaRoute>> {
+  return attempt(async () => {
+    const response = await transitRouteApi.walkingRoute(from, to);
+    const route = response.routes?.[0];
+    const seconds = route?.durationSeconds;
+    const coordinates = route?.geometry?.coordinates;
+    if (!route || seconds === undefined || !coordinates?.length) {
+      throw new Error(response.error?.message ?? "No walking route found.");
+    }
+    return {
+      path: coordinates.map(([lng, lat]): LatLng => [lat, lng]),
+      durationSeconds: seconds,
+      distanceMeters: route.distanceMeters ?? 0,
+    };
+  });
+}
+
 export const vehicleStatusLabels: Record<string, string> = {
   "on-trip": "In Transit",
   loading: "Loading/Unloading",
@@ -276,6 +309,7 @@ export type LiveVehicle = {
   status: string;
   maxCapacity: number;
   currentCapacity: number;
+  isFull: boolean;
   occupancy: OccupancyLevel;
   lat: number;
   lng: number;
@@ -295,7 +329,10 @@ export function loadLiveVehicles(): Promise<Result<LiveVehicle[]>> {
       status: vehicleStatusLabels[row.vehicle_status] ?? row.vehicle_status,
       maxCapacity: row.max_capacity,
       currentCapacity: row.current_capacity,
-      occupancy: getOccupancyLevel(row.current_capacity, row.max_capacity),
+      isFull: row.is_full,
+      occupancy: row.is_full
+        ? "Full"
+        : getOccupancyLevel(row.current_capacity, row.max_capacity),
       lat: row.latitude,
       lng: row.longitude,
       routeId: row.route_id,

@@ -64,7 +64,10 @@ async function send(
 ): Promise<SendOutcome> {
   const request =
     slot === "tripState"
-      ? operatorRoutes.setMyTripState(params as TripStateParams)
+      ? operatorRoutes.setMyTripState({
+          ...(params as TripStateParams),
+          p_is_full: (params as TripStateParams).p_is_full ?? false,
+        })
       : operatorRoutes.shareMyLocation(params as LocationParams);
   let error: unknown = null;
   try {
@@ -116,10 +119,12 @@ export function flushOutbox(): Promise<void> {
 export function sendTripState(
   status: TripStateParams["p_status"],
   passengers: number,
+  isFull = false,
 ) {
   return deliver("tripState", {
     p_status: status,
     p_current_capacity: passengers,
+    p_is_full: isFull,
   });
 }
 

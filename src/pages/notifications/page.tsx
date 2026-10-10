@@ -32,9 +32,12 @@ import {
   type AppNotification,
 } from "@/api/v1/notifications/controllers";
 import { dismissFromDevice } from "@/api/v1/notifications/device";
-import { loadHomeRoute } from "@/api/v1/profile/controllers";
+import {
+  loadHomeRoute,
+  loadProfileSummary,
+  peekSignedInHomeRoute,
+} from "@/api/v1/profile/controllers";
 import { BottomNav, bottomNavHeight } from "@/components/bottom-nav";
-import { LoadingLogo } from "@/components/LoadingLogo";
 import {
   ExpandedOnly,
   headerLayoutTransition,
@@ -93,12 +96,15 @@ export default function NotificationsScreen() {
   const chrome = useScrollChrome();
   const { collapsed } = chrome;
   const blurTarget = useRef<View | null>(null);
-  const [homeRoute, setHomeRoute] = useState<AppRoute | null>(null);
+  const [homeRoute, setHomeRoute] = useState<AppRoute | null>(
+    peekSignedInHomeRoute,
+  );
   const [refreshing, setRefreshing] = useState(false);
   const { notifications, unreadCount } = useNotifications();
 
   useEffect(() => {
     let active = true;
+    void loadProfileSummary();
 
     const load = async () => {
       const result = await loadHomeRoute();
@@ -134,14 +140,6 @@ export default function NotificationsScreen() {
     const result = await markAllNotificationsRead();
     if (result.ok) dismissFromDevice(result.data);
   };
-
-  if (!homeRoute) {
-    return (
-      <View style={styles.loadingScreen}>
-        <LoadingLogo color={brandBlue} />
-      </View>
-    );
-  }
 
   return (
     <View style={styles.screen}>
@@ -264,12 +262,14 @@ export default function NotificationsScreen() {
         </StickyHeader>
       </BlurTargetView>
 
-      <BottomNav
-        active="notifications"
-        homeRoute={homeRoute}
-        blurTarget={blurTarget}
-        hidden={chrome.navHidden}
-      />
+      {homeRoute && (
+        <BottomNav
+          active="notifications"
+          homeRoute={homeRoute}
+          blurTarget={blurTarget}
+          hidden={chrome.navHidden}
+        />
+      )}
     </View>
   );
 }
@@ -316,12 +316,6 @@ function NotificationRow({
 }
 
 const styles = StyleSheet.create({
-  loadingScreen: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#ffffff",
-  },
   screen: { flex: 1, backgroundColor: "#ffffff" },
   blurTarget: { flex: 1 },
   pressed: { opacity: 0.7 },

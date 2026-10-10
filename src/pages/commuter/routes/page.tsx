@@ -1,10 +1,9 @@
 import { useLocalSearchParams } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import Bus from "lucide-react-native/icons/bus";
 import ChevronsDown from "lucide-react-native/icons/chevrons-down";
 import ChevronsUp from "lucide-react-native/icons/chevrons-up";
 import MapPin from "lucide-react-native/icons/map-pin";
-import PersonStanding from "lucide-react-native/icons/person-standing";
+import MapPinned from "lucide-react-native/icons/map-pinned";
 import Search from "lucide-react-native/icons/search";
 import X from "lucide-react-native/icons/x";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
@@ -108,7 +107,6 @@ export default function RoutesScreen() {
   const [query, setQuery] = useState(initialRoute?.name ?? "");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [panelExpanded, setPanelExpanded] = useState(false);
-  const [showTerminals, setShowTerminals] = useState(true);
   const [showWaitingAreas, setShowWaitingAreas] = useState(true);
 
   const route = findRoute(routeId);
@@ -192,25 +190,27 @@ export default function RoutesScreen() {
       routeId,
       route: path,
       alternativeRoutes: alternativePaths,
-      waitingAreas: routeWaitingAreas
-        .filter(({ type }) =>
-          type === "terminal" ? showTerminals : showWaitingAreas,
-        )
-        .map(({ id, name, lat, lng, vicinity, type }) => ({
-          id,
-          name,
-          lat,
-          lng,
-          tag: findVicinity(route?.vicinity ?? [], vicinity),
-          kind: type,
-        })),
+      waitingAreas: showWaitingAreas
+        ? routeWaitingAreas.map(
+            ({ id, name, lat, lng, vicinity, type }) => ({
+              id,
+              name,
+              lat,
+              lng,
+              tag: findVicinity(route?.vicinity ?? [], vicinity),
+              kind: type,
+            }),
+          )
+        : [],
+      showStops: showWaitingAreas,
       vehicles: vehiclesOnRoute.map((vehicle) => ({
         id: vehicle.id,
         lat: vehicle.lat,
         lng: vehicle.lng,
         type: vehicle.type,
         label: vehicle.routeName,
-        muted: !!routeId && vehicle.routeId !== routeId,
+        occupancy: vehicle.occupancy,
+        isFull: vehicle.isFull,
       })),
       pickups: destination ? [{ id: "destination", ...destination }] : [],
       focus: null,
@@ -226,7 +226,6 @@ export default function RoutesScreen() {
       route,
       routeWaitingAreas,
       showWaitingAreas,
-      showTerminals,
       headerHeight,
       panelHeight,
     ],
@@ -279,20 +278,12 @@ export default function RoutesScreen() {
       {route && (
         <View style={[styles.layerFilters, { top: headerHeight + 12 }]}>
           <FilterChip
-            label="Terminals"
-            text="Terminals"
-            active={showTerminals}
-            onPress={() => setShowTerminals((current) => !current)}
-          >
-            <Bus color="#000000" size={20} strokeWidth={2} />
-          </FilterChip>
-          <FilterChip
             label="Waiting areas"
-            text="Waiting Areas"
+            text="Waiting areas"
             active={showWaitingAreas}
             onPress={() => setShowWaitingAreas((current) => !current)}
           >
-            <PersonStanding color="#000000" size={20} strokeWidth={2} />
+            <MapPinned color="#000000" size={20} strokeWidth={2} />
           </FilterChip>
         </View>
       )}

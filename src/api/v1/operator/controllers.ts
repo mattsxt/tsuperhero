@@ -167,19 +167,25 @@ const vehicleStatuses: Record<TripStatus, VehicleStatus> = {
 export function saveTripState(
   status: TripStatus,
   passengers: number,
+  isFull = false,
 ): Promise<Result<unknown>> {
   return attempt(() =>
     unwrap(
       operatorRoutes.setMyTripState({
         p_status: vehicleStatuses[status],
         p_current_capacity: passengers,
+        p_is_full: isFull,
       }),
     ),
   );
 }
 
-export function queueTripState(status: TripStatus, passengers: number) {
-  return sendTripState(vehicleStatuses[status], passengers);
+export function queueTripState(
+  status: TripStatus,
+  passengers: number,
+  isFull = false,
+) {
+  return sendTripState(vehicleStatuses[status], passengers, isFull);
 }
 
 const metersPerKm = 1_000;

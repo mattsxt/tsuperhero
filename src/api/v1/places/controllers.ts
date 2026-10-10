@@ -22,7 +22,6 @@ export type PlaceSuggestion = {
 
 export const minPlaceQueryLength = 2;
 
-// Mapbox groups suggest and retrieve calls by a UUID v4 session token.
 export function createPlacesSession() {
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (char) => {
     const random = Math.floor(Math.random() * 16);

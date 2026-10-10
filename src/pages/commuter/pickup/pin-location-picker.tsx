@@ -1,6 +1,5 @@
 import ArrowLeft from "lucide-react-native/icons/arrow-left";
-import PersonStanding from "lucide-react-native/icons/person-standing";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
@@ -10,11 +9,17 @@ import {
   getLastKnownPoint,
   type Place,
 } from "@/api/v1/places/controllers";
+import type { WaitingArea } from "@/api/v1/waiting-areas/controllers";
 import {
-  formatDistance,
-  recommendWaitingArea,
-  type WaitingArea,
+  findNearestWaitingArea,
+  type WaitingAreaRecommendation,
 } from "@/api/v1/waiting-areas/controllers";
+import {
+  findNearestRoute,
+  loadWalkingRoute,
+  type TransitRoute,
+} from "@/api/v1/transit-routes/controllers";
+import type { PickupVehicle } from "@/api/v1/pickups/controllers";
 import { LoadingLogo } from "@/components/LoadingLogo";
 import { moduleColors } from "@/components/module-ui";
 import {
@@ -22,8 +27,9 @@ import {
   type MapCenter,
   type TransitMapState,
 } from "@/components/transit-map";
+import { waitingAreaPinColors } from "@/constants/waiting-area";
 
-const { brandBlue, headerBlue, mutedText, softBlue, text } = moduleColors;
+const { brandBlue, headerBlue, softBlue } = moduleColors;
 const pinRed = "#c81e1e";
 const pinSize = 32;
 const pickZoom = 17;
@@ -31,12 +37,16 @@ const defaultCenter: MapCenter = { lat: 13.6218, lng: 123.1948 };
 
 export function PinLocationPicker({
   initial,
-  stops,
+  waitingAreas,
+  routes,
+  vehicle,
   onPick,
   onClose,
 }: {
   initial: MapCenter | null;
-  stops: WaitingArea[];
+  waitingAreas: WaitingArea[];
+  routes: TransitRoute[];
+  vehicle: PickupVehicle;
   onPick: (place: Place) => void;
   onClose: () => void;
 }) {
@@ -44,50 +54,115 @@ export function PinLocationPicker({
   const [start, setStart] = useState<MapCenter | null>(initial);
   const [center, setCenter] = useState<MapCenter | null>(initial);
   const [saving, setSaving] = useState(false);
+  const [walkingPath, setWalkingPath] = useState<[number, number][]>([]);
+  const isDragging = useRef(false);
 
   useEffect(() => {
     if (initial) return;
     let active = true;
     getLastKnownPoint().then((point) => {
       if (!active) return;
-      setStart(point ?? defaultCenter);
+      const location = point ?? defaultCenter;
+      setStart(location);
+      setCenter(location);
     });
     return () => {
       active = false;
     };
   }, [initial]);
 
-  const nearest = useMemo(
-    () => (center ? recommendWaitingArea(center, stops) : null),
-    [center, stops],
-  );
+  const pickupCenter = useMemo(() => center ?? start, [center, start]);
+  const recommendedArea = useMemo<WaitingAreaRecommendation | null>(() => {
+    if (vehicle !== "jeep" || !pickupCenter) return null;
+    const nearestRoute = findNearestRoute(pickupCenter, routes);
+    if (!nearestRoute) return null;
+    return findNearestWaitingArea(
+      pickupCenter,
+      waitingAreas,
+      nearestRoute.route.id,
+      [nearestRoute.route.waypoints, ...nearestRoute.route.alternativePaths].filter(
+        (path) => path.length > 0,
+      ),
+      nearestRoute.route.vicinity,
+    );
+  }, [vehicle, pickupCenter, routes, waitingAreas]);
+
+  useEffect(() => {
+    if (!pickupCenter || !recommendedArea) {
+      setWalkingPath([]);
+      return;
+    }
+    let active = true;
+    const origin: [number, number] = [pickupCenter.lat, pickupCenter.lng];
+    const destination: [number, number] = [
+      recommendedArea.lat,
+      recommendedArea.lng,
+    ];
+    setWalkingPath([origin, destination]);
+    const timer = setTimeout(() => {
+      void loadWalkingRoute(origin, destination).then((result) => {
+        if (active && result.ok) setWalkingPath(result.data.path);
+      });
+    }, 500);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [pickupCenter, recommendedArea]);
+
+  const mapFocus = useMemo(() => {
+    if (!pickupCenter) return null;
+    if (!recommendedArea) {
+      return {
+        key: `pin-start-${pickupCenter.lat}-${pickupCenter.lng}`,
+        lat: pickupCenter.lat,
+        lng: pickupCenter.lng,
+        zoom: pickZoom,
+      };
+    }
+    const zoom =
+      recommendedArea.distanceMeters < 300
+        ? 16.5
+        : recommendedArea.distanceMeters < 800
+          ? 15.5
+          : recommendedArea.distanceMeters < 1_500
+            ? 14.5
+            : recommendedArea.distanceMeters < 3_000
+              ? 13.5
+              : 12;
+    return {
+      key: `waiting-${recommendedArea.id}-${pickupCenter.lat}-${pickupCenter.lng}`,
+      lat: pickupCenter.lat,
+      lng: pickupCenter.lng,
+      zoom,
+    };
+  }, [pickupCenter, recommendedArea]);
 
   const mapState = useMemo<TransitMapState>(
     () => ({
       routeId: null,
       route: null,
+      waitingAreas: waitingAreas.map(
+        ({ id, name, lat, lng, vicinity, type }) => ({
+          id,
+          name,
+          lat,
+          lng,
+          tag: vicinity,
+          kind: type,
+        }),
+      ),
+      showStops: true,
       vehicles: [],
-      waitingAreas: stops.map(({ id, name, lat, lng }) => ({
-        id,
-        name,
-        lat,
-        lng,
-        kind: "stop" as const,
-      })),
-      pickupLine:
-        center && nearest
-          ? [
-              [center.lat, center.lng],
-              [nearest.lat, nearest.lng],
-            ]
-          : null,
-      focus: start
-        ? { key: "pin-start", lat: start.lat, lng: start.lng, zoom: pickZoom }
-        : null,
+      pickupLine: walkingPath,
+      pickupLineColor: recommendedArea
+        ? waitingAreaPinColors[recommendedArea.type]
+        : waitingAreaPinColors.stop,
+      focus: mapFocus,
       padTop: 0,
       padBottom: 0,
     }),
-    [stops, center, nearest, start],
+    [waitingAreas, walkingPath, mapFocus],
   );
 
   const confirm = async () => {
@@ -106,7 +181,17 @@ export function PinLocationPicker({
       onRequestClose={onClose}
     >
       <View style={styles.screen}>
-        <TransitMap state={mapState} onCenterChange={setCenter} />
+        <TransitMap
+          state={mapState}
+          onDrag={() => {
+            isDragging.current = true;
+          }}
+          onCenterChange={(next) => {
+            if (!isDragging.current) return;
+            isDragging.current = false;
+            setCenter(next);
+          }}
+        />
 
         <View pointerEvents="none" style={styles.pinLayer}>
           <View style={styles.pin}>
@@ -134,29 +219,6 @@ export function PinLocationPicker({
         </View>
 
         <View style={[styles.card, { paddingBottom: insets.bottom + 16 }]}>
-          {nearest ? (
-            <View style={styles.preview}>
-              <View style={styles.previewIcon}>
-                <PersonStanding color="#ffffff" size={18} strokeWidth={2} />
-              </View>
-              <View style={styles.flex}>
-                <Text style={styles.previewLabel}>NEAREST PICKUP POINT</Text>
-                <Text style={styles.previewName} numberOfLines={1}>
-                  {nearest.name}
-                </Text>
-                <Text style={styles.previewMeta}>
-                  {formatDistance(nearest.distanceMeters)} from your pin · about{" "}
-                  {nearest.walkMinutes} min walk
-                </Text>
-              </View>
-            </View>
-          ) : (
-            <Text style={styles.previewWarning}>
-              No waiting area within walking distance of this spot. Move the pin
-              closer to a route.
-            </Text>
-          )}
-
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Use this pickup location"
@@ -253,45 +315,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: -2 },
-  },
-  preview: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    padding: 12,
-    borderRadius: 10,
-    backgroundColor: softBlue,
-  },
-  previewIcon: {
-    width: 34,
-    height: 34,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 17,
-    backgroundColor: "#1e9e45",
-  },
-  previewLabel: { color: mutedText, fontFamily: "SoraBold", fontSize: 8 },
-  previewName: {
-    color: brandBlue,
-    fontFamily: "SoraBold",
-    fontSize: 14,
-    marginTop: 2,
-  },
-  previewMeta: {
-    color: text,
-    fontFamily: "Sora",
-    fontSize: 10,
-    lineHeight: 15,
-    marginTop: 2,
-  },
-  previewWarning: {
-    color: "#b91c1c",
-    fontFamily: "Sora",
-    fontSize: 10,
-    lineHeight: 15,
-    padding: 12,
-    borderRadius: 10,
-    backgroundColor: "#fee2e2",
   },
   confirm: {
     height: 50,

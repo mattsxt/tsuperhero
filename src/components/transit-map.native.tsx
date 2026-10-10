@@ -9,8 +9,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { SvgXml } from "react-native-svg";
 
-import type { TransitMapProps } from "@/components/transit-map-types";
+import {
+  occupancyPinColors,
+  type TransitMapProps,
+} from "@/components/transit-map-types";
 import { mapStyleUrl, mapboxToken } from "@/constants/mapbox";
+import { waitingAreaPinColors } from "@/constants/waiting-area";
 import { vehicleIconUris } from "@/constants/vehicle-icon-uris";
 
 export type { MapCenter, TransitMapState } from "@/components/transit-map-types";
@@ -21,13 +25,12 @@ type Position = [number, number];
 type LatLngPair = [number, number];
 
 const brandBlue = "#193caf";
-const routeYellow = "#f6c945";
+const routeBlue = "#1034A6";
 const pinRed = "#c81e1e";
 const defaultCenter: Position = [123.1948, 13.6218];
 const glideMs = 900;
 
-// Fixed marker boxes keep the anchor on the icon while labels show below it.
-const vehicleBox = { width: 110, height: 52, pin: 31 };
+const vehicleBox = { width: 36, height: 31, pin: 31 };
 const waitingBox = { width: 200, height: 80, icon: 22 };
 
 const TERMINAL_SVG =
@@ -46,7 +49,6 @@ const vehicleIconXml: Record<string, string> = Object.fromEntries(
   ]),
 );
 
-// App points are [lat, lng]; Mapbox wants [lng, lat].
 const toPosition = ([lat, lng]: LatLngPair): Position => [lng, lat];
 
 function lineCollection(paths: Position[][]): GeoJSON.FeatureCollection {
@@ -124,7 +126,18 @@ function VehicleMarker({
           hitSlop={8}
           style={styles.pinArea}
         >
-          <View style={styles.pin}>
+          <View
+            style={[
+              styles.pin,
+              {
+                backgroundColor: vehicle.isFull
+                  ? occupancyPinColors.Full
+                  : vehicle.occupancy
+                    ? occupancyPinColors[vehicle.occupancy]
+                    : "#ffffff",
+              },
+            ]}
+          >
             {icon ? (
               <View style={styles.pinIcon}>
                 <SvgXml xml={icon} width={14} height={14} />
@@ -132,16 +145,6 @@ function VehicleMarker({
             ) : null}
           </View>
         </Pressable>
-        {vehicle.label ? (
-          <View style={[styles.badge, vehicle.muted && styles.badgeMuted]}>
-            <Text
-              style={[styles.badgeText, vehicle.muted && styles.badgeTextMuted]}
-              numberOfLines={1}
-            >
-              {vehicle.label}
-            </Text>
-          </View>
-        ) : null}
       </View>
     </MarkerView>
   );
@@ -159,6 +162,7 @@ function WaitingAreaMarker({
   onToggle: () => void;
 }) {
   const terminal = area.kind === "terminal";
+  const tricycleStation = area.kind === "tricycle_station";
   return (
     <MarkerView
       coordinate={[area.lng, area.lat]}
@@ -176,6 +180,7 @@ function WaitingAreaMarker({
           style={[
             styles.waitingIcon,
             terminal && styles.terminalIcon,
+            tricycleStation && styles.tricycleStationIcon,
             open && styles.waitingIconOpen,
           ]}
         >
@@ -188,7 +193,10 @@ function WaitingAreaMarker({
         {open ? (
           <View style={styles.waitingLabel}>
             <Text
-              style={[styles.waitingName, terminal && styles.terminalName]}
+              style={[
+                styles.waitingName,
+                (terminal || tricycleStation) && styles.stationName,
+              ]}
               numberOfLines={1}
             >
               {area.name}
@@ -271,8 +279,6 @@ export function TransitMap({
     [state.pickupLine],
   );
 
-  // Same camera rules as the web map: refit when the route, fit or focus
-  // key changes, in that order.
   useEffect(() => {
     const view = camera.current;
     if (!loaded || !view) return;
@@ -326,13 +332,18 @@ export function TransitMap({
     return (
       <View style={styles.message}>
         <Text style={styles.messageText}>
-          Missing Mapbox token. Set MAPBOX_TOKEN in .env and rebuild the app.
+          Missing Mapbox public token. Set EXPO_PUBLIC_MAPBOX_TOKEN to a public pk. token in .env and rebuild the app.
         </Text>
       </View>
     );
   }
 
-  const waitingAreas = state.waitingAreas ?? [];
+  const waitingAreas = (state.waitingAreas ?? []).filter(
+    (area) =>
+      area.kind === "terminal" ||
+      area.kind === "tricycle_station" ||
+      state.showStops,
+  );
   const openArea = waitingAreas.find((area) => area.id === openWaitingId);
   const dimmed = !!openArea;
 
@@ -372,7 +383,7 @@ export function TransitMap({
           <LineLayer
             id="alternative-routes"
             style={{
-              lineColor: routeYellow,
+              lineColor: routeBlue,
               lineWidth: 4,
               lineOpacity: 0.95,
               lineDasharray: [2, 2],
@@ -383,7 +394,7 @@ export function TransitMap({
           <LineLayer
             id="route"
             style={{
-              lineColor: routeYellow,
+              lineColor: routeBlue,
               lineWidth: 4,
               lineOpacity: 0.95,
               lineCap: "round",
@@ -395,7 +406,7 @@ export function TransitMap({
           <LineLayer
             id="pickup-line"
             style={{
-              lineColor: "#1f2937",
+              lineColor: state.pickupLineColor ?? "#1f2937",
               lineWidth: 3,
               lineOpacity: 0.9,
               lineCap: "round",
@@ -404,8 +415,6 @@ export function TransitMap({
           />
         </ShapeSource>
 
-        {/* Later markers draw on top: vehicles, closed waiting areas,
-            pickups, the user's dot, then the open waiting area. */}
         {state.vehicles.map((vehicle) => (
           <VehicleMarker
             key={vehicle.id}
@@ -417,7 +426,11 @@ export function TransitMap({
         {waitingAreas
           .filter((area) => area.id !== openWaitingId)
           .sort((a, b) =>
-            a.kind === b.kind ? 0 : a.kind === "terminal" ? 1 : -1,
+            a.kind === b.kind
+              ? 0
+              : a.kind === "terminal" || a.kind === "tricycle_station"
+                ? 1
+                : -1,
           )
           .map((area) => (
             <WaitingAreaMarker
@@ -504,17 +517,6 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   pinIcon: { transform: [{ rotate: "45deg" }] },
-  badge: {
-    marginTop: -2,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 999,
-    backgroundColor: brandBlue,
-    elevation: 2,
-  },
-  badgeMuted: { backgroundColor: "#ffffff" },
-  badgeText: { fontSize: 9, fontWeight: "bold", color: "#ffffff" },
-  badgeTextMuted: { color: brandBlue },
   waitingBox: {
     width: waitingBox.width,
     height: waitingBox.height,
@@ -526,12 +528,18 @@ const styles = StyleSheet.create({
     borderRadius: waitingBox.icon / 2,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#1e9e45",
+    backgroundColor: waitingAreaPinColors.stop,
     borderWidth: 2,
     borderColor: "#ffffff",
     elevation: 3,
   },
-  terminalIcon: { borderRadius: 6, backgroundColor: brandBlue },
+  terminalIcon: {
+    borderRadius: 6,
+    backgroundColor: waitingAreaPinColors.terminal,
+  },
+  tricycleStationIcon: {
+    backgroundColor: waitingAreaPinColors.tricycle_station,
+  },
   waitingIconOpen: { transform: [{ scale: 1.3 }] },
   waitingLabel: {
     marginTop: 6,
@@ -544,7 +552,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   waitingName: { fontSize: 11, fontWeight: "bold", color: "#15803d" },
-  terminalName: { color: brandBlue },
+  stationName: { color: brandBlue },
   waitingTag: {
     paddingHorizontal: 7,
     paddingVertical: 2,

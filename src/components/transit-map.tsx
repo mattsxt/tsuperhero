@@ -2,7 +2,9 @@ import { createElement, useEffect, useRef, useState } from "react";
 import { Platform, StyleSheet, View } from "react-native";
 import { WebView } from "react-native-webview";
 
+import { occupancyPinColors } from "@/components/transit-map-types";
 import { mapboxToken } from "@/constants/mapbox";
+import { waitingAreaPinColors } from "@/constants/waiting-area";
 import { vehicleIconUris } from "@/constants/vehicle-icon-uris";
 import type {
   TransitMapProps,
@@ -43,13 +45,6 @@ const mapHtml = `<!DOCTYPE html>
     font: 13px sans-serif; color: #6b6b6b;
   }
   .pin-wrap { padding-bottom: 5px; cursor: pointer; }
-  .vehicle-badge {
-    position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
-    margin-top: -2px; padding: 2px 7px; border-radius: 999px;
-    background: #193caf; color: #ffffff; font: bold 9px sans-serif;
-    white-space: nowrap; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-  }
-  .vehicle-badge.muted { background: #ffffff; color: #193caf; }
   .pin {
     width: 26px; height: 26px; box-sizing: border-box;
     display: flex; align-items: center; justify-content: center;
@@ -67,14 +62,14 @@ const mapHtml = `<!DOCTYPE html>
   .waiting-icon {
     width: 22px; height: 22px; box-sizing: border-box; border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
-    background: #1e9e45; border: 2px solid #ffffff;
+    background: var(--waiting-color, #1e9e45); border: 2px solid #ffffff;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35);
     transition: transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
   }
   .waiting-label {
     position: absolute; top: 100%; left: 50%; margin-top: 6px;
     padding: 3px 8px; border-radius: 6px;
-    background: #ffffff; color: #15803d;
+    background: #ffffff; color: var(--waiting-label-color, #15803d);
     font: bold 11px sans-serif; white-space: nowrap;
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
     opacity: 0; pointer-events: none; transform-origin: top center;
@@ -88,8 +83,7 @@ const mapHtml = `<!DOCTYPE html>
     padding: 2px 7px; border-radius: 999px;
     background: #e3ecfb; color: #193caf; font: bold 9px sans-serif;
   }
-  .waiting.hub .waiting-icon { border-radius: 6px; background: #193caf; }
-  .waiting.hub .waiting-label { color: #193caf; }
+  .waiting.hub .waiting-icon { border-radius: 6px; }
   .pickup { line-height: 0; filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.35)); }
   .me {
     width: 14px; height: 14px; border-radius: 50%;
@@ -106,6 +100,8 @@ const mapHtml = `<!DOCTYPE html>
 <div id="map"></div>
 <script>
   var ICONS = ${JSON.stringify(vehicleIconUris)};
+  var OCCUPANCY_COLORS = ${JSON.stringify(occupancyPinColors)};
+  var WAITING_AREA_COLORS = ${JSON.stringify(waitingAreaPinColors)};
   var TOKEN = ${JSON.stringify(mapboxToken ?? "")};
   var TERMINAL_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6v6M15 6v6M2 12h19.6M18 18h3s.5-1.7.8-2.8c.1-.4.2-.8.2-1.2 0-.4-.1-.8-.2-1.2l-1.4-5C20.1 6.8 19.1 6 18 6H4a2 2 0 0 0-2 2v10h3"/><circle cx="7" cy="18" r="2"/><path d="M9 18h5"/><circle cx="16" cy="18" r="2"/></svg>';
   var map = null;
@@ -119,6 +115,7 @@ const mapHtml = `<!DOCTYPE html>
   var pickupMarkers = [];
   var lastPickupKey = "";
   var lastPickupLineKey = "null";
+  var lastPickupLineColor = "";
   var reportCenter = false;
   var meMarker = null;
   var lastFitKey = null;
@@ -135,7 +132,6 @@ const mapHtml = `<!DOCTYPE html>
     document.getElementById("map").innerHTML = '<div class="error">' + text + "</div>";
   }
 
-  // Points arrive as [lat, lng]; Mapbox wants [lng, lat].
   function lngLat(point) { return [point[1], point[0]]; }
 
   function line(coordinates) {
@@ -229,9 +225,15 @@ const mapHtml = `<!DOCTYPE html>
       });
     }
     var lineKey = JSON.stringify(state.pickupLine || null);
-    if (lineKey === lastPickupLineKey) return;
-    lastPickupLineKey = lineKey;
-    setLines("pickup-line", state.pickupLine && state.pickupLine.length > 1 ? [state.pickupLine.map(lngLat)] : []);
+    if (lineKey !== lastPickupLineKey) {
+      lastPickupLineKey = lineKey;
+      setLines("pickup-line", state.pickupLine && state.pickupLine.length > 1 ? [state.pickupLine.map(lngLat)] : []);
+    }
+    var lineColor = state.pickupLineColor || "#1f2937";
+    if (lineColor !== lastPickupLineColor) {
+      lastPickupLineColor = lineColor;
+      map.setPaintProperty("pickup-line", "line-color", lineColor);
+    }
   }
 
   function applyUserLocation(state) {
@@ -252,7 +254,9 @@ const mapHtml = `<!DOCTYPE html>
 
   function applyWaitingAreas(state) {
     if (state.keepWaitingAreas) return;
-    var areas = state.waitingAreas || [];
+    var areas = (state.waitingAreas || []).filter(function (area) {
+      return area.kind === "terminal" || area.kind === "tricycle_station" || state.showStops;
+    });
     var key = areas.map(function (area) { return area.id + ":" + (area.tag || "") + ":" + (area.kind || ""); }).join(",");
     if (key === lastWaitingKey) return;
     lastWaitingKey = key;
@@ -260,8 +264,15 @@ const mapHtml = `<!DOCTYPE html>
     waitingMarkers = areas.map(function (area) {
       var content = document.createElement("div");
       var terminal = area.kind === "terminal";
-      var zIndex = terminal ? 650 : 600;
+      var tricycleStation = area.kind === "tricycle_station";
+      var waitingColor = WAITING_AREA_COLORS[area.kind || "stop"] || WAITING_AREA_COLORS.stop;
+      var zIndex = terminal || tricycleStation ? 650 : 600;
       content.className = "waiting" + (terminal ? " hub" : "");
+      content.style.setProperty("--waiting-color", waitingColor);
+      content.style.setProperty(
+        "--waiting-label-color",
+        terminal || tricycleStation ? "#193caf" : waitingColor,
+      );
       content.innerHTML = '<div class="waiting-icon">' + (terminal ? TERMINAL_SVG : WAITING_SVG) + '</div><div class="waiting-label"><span></span></div>';
       content.lastChild.firstChild.textContent = area.name;
       if (area.tag) {
@@ -324,9 +335,7 @@ const mapHtml = `<!DOCTYPE html>
         var content = document.createElement("div");
         content.className = "pin-wrap";
         content.innerHTML = '<div class="pin"><img src="' + ICONS[vehicle.type] + '" /></div>';
-        var badge = document.createElement("div");
-        badge.className = "vehicle-badge";
-        content.appendChild(badge);
+        var pin = content.querySelector(".pin");
         var position = { lat: vehicle.lat, lng: vehicle.lng };
         var marker = markerAt(content, vehicle.lat, vehicle.lng, 700);
         var vehicleId = vehicle.id;
@@ -334,14 +343,14 @@ const mapHtml = `<!DOCTYPE html>
           event.stopPropagation();
           send({ type: "vehicle", id: vehicleId });
         });
-        entry = { marker: marker, position: position, frame: null, badge: badge };
+        entry = { marker: marker, position: position, frame: null, pin: pin };
         vehicleMarkers[vehicle.id] = entry;
       } else if (entry.position.lat !== vehicle.lat || entry.position.lng !== vehicle.lng) {
         animateTo(entry, vehicle.lat, vehicle.lng);
       }
-      entry.badge.textContent = vehicle.label || "";
-      entry.badge.style.display = vehicle.label ? "" : "none";
-      entry.badge.classList.toggle("muted", !!vehicle.muted);
+      entry.pin.style.backgroundColor = vehicle.isFull
+        ? OCCUPANCY_COLORS.Full
+        : OCCUPANCY_COLORS[vehicle.occupancy] || "#ffffff";
     });
     updatePinFocus();
     Object.keys(vehicleMarkers).forEach(function (id) {
@@ -377,12 +386,12 @@ const mapHtml = `<!DOCTYPE html>
       map.addSource("pickup-line", { type: "geojson", data: EMPTY });
       map.addLayer({
         id: "alt", type: "line", source: "alt",
-        paint: { "line-color": "#f6c945", "line-width": 4, "line-opacity": 0.95, "line-dasharray": [2, 2] }
+        paint: { "line-color": "#1034A6", "line-width": 4, "line-opacity": 0.95, "line-dasharray": [2, 2] }
       });
       map.addLayer({
         id: "route", type: "line", source: "route",
         layout: { "line-join": "round", "line-cap": "round" },
-        paint: { "line-color": "#f6c945", "line-width": 4, "line-opacity": 0.95 }
+        paint: { "line-color": "#1034A6", "line-width": 4, "line-opacity": 0.95 }
       });
       map.addLayer({
         id: "pickup-line", type: "line", source: "pickup-line",
@@ -416,7 +425,9 @@ const mapHtml = `<!DOCTYPE html>
     script.onerror = function () { showError("Mapbox could not load. Check your connection."); };
     document.head.appendChild(script);
   } else {
-    showError("Missing Mapbox token. Set MAPBOX_TOKEN in .env and restart Expo.");
+    showError(
+      "Missing Mapbox public token. Set EXPO_PUBLIC_MAPBOX_TOKEN to a public pk. token in .env and restart Expo.",
+    );
   }
 </script>
 </body>
@@ -466,7 +477,7 @@ export function TransitMap({
   };
   const lastSent = useRef<Pick<
     TransitMapState,
-    "routeId" | "route" | "alternativeRoutes" | "waitingAreas"
+    "routeId" | "route" | "alternativeRoutes" | "waitingAreas" | "showStops"
   > | null>(null);
   const webViewRef = useRef<WebView>(null);
   const frameRef = useRef<FrameRef | null>(null);
@@ -479,12 +490,16 @@ export function TransitMap({
       last.routeId === state.routeId &&
       last.route === state.route &&
       last.alternativeRoutes === state.alternativeRoutes;
-    const keepWaitingAreas = !!last && last.waitingAreas === state.waitingAreas;
+    const keepWaitingAreas =
+      !!last &&
+      last.waitingAreas === state.waitingAreas &&
+      last.showStops === state.showStops;
     lastSent.current = {
       routeId: state.routeId,
       route: state.route,
       alternativeRoutes: state.alternativeRoutes,
       waitingAreas: state.waitingAreas,
+      showStops: state.showStops,
     };
     const payload = JSON.stringify({
       ...state,

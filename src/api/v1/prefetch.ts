@@ -65,7 +65,6 @@ async function prepare() {
     loadWaitingAreas(),
     loadProfileSummary(),
   ]);
-  // Runs in the background; the tile download can take a while.
   if (routes.ok) saveOfflineMap(routes.data).catch(() => {});
 
   if (home.homeRoute === Routes.commuterHome) {

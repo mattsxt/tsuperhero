@@ -26,6 +26,7 @@
     },
     "plugins": [
       "expo-router",
+      "@rnmapbox/maps",
       "expo-image",
       [
         "expo-image-picker",
@@ -54,9 +55,7 @@
       [
         "expo-font",
         {
-          "fonts": [
-            "./src/assets/fonts/Sora.ttf"
-          ]
+          "fonts": ["./src/assets/fonts/Sora.ttf"]
         }
       ],
       [

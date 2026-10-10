@@ -1,3 +1,13 @@
+import type { OccupancyLevel } from "@/api/v1/transit-routes/controllers";
+import type { WaitingAreaType } from "@/constants/waiting-area";
+
+export const occupancyPinColors: Record<OccupancyLevel, string> = {
+  Available: "#b7e4c7",
+  Moderate: "#ffe066",
+  "Almost Full": "#ffa94d",
+  Full: "#ff6b6b",
+};
+
 export type TransitMapState = {
   routeId: string | null;
   route: [number, number][] | null;
@@ -8,15 +18,17 @@ export type TransitMapState = {
     lat: number;
     lng: number;
     tag?: string | null;
-    kind?: "stop" | "terminal";
+    kind?: WaitingAreaType;
   }[];
+  showStops?: boolean;
   vehicles: {
     id: string;
     lat: number;
     lng: number;
     type: string;
     label?: string | null;
-    muted?: boolean;
+    occupancy?: OccupancyLevel;
+    isFull?: boolean;
   }[];
   focus: {
     key: number | string;
@@ -28,6 +40,7 @@ export type TransitMapState = {
   padBottom: number;
   pickups?: { id: string; lat: number; lng: number; passengers?: number }[];
   pickupLine?: [number, number][] | null;
+  pickupLineColor?: string;
   userLocation?: { lat: number; lng: number } | null;
   fit?: { key: number | string; points: [number, number][] } | null;
 };

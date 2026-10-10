@@ -4,7 +4,6 @@ import * as SplashScreen from "expo-splash-screen";
 import { useColorScheme } from "react-native";
 
 import { AnimatedSplashOverlay } from "@/components/animated-icon";
-import type { TabTransition } from "@/components/bottom-nav";
 import { NotificationSync } from "@/components/notification-sync";
 import { OfflineBanner } from "@/components/offline-banner";
 import { ShareInviteModal } from "@/components/share-invite-modal";
@@ -12,16 +11,10 @@ import { AppFonts } from "@/constants/fonts";
 
 SplashScreen.preventAutoHideAsync();
 
-const tabScreenOptions = ({
-  route,
-}: {
-  route: { params?: { transition?: TabTransition } };
-}) => ({
+const tabScreenOptions = {
   gestureEnabled: false,
-  animation: "slide_from_right" as const,
-  animationTypeForReplace:
-    route.params?.transition === "back" ? ("pop" as const) : ("push" as const),
-});
+  animation: "fade" as const,
+};
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();

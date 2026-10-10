@@ -9,6 +9,8 @@ import type {
   RiderRow,
   ShareInviteRow,
 } from "@/api/v1/pickups/types";
+import { getKnownWaitingAreas } from "@/api/v1/waiting-areas/controllers";
+import type { WaitingAreaType } from "@/constants/waiting-area";
 import { unwrapCached } from "@/api/v1/cache";
 import { attempt, failure, unwrap, type Result } from "@/api/v1/result";
 import {
@@ -24,6 +26,8 @@ export type PickupVehicle = "jeep" | "tricy";
 export type PickupRequest = {
   id: string;
   pickupName: string;
+  vehicle: PickupVehicle;
+  waitingAreaType?: WaitingAreaType;
   lat: number;
   lng: number;
   passengers: number;
@@ -90,6 +94,13 @@ function fetchActivePickup(): Promise<Result<PickupRequest | null>> {
     return {
       id: row.request_id,
       pickupName: pickup.pickup_destination,
+      vehicle:
+        pickup.requested_vehicle_type === "Tricycle" ? "tricy" : "jeep",
+      waitingAreaType: getKnownWaitingAreas().find(
+        (area) =>
+          Math.abs(area.lat - row.device_latitude) < 0.00001 &&
+          Math.abs(area.lng - row.device_longitude) < 0.00001,
+      )?.type,
       lat: row.device_latitude,
       lng: row.device_longitude,
       passengers: pickup.number_of_passengers,
@@ -98,30 +109,27 @@ function fetchActivePickup(): Promise<Result<PickupRequest | null>> {
   });
 }
 
-type PickupPoint = { name: string; lat: number; lng: number };
+type PickupPoint = {
+  name: string;
+  lat: number;
+  lng: number;
+  waitingAreaType?: WaitingAreaType;
+};
 
 type PickupForm = {
   vehicle: PickupVehicle;
   passengers: number;
   location: PickupPoint | null;
-  waitingArea: PickupPoint | null;
   riders: Rider[];
 };
 
 export async function requestPickup(
   form: PickupForm,
 ): Promise<Result<PickupRequest>> {
-  const { vehicle, passengers, location, waitingArea, riders } = form;
+  const { vehicle, passengers, location, riders } = form;
 
   if (!location) {
     return failure("Choose where you are so drivers can find you.");
-  }
-  if (!waitingArea) {
-    return failure(
-      vehicle === "jeep"
-        ? "There’s no waiting area near you. Jeepneys only pick up at waiting areas."
-        : "There’s no waiting area near you. Tricycles pick up at waiting areas.",
-    );
   }
   if (passengers < minPickupPassengers || passengers > maxPickupPassengers) {
     return failure(
@@ -134,7 +142,7 @@ export async function requestPickup(
     );
   }
 
-  const point = waitingArea;
+  const point = location;
 
   return attempt(async () => {
     const commuterId = await getCommuterId();
@@ -148,7 +156,12 @@ export async function requestPickup(
 
     try {
       await unwrap(
-        pickupRoutes.createPickup(request.request_id, point.name, passengers),
+        pickupRoutes.createPickup(
+          request.request_id,
+          point.name,
+          passengers,
+          vehicle === "jeep" ? "Jeepney" : "Tricycle",
+        ),
       );
     } catch (error) {
       await pickupRoutes.deleteRequest(request.request_id);
@@ -173,6 +186,8 @@ export async function requestPickup(
     knownActivePickup = {
       id: request.request_id,
       pickupName: point.name,
+      vehicle,
+      waitingAreaType: point.waitingAreaType,
       lat: point.lat,
       lng: point.lng,
       passengers,

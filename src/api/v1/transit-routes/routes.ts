@@ -31,14 +31,13 @@ type MapboxDirections = {
 
 const directionsUrl = "https://api.mapbox.com/directions/v5/mapbox";
 
-// Directions accepts at most 25 coordinates per request.
 const maxCoordinates = 25;
 
 const toCoordinates = (points: LatLng[]) =>
   points.map(([lat, lng]) => `${lng},${lat}`).join(";");
 
 async function requestDirections(
-  profile: "driving" | "driving-traffic",
+  profile: "driving" | "driving-traffic" | "walking",
   points: LatLng[],
   params: string,
 ): Promise<MapboxDirections> {
@@ -67,6 +66,7 @@ export type LiveVehicleRow = {
   vehicle_status: string;
   max_capacity: number;
   current_capacity: number;
+  is_full: boolean;
   latitude: number;
   longitude: number;
   route_id: string | null;
@@ -75,12 +75,11 @@ export type LiveVehicleRow = {
 
 export const routeTableRoutes = {
   listRoutes: () => routeTable().select("*").order("route_name"),
-  listLiveVehicles: () => getSupabaseClient().rpc("get_live_vehicles"),
+  listLiveVehicles: () =>
+    getSupabaseClient().rpc("get_live_vehicles_with_full"),
 };
 
 export const transitRouteApi = {
-  // One leg per consecutive pair of points. Mapbox returns each leg's shape
-  // as its steps, so a leg's line is its steps joined together.
   drivingRoute: async (points: LatLng[]): Promise<DirectionsResponse> => {
     if (points.length < 2) throw new Error("A route needs two points.");
     const legs: NonNullable<DirectionsResponse["routes"]>[number]["legs"] = [];
@@ -118,6 +117,27 @@ export const transitRouteApi = {
     const route = data.routes?.[0];
     if (data.code !== "Ok" || !route) {
       return { error: { message: data.message ?? "No route found." } };
+    }
+    return {
+      routes: [
+        {
+          geometry: route.geometry,
+          distanceMeters: route.distance,
+          durationSeconds: route.duration,
+        },
+      ],
+    };
+  },
+
+  walkingRoute: async (from: LatLng, to: LatLng): Promise<DirectionsResponse> => {
+    const data = await requestDirections(
+      "walking",
+      [from, to],
+      "geometries=geojson&overview=full",
+    );
+    const route = data.routes?.[0];
+    if (data.code !== "Ok" || !route) {
+      return { error: { message: data.message ?? "No walking route found." } };
     }
     return {
       routes: [

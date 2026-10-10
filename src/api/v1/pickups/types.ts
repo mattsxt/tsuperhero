@@ -4,6 +4,7 @@ export type PickupRow = {
   pickup_id: string;
   pickup_destination: string;
   number_of_passengers: number;
+  requested_vehicle_type: "Jeepney" | "Tricycle";
 };
 
 export type BookingRow = {

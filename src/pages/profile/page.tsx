@@ -15,10 +15,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { logout } from "@/api/v1/auth/controllers";
 import {
   loadProfileSummary,
+  peekProfileSummary,
+  peekSignedInHomeRoute,
   type ProfileSummary,
 } from "@/api/v1/profile/controllers";
 import { BottomNav, bottomNavHeight } from "@/components/bottom-nav";
-import { LoadingLogo } from "@/components/LoadingLogo";
 import {
   ExpandedOnly,
   headerLayoutTransition,
@@ -41,7 +42,9 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const chrome = useScrollChrome();
   const blurTarget = useRef<View | null>(null);
-  const [summary, setSummary] = useState<ProfileSummary | null>(null);
+  const [summary, setSummary] = useState<ProfileSummary | null>(
+    peekProfileSummary,
+  );
   const [signingOut, setSigningOut] = useState(false);
 
   useFocusEffect(
@@ -82,13 +85,7 @@ export default function ProfileScreen() {
 
   if (signingOut) return <LoadingScreen messages={signOutMessages} />;
 
-  if (!summary) {
-    return (
-      <View style={styles.loadingScreen}>
-        <LoadingLogo color={brandBlue} />
-      </View>
-    );
-  }
+  const homeRoute = summary?.homeRoute ?? peekSignedInHomeRoute();
 
   return (
     <View style={styles.screen}>
@@ -107,7 +104,10 @@ export default function ProfileScreen() {
             <Text style={styles.sectionLabel}>Configure your profile</Text>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`Edit profile of ${summary.fullName}`}
+              accessibilityLabel={
+                summary ? `Edit profile of ${summary.fullName}` : "Edit profile"
+              }
+              disabled={!summary}
               onPress={() => router.push(Routes.profileEdit)}
               style={({ pressed }) => [
                 styles.card,
@@ -116,30 +116,36 @@ export default function ProfileScreen() {
               ]}
             >
               <View style={styles.avatar}>
-                {summary.pictureUrl ? (
+                {summary?.pictureUrl ? (
                   <Image
                     source={{ uri: summary.pictureUrl }}
                     style={styles.avatarImage}
                     contentFit="cover"
                   />
                 ) : (
-                  <Text style={styles.avatarText}>{summary.initials}</Text>
+                  <Text style={styles.avatarText}>
+                    {summary?.initials ?? "…"}
+                  </Text>
                 )}
               </View>
               <View style={styles.profileText}>
                 <Text style={styles.profileName} numberOfLines={1}>
-                  {summary.fullName}
+                  {summary?.fullName ?? "Loading profile…"}
                 </Text>
                 <Text style={styles.profileDetail} numberOfLines={1}>
-                  {summary.email}
+                  {summary?.email ?? ""}
                 </Text>
                 <Text style={styles.profileDetail}>
-                  {summary.contactNumber}
+                  {summary?.contactNumber ?? ""}
                 </Text>
               </View>
-              <View style={styles.userTypeBadge}>
-                <Text style={styles.userTypeText}>{summary.userTypeLabel}</Text>
-              </View>
+              {summary && (
+                <View style={styles.userTypeBadge}>
+                  <Text style={styles.userTypeText}>
+                    {summary.userTypeLabel}
+                  </Text>
+                </View>
+              )}
               <ChevronRight color={brandBlue} size={20} strokeWidth={2.5} />
             </Pressable>
 
@@ -152,7 +158,7 @@ export default function ProfileScreen() {
                   <ShieldCog color={brandBlue} size={18} strokeWidth={1.8} />
                 }
               />
-              {summary.userType === "transit_personnel" && (
+              {summary?.userType === "transit_personnel" && (
                 <ActionRow
                   label="Vehicles & Documents"
                   onPress={() => router.push(Routes.profileVehicles)}
@@ -218,12 +224,14 @@ export default function ProfileScreen() {
         </StickyHeader>
       </BlurTargetView>
 
-      <BottomNav
-        active="profile"
-        homeRoute={summary.homeRoute}
-        blurTarget={blurTarget}
-        hidden={chrome.navHidden}
-      />
+      {homeRoute && (
+        <BottomNav
+          active="profile"
+          homeRoute={homeRoute}
+          blurTarget={blurTarget}
+          hidden={chrome.navHidden}
+        />
+      )}
     </View>
   );
 }
@@ -272,12 +280,6 @@ function ActionRow({
 }
 
 const styles = StyleSheet.create({
-  loadingScreen: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#ffffff",
-  },
   screen: { flex: 1, backgroundColor: "#ffffff" },
   blurTarget: { flex: 1 },
   header: {
