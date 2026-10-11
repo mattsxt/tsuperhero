@@ -71,7 +71,6 @@ import {
 import {
   clearOutbox,
   hasPendingTripEnd,
-  usePendingSync,
   sendLocation,
 } from "@/api/v1/operator/outbox";
 import {
@@ -283,8 +282,7 @@ function Trip({
 
   const onTrip = status !== "idle";
   const online = useOnline();
-  const pendingSync = usePendingSync();
-  const syncWaiting = !online || pendingSync > 0;
+  const syncWaiting = !online;
   const full = markedFull || count >= capacity;
   const occupancy = markedFull ? "Full" : getOccupancyLevel(count, capacity);
 
