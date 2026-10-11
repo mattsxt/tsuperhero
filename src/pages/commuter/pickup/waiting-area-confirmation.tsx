@@ -9,14 +9,19 @@ import {
   formatDistance,
   type WaitingAreaRecommendation,
 } from "@/api/v1/waiting-areas/controllers";
-import { ModuleButton, ModuleHeader, moduleColors } from "@/components/module-ui";
+import {
+  ModuleButton,
+  ModuleHeader,
+  moduleColors,
+} from "@/components/module-ui";
 import { getDistanceMeters } from "@/utils/geo";
 
-import { PickupAlert } from "./pickup-alert";
 import {
   waitingAreaArrivalMeters,
   WaitingAreaDirectionsMap,
 } from "./waiting-area-directions-map";
+import { ErrorAlert } from "@/components/error-alert";
+import { palette } from "@/constants/colors";
 
 const { brandBlue, mutedText, text } = moduleColors;
 
@@ -70,20 +75,11 @@ export function WaitingAreaConfirmation({
         <Text style={styles.label}>RECOMMENDED WAITING AREA</Text>
         <Text style={styles.areaName}>{area.name}</Text>
         {distance === null ? (
-          <>
-            <Text style={styles.message}>
-              {locationError
-                ? "We couldn’t get your location to show directions."
-                : "Finding your location to show directions to the waiting area…"}
-            </Text>
-            {!!locationError && (
-              <PickupAlert
-                source="Current location"
-                message={locationError}
-                compact
-              />
-            )}
-          </>
+          <Text style={styles.message}>
+            {locationError
+              ? "We couldn’t get your location to show directions."
+              : "Finding your location to show directions to the waiting area…"}
+          </Text>
         ) : arrived ? (
           <Text style={styles.arrivedMessage}>
             You’re at the waiting area. You can now send your pickup request to
@@ -96,12 +92,13 @@ export function WaitingAreaConfirmation({
             there.
           </Text>
         )}
-        {!!problem && (
-          <PickupAlert
-            source={problemSource}
-            message={problem}
-            compact
-          />
+        {problem ? (
+          <ErrorAlert title={problemSource} message={problem} />
+        ) : (
+          distance === null &&
+          !!locationError && (
+            <ErrorAlert title="Current location" message={locationError} />
+          )
         )}
         <ModuleButton
           label={busy ? "SENDING REQUEST..." : "REQUEST PICKUP"}
@@ -111,7 +108,10 @@ export function WaitingAreaConfirmation({
         <Pressable
           accessibilityRole="button"
           onPress={onBack}
-          style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}
+          style={({ pressed }) => [
+            styles.backButton,
+            pressed && styles.pressed,
+          ]}
         >
           <ArrowLeft color={brandBlue} size={16} strokeWidth={2.5} />
           <Text style={styles.backText}>CHANGE PICKUP LOCATION</Text>
@@ -138,7 +138,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
     elevation: 8,
   },
-  label: { color: mutedText, fontFamily: "SoraBold", fontSize: 9 },
+  label: { color: mutedText, fontFamily: "SoraBold", fontSize: 10 },
   areaName: { color: brandBlue, fontFamily: "SoraBold", fontSize: 16 },
   message: {
     color: text,
@@ -148,7 +148,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   arrivedMessage: {
-    color: "#15803d",
+    color: palette.success,
     fontFamily: "SoraBold",
     fontSize: 11,
     lineHeight: 16,
@@ -161,6 +161,6 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 8,
   },
-  backText: { color: brandBlue, fontFamily: "SoraBold", fontSize: 9 },
+  backText: { color: brandBlue, fontFamily: "SoraBold", fontSize: 10 },
   pressed: { opacity: 0.75 },
 });

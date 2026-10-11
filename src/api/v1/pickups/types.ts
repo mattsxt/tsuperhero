@@ -12,6 +12,7 @@ export type PickupDraftRow = {
 
 export type PickupCompanionStatusRow = RiderRow & {
   companion_status: CompanionStatus;
+  arrived?: boolean | null;
 };
 
 export type PickupRow = {
@@ -50,6 +51,9 @@ export type ShareInviteRow = Omit<RiderRow, "user_id"> & {
   number_of_passengers: number | null;
   request_status: RequestStatus;
   added_at: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  location_changed?: boolean | null;
 };
 
 export type PickupDriverRow = {
@@ -69,9 +73,27 @@ export type PickupDriverRow = {
 };
 
 export type PickupRequestRow = {
+  arrived_at?: string | null;
   request_id: string;
   request_status: RequestStatus;
   device_latitude: number;
   device_longitude: number;
   pickup: PickupRow[] | PickupRow | null;
+};
+
+export type SharedRideRow = {
+  request_id: string;
+  owner_first_name: string | null;
+  owner_last_name: string | null;
+  owner_picture: string | null;
+  pickup_destination: string;
+  latitude: number;
+  longitude: number;
+  passengers: number;
+  vehicle_type: "Jeepney" | "Tricycle";
+  request_status: RequestStatus;
+  is_draft: boolean;
+  plate_number: string | null;
+  owner_arrived?: boolean | null;
+  me_arrived?: boolean | null;
 };

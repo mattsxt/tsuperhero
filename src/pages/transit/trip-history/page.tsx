@@ -16,15 +16,16 @@ import {
   loadMyTrips,
   type TripRecord,
 } from "@/api/v1/operator/controllers";
-import { LoadingLogo } from "@/components/LoadingLogo";
 import { StatusPill } from "@/components/card-badges";
 import { EmptyState } from "@/components/empty-state";
 import { Chip, ModuleHeader, moduleColors } from "@/components/module-ui";
 import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
 import { goBackOr } from "@/utils/navigation";
+import { ErrorAlert } from "@/components/error-alert";
+import { SkeletonCards } from "@/components/skeleton";
 
-const { brandBlue, mutedText, softBlue, text, error } = moduleColors;
+const { brandBlue, mutedText, softBlue, text } = moduleColors;
 const cardEdgeBlue = "#1a2f8f";
 
 type Period = "all" | "week" | "month";
@@ -137,10 +138,16 @@ export default function TripHistoryScreen() {
           </View>
 
           {trips === null ? (
-            <LoadingLogo style={styles.loading} />
+            <SkeletonCards style={styles.loading} />
           ) : visible.length === 0 ? (
             <View style={styles.centered}>
-              {!!problem && <Text style={styles.problem}>{problem}</Text>}
+              {!!problem && (
+                <ErrorAlert
+                  title="Trip history"
+                  message={problem}
+                  style={styles.problem}
+                />
+              )}
               <EmptyState
                 icon={<Route color={brandBlue} size={32} strokeWidth={1.8} />}
                 message={emptyMessages[period]}
@@ -287,12 +294,7 @@ const styles = StyleSheet.create({
   tabRow: { flexDirection: "row", gap: 6 },
   loading: { marginTop: 48 },
   centered: { flex: 1, justifyContent: "center" },
-  problem: {
-    color: error,
-    fontFamily: "Sora",
-    fontSize: 10,
-    textAlign: "center",
-  },
+  problem: { alignSelf: "stretch", marginBottom: 12 },
   summary: { flexDirection: "row", gap: 8, marginTop: 16 },
   tile: {
     flex: 1,
@@ -312,7 +314,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
   },
   tileValue: { color: brandBlue, fontFamily: "SoraBold", fontSize: 13 },
-  tileLabel: { color: mutedText, fontFamily: "Sora", fontSize: 8 },
+  tileLabel: { color: mutedText, fontFamily: "Sora", fontSize: 10 },
   list: { gap: 10, marginTop: 16 },
   card: {
     gap: 12,

@@ -5,7 +5,6 @@ import {
   getPasswordProblem,
 } from "@/api/v1/auth/validation";
 import { getErrorMessage } from "@/api/v1/client";
-import { signedOutOrOffline } from "@/api/v1/session-route";
 import { forgetPushToken } from "@/api/v1/notifications/controllers";
 import { cancelActivePickupBeforeSignOut } from "@/api/v1/pickups/controllers";
 import {
@@ -19,13 +18,14 @@ import {
   unwrap,
   type Result,
 } from "@/api/v1/result";
+import { signedOutOrOffline } from "@/api/v1/session-route";
 import { Routes, type AppRoute } from "@/constants/routes";
 import { checkOnline } from "@/hooks/use-online";
 
 export {
   codeLength,
   getEmailProblem,
-  getPasswordProblem,
+  getPasswordProblem
 } from "@/api/v1/auth/validation";
 
 export async function getStartupRoute(): Promise<AppRoute> {

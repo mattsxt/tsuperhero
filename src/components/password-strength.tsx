@@ -2,8 +2,9 @@ import CircleCheck from "lucide-react-native/icons/circle-check";
 import { StyleSheet, Text, View } from "react-native";
 
 import { passwordRules } from "@/api/v1/auth/validation";
+import { palette } from "@/constants/colors";
 
-const brandBlue = "#193caf";
+const brandBlue = palette.brand;
 
 export function PasswordStrength({ password }: { password: string }) {
   const passedRules = passwordRules.filter((rule) =>
@@ -53,11 +54,11 @@ const styles = StyleSheet.create({
   },
   strengthText: {
     fontFamily: "SoraBold",
-    fontSize: 7,
+    fontSize: 10,
     alignSelf: "flex-end",
     marginTop: 3,
   },
   rules: { gap: 4, marginTop: 10 },
   ruleRow: { flexDirection: "row", alignItems: "center", gap: 4 },
-  ruleText: { color: "#111111", fontFamily: "Sora", fontSize: 9 },
+  ruleText: { color: "#111111", fontFamily: "Sora", fontSize: 10 },
 });

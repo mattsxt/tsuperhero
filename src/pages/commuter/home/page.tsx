@@ -12,11 +12,9 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { loadActivePickup } from "@/api/v1/pickups/controllers";
 import { loadHome, peekHomeName } from "@/api/v1/profile/controllers";
 import { loadWaitingAreas } from "@/api/v1/waiting-areas/controllers";
 import { BottomNav, bottomNavHeight } from "@/components/bottom-nav";
-import { LoadingLogo } from "@/components/LoadingLogo";
 import {
   ActionCard,
   ActionRow,
@@ -31,7 +29,10 @@ import {
   DestinationSearchPanel,
   DestinationSearchTrigger,
 } from "@/pages/commuter/home/destination-search";
+import { usePickupStatus } from "@/hooks/use-pickup-status";
+import { ActivePickupBanner } from "@/pages/commuter/home/active-pickup-banner";
 import { RecentBookings } from "@/pages/commuter/home/recent-bookings";
+import { HomeSkeleton } from "@/components/skeleton";
 
 const { brandBlue } = homeColors;
 const searchLayerGap = 14;
@@ -42,6 +43,7 @@ export default function CommuterHomeScreen() {
   const blurTarget = useRef<View | null>(null);
   const [firstName, setFirstName] = useState(() => peekHomeName("commuter"));
   const [searchOpen, setSearchOpen] = useState(false);
+  const pickupStatus = usePickupStatus();
   const scrollRef = useAnimatedRef<Animated.ScrollView>();
   const minimizedHeaderHeight = chrome.collapsedHeaderHeight ?? insets.top + 56;
 
@@ -62,7 +64,6 @@ export default function CommuterHomeScreen() {
         return;
       }
       if (active) setFirstName(home.firstName);
-      loadActivePickup();
       loadWaitingAreas();
     };
 
@@ -73,11 +74,7 @@ export default function CommuterHomeScreen() {
   }, []);
 
   if (firstName === null) {
-    return (
-      <View style={styles.loadingScreen}>
-        <LoadingLogo color={brandBlue} />
-      </View>
-    );
+    return <HomeSkeleton />;
   }
 
   return (
@@ -104,6 +101,8 @@ export default function CommuterHomeScreen() {
                 entering={FadeIn.duration(200)}
                 exiting={FadeOut.duration(120)}
               >
+                <ActivePickupBanner status={pickupStatus} />
+
                 <ActionRow>
                   <ActionCard
                     title="Routes"
@@ -122,12 +121,20 @@ export default function CommuterHomeScreen() {
                     description="Rent a vehicle for your trip"
                     icon={<Bus color={brandBlue} size={40} strokeWidth={1.8} />}
                     onPress={() => router.push(Routes.commuterRental)}
+                    badge={
+                      pickupStatus?.kind === "rental" ? "ACTIVE" : undefined
+                    }
                   />
                   <ActionCard
                     title="Pickup"
                     description="Schedule a pickup easily"
                     icon={<PickupIcon color={brandBlue} size={40} />}
                     onPress={() => router.push(Routes.commuterPickup)}
+                    badge={
+                      pickupStatus && pickupStatus.kind !== "rental"
+                        ? "ACTIVE"
+                        : undefined
+                    }
                   />
                 </ActionRow>
 

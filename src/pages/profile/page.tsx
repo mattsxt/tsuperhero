@@ -6,13 +6,16 @@ import CircleUserRound from "lucide-react-native/icons/circle-user-round";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
 import FileText from "lucide-react-native/icons/file-text";
 import LogOut from "lucide-react-native/icons/log-out";
+import CircleHelp from "lucide-react-native/icons/circle-question-mark";
 import ShieldCog from "lucide-react-native/icons/shield-cog";
 import { useCallback, useRef, useState, type ReactNode } from "react";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { logout } from "@/api/v1/auth/controllers";
+import { describePickupBeforeSignOut } from "@/api/v1/pickups/controllers";
+import { ConfirmModal } from "@/components/confirm-modal";
 import {
   loadProfileSummary,
   peekProfileSummary,
@@ -21,19 +24,18 @@ import {
 } from "@/api/v1/profile/controllers";
 import { BottomNav, bottomNavHeight } from "@/components/bottom-nav";
 import {
-  ExpandedOnly,
-  headerLayoutTransition,
-  headerLogoTransition,
-  headerTitleTransition,
   StickyHeader,
   useScrollChrome,
+  CollapsibleHeader,
 } from "@/components/scroll-chrome";
 import { LoadingScreen, signOutMessages } from "@/components/LoadingScreen";
 import { Routes } from "@/constants/routes";
 import { useOnline } from "@/hooks/use-online";
+import { ErrorAlert } from "@/components/error-alert";
+import { palette } from "@/constants/colors";
 
-const brandBlue = "#193caf";
-const headerBlue = "#1034A6";
+const brandBlue = palette.brand;
+const headerBlue = palette.header;
 const cardEdgeBlue = "#1a2f8f";
 const iconBackground = "#d4ecf9";
 const dangerRed = "#a31818";
@@ -47,6 +49,9 @@ export default function ProfileScreen() {
     peekProfileSummary,
   );
   const [signingOut, setSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState("");
+  const [signOutWarning, setSignOutWarning] = useState<string | null>(null);
+  const [checkingSignOut, setCheckingSignOut] = useState(false);
   const online = useOnline();
 
   useFocusEffect(
@@ -69,8 +74,19 @@ export default function ProfileScreen() {
     }, []),
   );
 
+  const requestSignOut = async () => {
+    if (signingOut || checkingSignOut) return;
+    setSignOutError("");
+    setCheckingSignOut(true);
+    const warning = await describePickupBeforeSignOut();
+    setCheckingSignOut(false);
+    if (warning) setSignOutWarning(warning);
+    else void signOut();
+  };
+
   const signOut = async () => {
     if (signingOut) return;
+    setSignOutError("");
     setSigningOut(true);
     const [result] = await Promise.all([
       logout(),
@@ -79,7 +95,7 @@ export default function ProfileScreen() {
 
     if (!result.ok) {
       setSigningOut(false);
-      Alert.alert("Couldn't sign out", result.error);
+      setSignOutError(result.error);
       return;
     }
     router.replace(Routes.login);
@@ -165,6 +181,13 @@ export default function ProfileScreen() {
                   <ShieldCog color={brandBlue} size={18} strokeWidth={1.8} />
                 }
               />
+              <ActionRow
+                label="Help"
+                onPress={() => router.push(Routes.profileHelp)}
+                icon={
+                  <CircleHelp color={brandBlue} size={18} strokeWidth={1.8} />
+                }
+              />
               {summary?.userType === "transit_personnel" && (
                 <ActionRow
                   label="Vehicles & Documents"
@@ -174,11 +197,14 @@ export default function ProfileScreen() {
                   }
                 />
               )}
+              {!!signOutError && (
+                <ErrorAlert title="Sign out" message={signOutError} />
+              )}
               <ActionRow
                 label="Sign out"
                 danger
-                disabled={signingOut || !online}
-                onPress={signOut}
+                disabled={signingOut || checkingSignOut || !online}
+                onPress={requestSignOut}
                 icon={<LogOut color={dangerRed} size={18} strokeWidth={1.8} />}
                 trailing={null}
               />
@@ -187,47 +213,13 @@ export default function ProfileScreen() {
         </Animated.ScrollView>
 
         <StickyHeader chrome={chrome}>
-          <Animated.View
-            layout={headerLayoutTransition}
-            style={[
-              styles.header,
-              chrome.collapsed && styles.headerCollapsed,
-              { paddingTop: insets.top + (chrome.collapsed ? 10 : 16) },
-            ]}
-          >
-            <View
-              style={[
-                styles.headerRow,
-                chrome.collapsed && styles.headerRowCollapsedIcon,
-              ]}
-            >
-              <View style={styles.headerTextBlock}>
-                <Animated.Text
-                  style={[
-                    styles.title,
-                    chrome.collapsed && styles.titleCollapsed,
-                    headerTitleTransition,
-                  ]}
-                >
-                  User Profile and Actions
-                </Animated.Text>
-                <ExpandedOnly collapsed={chrome.collapsed}>
-                  <Text style={styles.subtitle}>
-                    Manage your own profile and settings
-                  </Text>
-                </ExpandedOnly>
-              </View>
-              <Animated.View
-                style={[
-                  styles.headerIcon,
-                  chrome.collapsed && styles.headerIconCollapsed,
-                  headerLogoTransition,
-                ]}
-              >
-                <CircleUserRound color="#ffffff" size={40} strokeWidth={1.8} />
-              </Animated.View>
-            </View>
-          </Animated.View>
+          <CollapsibleHeader
+            title="User Profile and Actions"
+            subtitle="Manage your own profile and settings"
+            icon={
+              <CircleUserRound color="#ffffff" size={40} strokeWidth={1.8} />
+            }
+          />
         </StickyHeader>
       </BlurTargetView>
 
@@ -239,6 +231,20 @@ export default function ProfileScreen() {
           hidden={chrome.navHidden}
         />
       )}
+      <ConfirmModal
+        visible={!!signOutWarning}
+        title="Sign out now?"
+        message={signOutWarning ?? ""}
+        confirmLabel="Sign out"
+        cancelLabel="Stay signed in"
+        destructive
+        icon={<LogOut color="#ffffff" size={22} strokeWidth={2.2} />}
+        onCancel={() => setSignOutWarning(null)}
+        onConfirm={() => {
+          setSignOutWarning(null);
+          void signOut();
+        }}
+      />
     </View>
   );
 }
@@ -380,7 +386,7 @@ const styles = StyleSheet.create({
   profileDetail: {
     color: "#111111",
     fontFamily: "Sora",
-    fontSize: 8,
+    fontSize: 10,
     marginTop: 3,
   },
   userTypeBadge: {
@@ -392,7 +398,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: "#0f2a5c",
   },
-  userTypeText: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 6 },
+  userTypeText: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 10 },
   actions: { gap: 12 },
   actionRow: { height: 62, paddingLeft: 20, paddingRight: 12 },
   iconCircle: {

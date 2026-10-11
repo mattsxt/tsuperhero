@@ -13,8 +13,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Routes, type AppRoute } from "@/constants/routes";
 import { useNotifications } from "@/hooks/use-notifications";
+import { palette } from "@/constants/colors";
 
-const navBlue = "#1034A6";
+const navBlue = palette.header;
 
 export const bottomNavHeight = 110;
 
@@ -154,7 +155,7 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     borderWidth: 2,
     borderColor: navBlue,
-    backgroundColor: "#e5383b",
+    backgroundColor: palette.danger,
   },
   badgeText: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 9 },
   tabPressed: { backgroundColor: "rgba(255, 255, 255, 0.15)" },

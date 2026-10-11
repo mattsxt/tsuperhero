@@ -33,14 +33,32 @@ import {
   type ProfileFormField,
 } from "@/api/v1/profile/controllers";
 import { BrandHeader } from "@/components/brand-header";
+import {
+  ErrorAlert,
+  ErrorMark,
+  firstFieldError,
+} from "@/components/error-alert";
 import { LoadingLogo } from "@/components/LoadingLogo";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { MiniToast, type MiniToastMessage } from "@/components/mini-toast";
 import { Routes } from "@/constants/routes";
+import { palette } from "@/constants/colors";
 
-const backgroundBlue = "#1034A6";
+const backgroundBlue = palette.header;
 const accentBlue = "#29A9E1";
 const errorRed = "#ffb4ab";
+const profileFieldOrder = [
+  "firstName",
+  "lastName",
+  "birthdate",
+  "contact",
+] as const;
+const profileFieldTitles = {
+  firstName: "First name",
+  lastName: "Last name",
+  birthdate: "Birthdate",
+  contact: "Contact number",
+};
 
 const stepFadeMs = 260;
 
@@ -133,6 +151,10 @@ export default function SetupScreen() {
     }
     setStep(4);
   };
+
+  const errorField = firstFieldError(errors, profileFieldOrder);
+  const alertTitle = errorField ? profileFieldTitles[errorField] : "Profile";
+  const alertMessage = errorField ? errors[errorField] : saveError;
 
   if (checking) return <LoadingScreen messages={setupLoadingMessages} />;
 
@@ -261,8 +283,8 @@ export default function SetupScreen() {
                   </View>
                 </FormField>
 
-                {!!saveError && (
-                  <Text style={styles.saveError}>{saveError}</Text>
+                {!!alertMessage && (
+                  <ErrorAlert title={alertTitle} message={alertMessage} />
                 )}
 
                 <PrimaryButton
@@ -447,9 +469,11 @@ function FormField({
 }) {
   return (
     <View style={styles.field}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      {children}
-      {!!error && <Text style={styles.fieldError}>{error}</Text>}
+      <View style={styles.fieldLabelRow}>
+        <Text style={styles.fieldLabel}>{label}</Text>
+        {!!error && <ErrorMark color={errorRed} />}
+      </View>
+      <View style={!!error && styles.fieldErrorOutline}>{children}</View>
     </View>
   );
 }
@@ -489,7 +513,7 @@ const styles = StyleSheet.create({
   primaryButtonText: {
     color: "#ffffff",
     fontFamily: "SoraBold",
-    fontSize: 9,
+    fontSize: 10,
   },
   buttonDisabled: { opacity: 0.6 },
   backButton: { position: "absolute", top: 8, left: 16, zIndex: 1 },
@@ -506,12 +530,13 @@ const styles = StyleSheet.create({
   fieldLabel: {
     color: "#ffffff",
     fontFamily: "Sora",
-    fontSize: 9,
+    fontSize: 10,
   },
-  fieldError: {
-    color: errorRed,
-    fontFamily: "Sora",
-    fontSize: 8,
+  fieldLabelRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+  fieldErrorOutline: {
+    borderWidth: 1.5,
+    borderColor: errorRed,
+    borderRadius: 9,
   },
   input: {
     height: 35,
@@ -578,10 +603,4 @@ const styles = StyleSheet.create({
   sheetTitle: { color: "#111111", fontFamily: "SoraBold", fontSize: 14 },
   sheetCancel: { color: "#6b6b6b", fontFamily: "Sora", fontSize: 14 },
   sheetDone: { color: backgroundBlue, fontFamily: "SoraBold", fontSize: 14 },
-  saveError: {
-    color: errorRed,
-    fontFamily: "Sora",
-    fontSize: 9,
-    textAlign: "center",
-  },
 });

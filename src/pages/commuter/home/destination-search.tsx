@@ -41,8 +41,10 @@ import { formatDistance } from "@/api/v1/waiting-areas/controllers";
 import { LoadingLogo } from "@/components/LoadingLogo";
 import { Routes } from "@/constants/routes";
 import { useTransitRoutes } from "@/hooks/use-transit-routes";
+import { ErrorAlert } from "@/components/error-alert";
+import { palette } from "@/constants/colors";
 
-const brandBlue = "#193caf";
+const brandBlue = palette.brand;
 const softBlue = "#e3ecfb";
 const mutedText = "#6b6b6b";
 const cardEdgeBlue = "#1a2f8f";
@@ -390,9 +392,12 @@ function buildResultItems({
     items.push(<SectionLabel key="places-label" label="PLACES" />);
     if (placeProblem) {
       items.push(
-        <Text key="places-problem" style={styles.problem}>
-          {placeProblem}
-        </Text>,
+        <ErrorAlert
+          key="places-problem"
+          title="Places"
+          message={placeProblem}
+          style={styles.problem}
+        />,
       );
     }
     if (searchingPlaces && places.length === 0) {
@@ -484,8 +489,7 @@ function buildChosenItems(
     if (nearestRoute && nearestRoute.distanceMeters > 200) {
       items.push(
         <Text key="tricycle-suggestion" style={styles.routeSuggestion}>
-          {place.name} is {formatDistance(nearestRoute.distanceMeters)} from
-          {" "}
+          {place.name} is {formatDistance(nearestRoute.distanceMeters)} from{" "}
           {nearestRoute.route.name}. Consider taking a tricycle to reach this
           destination.
         </Text>,
@@ -534,7 +538,7 @@ const styles = StyleSheet.create({
     marginTop: 1,
     color: "#111111",
     fontFamily: "Sora",
-    fontSize: 9,
+    fontSize: 10,
   },
   placeholder: { color: mutedText },
   searchDivider: {
@@ -558,7 +562,7 @@ const styles = StyleSheet.create({
     paddingBottom: 6,
     backgroundColor: "#ffffff",
   },
-  sectionLabel: { color: brandBlue, fontFamily: "SoraBold", fontSize: 9 },
+  sectionLabel: { color: brandBlue, fontFamily: "SoraBold", fontSize: 10 },
   empty: {
     color: mutedText,
     fontFamily: "Sora",
@@ -591,16 +595,11 @@ const styles = StyleSheet.create({
   rowDetail: {
     color: mutedText,
     fontFamily: "Sora",
-    fontSize: 9,
+    fontSize: 10,
     marginTop: 1,
   },
   placeIcon: { backgroundColor: "#c81e1e" },
   loadingRow: { paddingVertical: 10 },
-  problem: {
-    color: "#d93025",
-    fontFamily: "Sora",
-    fontSize: 10,
-    paddingVertical: 8,
-  },
+  problem: { marginVertical: 8 },
   chosenHeader: { flexDirection: "row", alignItems: "center", gap: 6 },
 });

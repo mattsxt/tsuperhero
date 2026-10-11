@@ -1,17 +1,15 @@
 import { getSupabaseClient } from "@/api/v1/client";
 
-export type RentalVehicleType = "Van" | "Jeepney" | "Bus";
+export type RentalVehicleType = "Van" | "Jeepney" | "Bus" | "Tricycle";
 
-export type RentalDriverRow = {
-  driver_id: string;
-  vehicle_id: string;
-  driver_name: string;
-  years_of_experience: number | null;
-  plate_number: string;
+export type RentalUnitRow = {
+  unit_id: string;
   vehicle_type: string;
-  max_capacity: number;
-  is_modern: boolean;
-  cooperative_name: string | null;
+  status: "open" | "booked" | "completed";
+  is_mine: boolean;
+  driver_name: string | null;
+  plate_number: string | null;
+  driver_contact: string | null;
 };
 
 export type RentalRow = {
@@ -36,10 +34,16 @@ export type RentalRow = {
   commuter_contact: string | null;
   rating_score: number | null;
   rating_feedback: string | null;
+  driver_assigned?: boolean;
+  requested_vehicle_type?: string | null;
+  schedule_conflict?: boolean;
+  units?: RentalUnitRow[];
+  unit_id?: string;
+  unit_vehicle_type?: string;
 };
 
-export type RentalRequestParams = {
-  p_driver_id: string;
+export type RentalPostParams = {
+  p_vehicles: RentalVehicleType[];
   p_pickup_location: string;
   p_pickup_latitude: number;
   p_pickup_longitude: number;
@@ -57,21 +61,7 @@ export type RentalRequestParams = {
 const rpc = () => getSupabaseClient();
 
 export const rentalRoutes = {
-  findDrivers: (
-    vehicleType: RentalVehicleType,
-    passengers: number,
-    pickupTime: string,
-    returnTime: string | null,
-  ) =>
-    rpc().rpc("find_rental_drivers", {
-      p_vehicle_type: vehicleType,
-      p_passengers: passengers,
-      p_pickup_time: pickupTime,
-      p_return_time: returnTime,
-    }),
-
-  request: (params: RentalRequestParams) =>
-    rpc().rpc("request_charter_rental", params),
+  post: (params: RentalPostParams) => rpc().rpc("post_charter_rental", params),
 
   listMine: () => rpc().rpc("get_my_rentals"),
 
@@ -79,6 +69,14 @@ export const rentalRoutes = {
     rpc().rpc("cancel_my_rental", { p_request_id: requestId }),
 
   listForDriver: () => rpc().rpc("get_my_rental_requests"),
+
+  jobBoard: () => rpc().rpc("get_rental_job_board"),
+
+  acceptJob: (unitId: string) =>
+    rpc().rpc("accept_rental_job", { p_unit_id: unitId }),
+
+  dismissJob: (requestId: string) =>
+    rpc().rpc("dismiss_rental_job", { p_request_id: requestId }),
 
   respond: (requestId: string, accept: boolean) =>
     rpc().rpc("respond_to_rental", {

@@ -1,7 +1,10 @@
 import { Image } from "expo-image";
+import { router } from "expo-router";
+import ArrowLeft from "lucide-react-native/icons/arrow-left";
+import MapIcon from "lucide-react-native/icons/map";
 import MapPin from "lucide-react-native/icons/map-pin";
 import Users from "lucide-react-native/icons/users";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AppState,
   Modal,
@@ -18,10 +21,23 @@ import {
   type ShareInvite,
 } from "@/api/v1/pickups/controllers";
 import { LoadingLogo } from "@/components/LoadingLogo";
+import { LocationSettingsButton } from "@/components/location-settings-button";
 import { moduleColors } from "@/components/module-ui";
 import { useNotifications } from "@/hooks/use-notifications";
+import { WaitingAreaDirectionsMap } from "@/pages/commuter/pickup/waiting-area-directions-map";
+import { Routes } from "@/constants/routes";
+import { getDistanceMeters } from "@/utils/geo";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ErrorAlert } from "@/components/error-alert";
 
-const { brandBlue, mutedText, softBlue, text, error } = moduleColors;
+const { brandBlue, mutedText, softBlue, text } = moduleColors;
+
+const inviteTypes = new Set(["pickup_shared", "pickup_location_changed"]);
+
+const formatDistance = (meters: number) =>
+  meters < 1000
+    ? `${Math.round(meters / 10) * 10} m away`
+    : `${(meters / 1000).toFixed(1)} km away`;
 
 const passengerLabel = (count: number) =>
   `${count} ${count === 1 ? "passenger" : "passengers"}`;
@@ -31,12 +47,28 @@ export function ShareInviteModal() {
   const [invites, setInvites] = useState<ShareInvite[]>([]);
   const [busy, setBusy] = useState<"accept" | "decline" | null>(null);
   const [problem, setProblem] = useState("");
+  const [mapOpen, setMapOpen] = useState(false);
+  const [me, setMe] = useState<{ lat: number; lng: number } | null>(null);
+  const [locationProblem, setLocationProblem] = useState<string | null>(null);
+  const insets = useSafeAreaInsets();
+  const trackMe = useCallback(
+    (location: { lat: number; lng: number } | null) => setMe(location),
+    [],
+  );
+  const trackLocationProblem = useCallback(
+    (message: string | null) => setLocationProblem(message),
+    [],
+  );
 
   const shareNotifications = useMemo(
-    () => notifications.filter((item) => item.type === "pickup_shared"),
+    () => notifications.filter((item) => inviteTypes.has(item.type)),
     [notifications],
   );
   const shareKey = shareNotifications.map((item) => item.id).join(",");
+  const cancelledKey = notifications
+    .filter((item) => item.type === "pickup_shared_cancelled")
+    .map((item) => item.id)
+    .join(",");
 
   const refresh = () =>
     loadShareInvites().then((result) => {
@@ -58,7 +90,7 @@ export function ShareInviteModal() {
       active = false;
       subscription.remove();
     };
-  }, [shareKey]);
+  }, [shareKey, cancelledKey]);
 
   const invite = shareKey ? invites[0] : undefined;
   if (!invite) return null;
@@ -79,12 +111,81 @@ export function ShareInviteModal() {
         .filter((item) => item.data.request_id === invite.requestId)
         .map((item) => item.id),
     );
+    setMapOpen(false);
     setInvites((current) =>
       current.filter((item) => item.requestId !== invite.requestId),
     );
+    if (accept) router.push(Routes.commuterPickup);
   };
 
   const { from } = invite;
+  const pickupLocation = invite.location;
+
+  if (mapOpen && pickupLocation) {
+    return (
+      <Modal
+        visible
+        animationType="slide"
+        statusBarTranslucent
+        onRequestClose={() => setMapOpen(false)}
+      >
+        <View style={styles.mapScreen}>
+          <WaitingAreaDirectionsMap
+            area={{
+              id: `share-invite-${invite.requestId}`,
+              name: invite.pickupName,
+              type: "stop",
+              lat: pickupLocation.lat,
+              lng: pickupLocation.lng,
+              routeId: null,
+              vicinity: null,
+            }}
+            onLocationChange={trackMe}
+            onLocationError={trackLocationProblem}
+            locateTop={insets.top + 12}
+            padTop={insets.top + 80}
+            padBottom={insets.bottom + 150}
+          />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Back to the invitation"
+            onPress={() => setMapOpen(false)}
+            style={({ pressed }) => [
+              styles.mapBack,
+              { top: insets.top + 12 },
+              pressed && styles.pressed,
+            ]}
+          >
+            <ArrowLeft color={brandBlue} size={18} strokeWidth={2.5} />
+            <Text style={styles.mapBackText}>Back to invitation</Text>
+          </Pressable>
+          <View
+            style={[styles.mapPanel, { paddingBottom: insets.bottom + 16 }]}
+          >
+            <Text style={styles.eyebrow}>PICKUP LOCATION</Text>
+            <Text style={styles.mapTitle} numberOfLines={2}>
+              {invite.pickupName}
+            </Text>
+            {locationProblem ? (
+              <View>
+                <ErrorAlert title="Your location" message={locationProblem} />
+                <LocationSettingsButton
+                  color={brandBlue}
+                  background={softBlue}
+                />
+              </View>
+            ) : (
+              <Text style={styles.detailText}>
+                {me
+                  ? `You’re ${formatDistance(getDistanceMeters(me, pickupLocation))}. Follow the route to the pickup point.`
+                  : "Finding your location to show directions…"}
+              </Text>
+            )}
+          </View>
+        </View>
+      </Modal>
+    );
+  }
 
   return (
     <Modal
@@ -96,30 +197,62 @@ export function ShareInviteModal() {
     >
       <View style={styles.root}>
         <View style={styles.card}>
-          <Text style={styles.eyebrow}>SHARE A RIDE REQUEST</Text>
+          <View style={styles.eyebrowRow}>
+            <Text style={styles.eyebrow}>
+              {invite.locationChanged
+                ? "PICKUP LOCATION CHANGED"
+                : "SHARE A RIDE REQUEST"}
+            </Text>
+            {invites.length > 1 && (
+              <Text
+                style={styles.queue}
+                accessibilityLabel={`Invitation 1 of ${invites.length}`}
+              >
+                1 OF {invites.length}
+              </Text>
+            )}
+          </View>
           <View style={styles.sender}>
             <View style={styles.avatar}>
-              {from.picture ? (
+              <Text style={styles.avatarText}>{from.initials}</Text>
+              {!!from.picture && (
                 <Image
                   source={{ uri: from.picture }}
                   style={StyleSheet.absoluteFill}
                   contentFit="cover"
                 />
-              ) : (
-                <Text style={styles.avatarText}>{from.initials}</Text>
               )}
             </View>
             <Text style={styles.title}>
-              {from.name} wants to share a ride with you
+              {invite.locationChanged
+                ? `${from.name} changed the pickup location`
+                : `${from.name} wants to share a ride with you`}
             </Text>
           </View>
 
           <View style={styles.detail}>
             <MapPin color={brandBlue} size={16} strokeWidth={2} />
             <Text style={styles.detailText} numberOfLines={2}>
-              Pickup at {invite.pickupName}
+              {invite.locationChanged ? "New pickup at" : "Pickup at"}{" "}
+              {invite.pickupName}
             </Text>
           </View>
+          {!!pickupLocation && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="View the pickup location on the map"
+              onPress={() => setMapOpen(true)}
+              style={({ pressed }) => [
+                styles.mapButton,
+                pressed && styles.pressed,
+              ]}
+            >
+              <MapIcon color={brandBlue} size={15} strokeWidth={2} />
+              <Text style={styles.mapButtonText}>
+                View on map with directions
+              </Text>
+            </Pressable>
+          )}
           <View style={styles.detail}>
             <Users color={brandBlue} size={16} strokeWidth={2} />
             <Text style={styles.detailText}>
@@ -129,11 +262,18 @@ export function ShareInviteModal() {
           </View>
 
           <Text style={styles.helper}>
-            If you decline, the pickup will be for{" "}
-            {passengerLabel(Math.max(1, invite.passengers - 1))}.
+            {invite.locationChanged
+              ? "Accept to keep riding together from the new location. If you decline, you’ll leave this shared ride."
+              : `If you decline, the pickup will be for ${passengerLabel(Math.max(1, invite.passengers - 1))}.`}
           </Text>
 
-          {!!problem && <Text style={styles.problem}>{problem}</Text>}
+          {!!problem && (
+            <ErrorAlert
+              title="Ride invitation"
+              message={problem}
+              style={styles.problem}
+            />
+          )}
 
           <View style={styles.actions}>
             <Pressable
@@ -175,6 +315,21 @@ export function ShareInviteModal() {
 }
 
 const styles = StyleSheet.create({
+  eyebrowRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  queue: {
+    paddingVertical: 2,
+    paddingHorizontal: 8,
+    borderRadius: 999,
+    overflow: "hidden",
+    backgroundColor: softBlue,
+    color: brandBlue,
+    fontFamily: "SoraBold",
+    fontSize: 10,
+  },
   root: {
     flex: 1,
     justifyContent: "center",
@@ -189,7 +344,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     backgroundColor: "#ffffff",
   },
-  eyebrow: { color: mutedText, fontFamily: "SoraBold", fontSize: 8 },
+  eyebrow: { color: mutedText, fontFamily: "SoraBold", fontSize: 10 },
   sender: {
     flexDirection: "row",
     alignItems: "center",
@@ -227,13 +382,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     lineHeight: 15,
   },
-  problem: {
-    marginTop: 10,
-    color: error,
-    fontFamily: "Sora",
-    fontSize: 10,
-    lineHeight: 15,
-  },
+  problem: { marginTop: 10 },
   actions: { flexDirection: "row", gap: 10, marginTop: 18 },
   decline: {
     flex: 1,
@@ -261,4 +410,45 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   pressed: { opacity: 0.8 },
+  mapButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 6,
+    marginTop: 2,
+    marginBottom: 4,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: softBlue,
+  },
+  mapButtonText: { color: brandBlue, fontFamily: "SoraBold", fontSize: 10 },
+  mapScreen: { flex: 1, backgroundColor: "#e8eaed" },
+  mapBack: {
+    position: "absolute",
+    left: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    backgroundColor: "#ffffff",
+    elevation: 4,
+  },
+  mapBackText: { color: brandBlue, fontFamily: "SoraBold", fontSize: 11 },
+  mapPanel: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    gap: 8,
+    paddingTop: 18,
+    paddingHorizontal: 16,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    backgroundColor: "#ffffff",
+    elevation: 8,
+  },
+  mapTitle: { color: brandBlue, fontFamily: "SoraBold", fontSize: 16 },
 });

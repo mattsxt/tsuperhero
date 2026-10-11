@@ -8,6 +8,7 @@ import {
   showLocationSharingNotice,
 } from "@/api/v1/notifications/device";
 import { sendLocation } from "@/api/v1/operator/outbox";
+import { palette } from "@/constants/colors";
 
 type TaskManagerModule = typeof import("expo-task-manager");
 
@@ -68,7 +69,7 @@ async function startBackgroundUpdates(): Promise<
         notificationTitle: "Sharing your location",
         notificationBody:
           "Commuters and your cooperative can see your vehicle until you end the trip.",
-        notificationColor: "#1034A6",
+        notificationColor: palette.header,
         killServiceOnDestroy: true,
       },
     });

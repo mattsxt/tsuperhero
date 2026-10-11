@@ -9,6 +9,7 @@ import {
 } from "react-native";
 
 import { useOnline } from "@/hooks/use-online";
+import { palette } from "@/constants/colors";
 
 export function EmptyState({
   icon,
@@ -60,7 +61,7 @@ const styles = StyleSheet.create({
   iconOffline: { backgroundColor: "#fff4e5" },
   titleOffline: { color: "#9a3412" },
   title: {
-    color: "#193caf",
+    color: palette.brand,
     fontFamily: "SoraBold",
     fontSize: 14,
     marginTop: 14,

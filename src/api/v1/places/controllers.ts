@@ -1,5 +1,5 @@
 import * as Location from "expo-location";
-import { Platform } from "react-native";
+import { Linking, Platform } from "react-native";
 
 import { readCache, writeCache } from "@/api/v1/cache";
 import { getErrorMessage } from "@/api/v1/client";
@@ -20,7 +20,7 @@ export type PlaceSuggestion = {
   address: string;
 };
 
-export const minPlaceQueryLength = 2;
+export const minPlaceQueryLength = 1;
 
 export function createPlacesSession() {
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (char) => {
@@ -41,13 +41,11 @@ export async function searchPlaces(
       throw new Error(response.message ?? "Place search failed.");
     }
 
-    const remote = response.suggestions.map(
-      (suggestion): PlaceSuggestion => ({
-        id: suggestion.mapbox_id,
-        name: suggestion.name,
-        address: suggestion.place_formatted ?? suggestion.full_address ?? "",
-      }),
-    );
+    const remote = response.suggestions.map((suggestion): PlaceSuggestion => ({
+      id: suggestion.mapbox_id,
+      name: suggestion.name,
+      address: suggestion.place_formatted ?? suggestion.full_address ?? "",
+    }));
     return { suggestions: remote };
   } catch (error) {
     return { suggestions: [], error: getErrorMessage(error) };
@@ -112,11 +110,43 @@ async function getPosition() {
   return current ?? (await Location.getLastKnownPositionAsync());
 }
 
+export const blockedLocationMessage =
+  "Location access is turned off for this app. Open Settings and allow location to continue.";
+
+export type LocationPermission = "granted" | "undetermined" | "blocked";
+
+export async function getLocationPermission(): Promise<LocationPermission> {
+  const permission = await Location.getForegroundPermissionsAsync().catch(
+    () => null,
+  );
+  if (!permission) return "undetermined";
+  if (permission.granted) return "granted";
+  return permission.canAskAgain ? "undetermined" : "blocked";
+}
+
+export async function requestLocationPermission(): Promise<LocationPermission> {
+  const permission = await Location.requestForegroundPermissionsAsync().catch(
+    () => null,
+  );
+  if (!permission) return "undetermined";
+  if (permission.granted) return "granted";
+  return permission.canAskAgain ? "undetermined" : "blocked";
+}
+
+export const canOpenAppSettings = Platform.OS !== "web";
+export function openAppSettings() {
+  if (canOpenAppSettings) void Linking.openSettings();
+}
+
 export async function getCurrentPlace(): Promise<Result<Place>> {
   try {
     const permission = await Location.requestForegroundPermissionsAsync();
     if (!permission.granted) {
-      return failure("Allow location access to use your current location.");
+      return failure(
+        permission.canAskAgain
+          ? "Allow location access to use your current location."
+          : blockedLocationMessage,
+      );
     }
 
     if (!(await Location.hasServicesEnabledAsync())) {
@@ -193,7 +223,11 @@ export async function watchLocation(
     () => null,
   );
   if (!permission?.granted) {
-    return failure("Allow location access to show where you are.");
+    return failure(
+      permission && !permission.canAskAgain
+        ? blockedLocationMessage
+        : "Allow location access to show where you are.",
+    );
   }
   if (!(await Location.hasServicesEnabledAsync().catch(() => false))) {
     return failure("Turn on Location in your device settings.");

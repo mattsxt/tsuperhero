@@ -4,13 +4,14 @@ import { Platform } from "react-native";
 
 import type { AppNotification } from "@/api/v1/notifications/controllers";
 import * as Notifications from "@/api/v1/notifications/expo-notifications";
+import { palette } from "@/constants/colors";
 
 type NotificationData = Record<string, unknown>;
 
 const updatesChannel = "updates";
 const locationChannel = "location-sharing";
 const locationNoticeId = "location-sharing";
-const brandColor = "#1034A6";
+const brandColor = palette.header;
 
 const supported = Platform.OS !== "web";
 

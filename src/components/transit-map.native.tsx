@@ -17,7 +17,10 @@ import { mapStyleUrl, mapboxToken } from "@/constants/mapbox";
 import { waitingAreaPinColors } from "@/constants/waiting-area";
 import { vehicleIconUris } from "@/constants/vehicle-icon-uris";
 
-export type { MapCenter, TransitMapState } from "@/components/transit-map-types";
+export type {
+  MapCenter,
+  TransitMapState,
+} from "@/components/transit-map-types";
 
 Mapbox.setAccessToken(mapboxToken ?? null);
 
@@ -201,7 +204,9 @@ function WaitingAreaMarker({
             >
               {area.name}
             </Text>
-            {area.tag ? <Text style={styles.waitingTag}>{area.tag}</Text> : null}
+            {area.tag ? (
+              <Text style={styles.waitingTag}>{area.tag}</Text>
+            ) : null}
           </View>
         ) : null}
       </View>
@@ -343,7 +348,8 @@ export function TransitMap({
     return (
       <View style={styles.message}>
         <Text style={styles.messageText}>
-          Missing Mapbox public token. Set EXPO_PUBLIC_MAPBOX_TOKEN to a public pk. token in .env and rebuild the app.
+          Missing Mapbox public token. Set EXPO_PUBLIC_MAPBOX_TOKEN to a public
+          pk. token in .env and rebuild the app.
         </Text>
       </View>
     );
@@ -571,7 +577,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: "#e3ecfb",
     color: brandBlue,
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "bold",
   },
   pickupCount: {
@@ -597,7 +603,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
     color: "#193caf",
     fontFamily: "SoraBold",
-    fontSize: 9,
+    fontSize: 10,
     textAlign: "center",
   },
   meHalo: {

@@ -11,7 +11,6 @@ import {
   Platform,
   Pressable,
   StyleSheet,
-  Text,
   View,
 } from "react-native";
 import Animated from "react-native-reanimated";
@@ -33,8 +32,19 @@ import { PasswordStrength } from "@/components/password-strength";
 import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
 import { goBackOr } from "@/utils/navigation";
+import {
+  ErrorAlert,
+  ErrorOutline,
+  firstFieldError,
+} from "@/components/error-alert";
 
 const { brandBlue, error: errorRed } = moduleColors;
+const fieldOrder = ["current", "next", "confirm"] as const;
+const fieldTitles = {
+  current: "Current password",
+  next: "New password",
+  confirm: "Confirm new password",
+};
 
 export default function SecurityScreen() {
   const insets = useSafeAreaInsets();
@@ -72,6 +82,10 @@ export default function SecurityScreen() {
       { text: "OK", onPress: goBack },
     ]);
   };
+
+  const errorField = firstFieldError(errors, fieldOrder);
+  const alertTitle = errorField ? fieldTitles[errorField] : "Password";
+  const alertMessage = errorField ? errors[errorField] : saveError;
 
   return (
     <View style={styles.screen}>
@@ -131,13 +145,25 @@ export default function SecurityScreen() {
               />
             </Field>
 
-            {!!saveError && <Text style={styles.saveError}>{saveError}</Text>}
-
+            {!!alertMessage && (
+              <ErrorAlert
+                title={alertTitle}
+                message={alertMessage}
+                style={styles.saveError}
+              />
+            )}
             <ModuleButton
               label={saving ? "UPDATING..." : "UPDATE PASSWORD"}
               disabled={saving || !current || !next || !confirm}
+              disabledHint={
+                !saving
+                  ? "Fill in your current password, a new password and the confirmation."
+                  : undefined
+              }
               onPress={save}
-              style={styles.saveButton}
+              style={
+                alertMessage ? styles.saveButtonAfterError : styles.saveButton
+              }
             />
           </View>
         </Animated.ScrollView>
@@ -166,9 +192,10 @@ function Field({
 }) {
   return (
     <View style={styles.field}>
-      <FieldLabel>{label}</FieldLabel>
-      {children}
-      {!!error && <Text style={styles.fieldError}>{error}</Text>}
+      <FieldLabel invalid={!!error}>{label}</FieldLabel>
+      <ErrorOutline invalid={!!error} color={errorRed}>
+        {children}
+      </ErrorOutline>
     </View>
   );
 }
@@ -221,18 +248,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#ffffff" },
   body: { paddingHorizontal: 16, paddingTop: 8 },
   field: { marginTop: 18 },
-  fieldError: {
-    color: errorRed,
-    fontFamily: "Sora",
-    fontSize: 9,
-    marginTop: 6,
-  },
-  saveError: {
-    color: errorRed,
-    fontFamily: "Sora",
-    fontSize: 10,
-    textAlign: "center",
-    marginTop: 18,
-  },
+  saveError: { marginTop: 28 },
   saveButton: { marginTop: 28 },
+  saveButtonAfterError: { marginTop: 12 },
 });

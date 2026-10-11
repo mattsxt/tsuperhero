@@ -1,3 +1,4 @@
+import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
 import Eye from "lucide-react-native/icons/eye";
@@ -9,7 +10,7 @@ import UserRound from "lucide-react-native/icons/user-round";
 import Users from "lucide-react-native/icons/users";
 import UsersRound from "lucide-react-native/icons/users-round";
 import X from "lucide-react-native/icons/x";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -18,11 +19,15 @@ import {
   cancelPickup,
   getKnownActivePickup,
   loadActivePickup,
+  getKnownSharedRide,
+  leaveSharedRide,
   loadMyPickupDraft,
+  loadMySharedRide,
   loadPickupCompanionStatuses,
   loadRequestStatus,
-  maxPickupPassengers,
-  maxRiders,
+  maxRidersFor,
+  pickupVehicleCapacity,
+  pickupVehicleNames,
   minPickupPassengers,
   queuePickupCancellation,
   removePickupCompanion,
@@ -32,8 +37,15 @@ import {
   type PickupRequest,
   type PickupVehicle,
   type Rider,
+  type SharedRide,
 } from "@/api/v1/pickups/controllers";
-import type { Place } from "@/api/v1/places/controllers";
+import {
+  type Place,
+  blockedLocationMessage,
+  getLocationPermission,
+  requestLocationPermission,
+  type LocationPermission,
+} from "@/api/v1/places/controllers";
 import {
   findNearestRoute,
   getTransitRoutes,
@@ -49,7 +61,14 @@ import {
   type WaitingAreaRecommendation,
   type WaitingAreaType,
 } from "@/api/v1/waiting-areas/controllers";
+import {
+  activeRentalOf,
+  loadMyRentals,
+  type Rental,
+} from "@/api/v1/rentals/controllers";
 import { ConnectionRequired } from "@/components/connection-required";
+import { LocationSettingsButton } from "@/components/location-settings-button";
+import { LoadingLogo } from "@/components/LoadingLogo";
 import {
   ModuleButton,
   moduleColors,
@@ -66,23 +85,17 @@ import { usePolling } from "@/hooks/use-polling";
 import { getDistanceMeters } from "@/utils/geo";
 import { goBackOr } from "@/utils/navigation";
 
+import { ErrorAlert, ErrorMark, ErrorOutline } from "@/components/error-alert";
 import { ActivePickup } from "./active-pickup";
 import { BoardedScreen } from "./boarded-screen";
-import { PickupAlert } from "./pickup-alert";
 import { PinLocationPicker } from "./pin-location-picker";
 import { ShareRideField } from "./share-ride-field";
-import { WaitingAreaConfirmation } from "./waiting-area-confirmation";
+import { LocationPrimer } from "./location-primer";
+import { RentalInProgress } from "./rental-in-progress";
+import { SharedRideScreen } from "./shared-ride";
 import { WaitingAreaDirectionsMap } from "./waiting-area-directions-map";
 
-type WaitingAreaGate = {
-  area: WaitingAreaRecommendation;
-  passengers: number;
-  riders: Rider[];
-  vehicle: PickupVehicle;
-  draftRequestId: string | null;
-};
-
-const { brandBlue, softBlue, mutedText, text } = moduleColors;
+const { brandBlue, softBlue, mutedText, text, error } = moduleColors;
 
 function formatDistance(meters: number) {
   return meters < 1000
@@ -121,6 +134,12 @@ export default function PickupScreen() {
   const [riders, setRiders] = useState<Rider[]>([]);
   const ridersRef = useRef<Rider[]>([]);
   const [draftRequestId, setDraftRequestId] = useState<string | null>(null);
+  const [sharedRide, setSharedRide] = useState<SharedRide | null>(
+    getKnownSharedRide,
+  );
+  const [sharedRideLoaded, setSharedRideLoaded] = useState(false);
+  const [activeRental, setActiveRental] = useState<Rental | null>(null);
+  const savedLocationKey = useRef<string | null>(null);
   const online = useOnline();
   const [passengers, setPassengers] = useState(1);
   const [problem, setProblem] = useState("");
@@ -130,8 +149,10 @@ export default function PickupScreen() {
   const companionOperationsRef = useRef(0);
   const [pinOpen, setPinOpen] = useState(false);
   const [waitingAreaMapOpen, setWaitingAreaMapOpen] = useState(false);
-  const [waitingAreaGate, setWaitingAreaGate] =
-    useState<WaitingAreaGate | null>(null);
+  const [locationPermission, setLocationPermission] =
+    useState<LocationPermission | null>(null);
+  const [primerSkipped, setPrimerSkipped] = useState(false);
+  const [formKey, setFormKey] = useState(0);
 
   const clearProblem = () => {
     setProblem("");
@@ -153,7 +174,29 @@ export default function PickupScreen() {
   };
 
   useEffect(() => {
+    let active = true;
+    getLocationPermission().then((permission) => {
+      if (active) setLocationPermission(permission);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const allowLocation = async () => {
+    setLocationPermission(await requestLocationPermission());
+  };
+
+  useEffect(() => {
     let mounted = true;
+    Promise.all([loadMySharedRide(), loadMyRentals()]).then(
+      ([shared, rentals]) => {
+        if (!mounted) return;
+        if (shared.ok) setSharedRide(shared.data);
+        if (rentals.ok) setActiveRental(activeRentalOf(rentals.data));
+        setSharedRideLoaded(true);
+      },
+    );
     Promise.all([
       loadActivePickup(),
       loadTransitRoutes(),
@@ -168,6 +211,7 @@ export default function PickupScreen() {
       setWaitingAreasLoaded(true);
       if (draft.ok && draft.data) {
         setDraftRequestId(draft.data.request_id);
+        savedLocationKey.current = `${draft.data.device_latitude}:${draft.data.device_longitude}:${draft.data.pickup_destination}`;
         setPlace({
           id: draft.data.request_id,
           name: draft.data.pickup_destination,
@@ -201,7 +245,8 @@ export default function PickupScreen() {
         ridersRef.current.some(
           (current) =>
             current.userId === rider.userId &&
-            current.inviteStatus === rider.inviteStatus,
+            current.inviteStatus === rider.inviteStatus &&
+            current.arrived === rider.arrived,
         ),
       )
     ) {
@@ -214,7 +259,10 @@ export default function PickupScreen() {
     setRiders(next);
     if (difference) {
       setPassengers((current) =>
-        Math.max(minPickupPassengers, current + difference),
+        Math.min(
+          pickupVehicleCapacity[vehicle],
+          Math.max(minPickupPassengers, current + difference),
+        ),
       );
     }
   };
@@ -223,7 +271,6 @@ export default function PickupScreen() {
     if (online || !active) return;
     const disconnectedPickup = active;
     setActive(null);
-    setWaitingAreaGate(null);
     void queuePickupCancellation(disconnectedPickup);
   }, [active, online]);
 
@@ -234,6 +281,13 @@ export default function PickupScreen() {
   const canRecommendWaitingArea = !!place && !!nearestRoute;
   const hasPendingCompanions = riders.some(
     (rider) => rider.inviteStatus === "pending",
+  );
+  const pendingNames = riders
+    .filter((rider) => rider.inviteStatus === "pending")
+    .map((rider) => rider.name.split(" ")[0]);
+  const locationLocked = hasPendingCompanions;
+  const hasAcceptedCompanions = riders.some(
+    (rider) => rider.inviteStatus === "accepted",
   );
   const activeCompanionCount = riders.filter(
     (rider) => rider.inviteStatus !== "rejected",
@@ -276,16 +330,56 @@ export default function PickupScreen() {
     routePaths,
     routeWaitingAreas,
   ]);
-  const priorityWaitingArea = routeWaitingAreas.find(
-    (area) => area.id === priorityWaitingAreaId,
-  );
-  const recommendedWaitingArea =
-    place && priorityWaitingArea
+  const recommendedWaitingArea = useMemo(() => {
+    const priorityWaitingArea = routeWaitingAreas.find(
+      (area) => area.id === priorityWaitingAreaId,
+    );
+    return place && priorityWaitingArea
       ? {
           ...priorityWaitingArea,
           distanceMeters: getDistanceMeters(place, priorityWaitingArea),
         }
       : nearestWaitingArea;
+  }, [routeWaitingAreas, priorityWaitingAreaId, place, nearestWaitingArea]);
+
+  const requestLocation = useMemo(
+    () =>
+      useWaitingArea && recommendedWaitingArea
+        ? {
+            name: recommendedWaitingArea.name,
+            lat: recommendedWaitingArea.lat,
+            lng: recommendedWaitingArea.lng,
+            waitingAreaType: recommendedWaitingArea.type,
+          }
+        : place,
+    [useWaitingArea, recommendedWaitingArea, place],
+  );
+  const requestLocationKey = requestLocation
+    ? `${requestLocation.lat}:${requestLocation.lng}:${requestLocation.name}`
+    : null;
+
+  useEffect(() => {
+    if (!draftRequestId || !requestLocation || !requestLocationKey) return;
+    if (requestLocationKey === savedLocationKey.current) return;
+    if (!hasAcceptedCompanions || locationLocked) return;
+    savedLocationKey.current = requestLocationKey;
+    void savePickupDraft(
+      draftRequestId,
+      requestLocation,
+      passengers,
+      vehicle,
+    ).then(async (saved) => {
+      if (!saved.ok) {
+        savedLocationKey.current = null;
+        showProblem("Pickup location", saved.error);
+        return;
+      }
+      const statuses = await loadPickupCompanionStatuses(draftRequestId);
+      if (statuses.ok) setCompanionList(statuses.data);
+    });
+    // Only a change of location should trigger this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestLocationKey, draftRequestId, hasAcceptedCompanions]);
 
   usePolling(
     async () => {
@@ -298,6 +392,25 @@ export default function PickupScreen() {
   );
 
   const [boarded, setBoarded] = useState<PickupRequest | null>(null);
+
+  usePolling(
+    async () => {
+      const result = await loadMySharedRide();
+      if (result.ok) setSharedRide(result.data);
+    },
+    4_000,
+    sharedRideLoaded && !active && !draftRequestId,
+  );
+
+  const leaveRide = async () => {
+    if (!sharedRide || busy) return;
+    setBusy(true);
+    clearProblem();
+    const result = await leaveSharedRide(sharedRide.requestId);
+    setBusy(false);
+    if (!result.ok) return showProblem("Shared ride", result.error);
+    setSharedRide(null);
+  };
   const lastActive = useRef(active);
   useEffect(() => {
     if (active) lastActive.current = active;
@@ -354,29 +467,22 @@ export default function PickupScreen() {
     });
     setBusy(false);
     if (!result.ok) return showPickupProblem(result.error);
-    setWaitingAreaGate(null);
     ridersRef.current = [];
     setRiders([]);
     setDraftRequestId(null);
+    savedLocationKey.current = null;
     setActive(result.data);
   };
 
   const inviteCompanion = async (rider: Rider): Promise<string | null> => {
-    if (!place) return "Choose a pickup location before inviting a companion.";
+    if (!place || !requestLocation) {
+      return "Choose a pickup location before inviting a companion.";
+    }
     beginCompanionOperation();
     try {
       if (!(await checkOnline())) {
         return "Reconnect to the internet before sending an invitation.";
       }
-      const requestLocation =
-        useWaitingArea && recommendedWaitingArea
-          ? {
-              name: recommendedWaitingArea.name,
-              lat: recommendedWaitingArea.lat,
-              lng: recommendedWaitingArea.lng,
-              waitingAreaType: recommendedWaitingArea.type,
-            }
-          : place;
       const requiredPassengers = Math.max(
         passengers,
         ridersRef.current.filter((item) => item.inviteStatus !== "rejected")
@@ -389,6 +495,7 @@ export default function PickupScreen() {
         vehicle,
       );
       if (!saved.ok) return saved.error;
+      savedLocationKey.current = requestLocationKey;
       setDraftRequestId(saved.data);
       const sent = await sendPickupCompanionInvite(saved.data, rider.userId);
       if (!sent.ok) return sent.error;
@@ -435,18 +542,13 @@ export default function PickupScreen() {
       );
       return;
     }
-    if (useWaitingArea && recommendedWaitingArea) {
-      clearProblem();
-      setWaitingAreaGate({
-        area: recommendedWaitingArea,
-        passengers,
-        riders,
-        vehicle,
-        draftRequestId,
-      });
-      return;
-    }
-    await sendPickupRequest(place, vehicle, passengers, riders, draftRequestId);
+    await sendPickupRequest(
+      requestLocation,
+      vehicle,
+      passengers,
+      riders,
+      draftRequestId,
+    );
   };
 
   const cancel = async () => {
@@ -456,8 +558,47 @@ export default function PickupScreen() {
     const result = await cancelPickup(active);
     setBusy(false);
     if (!result.ok) return showProblem("Pickup request", result.error);
+    resetForm();
     setActive(null);
   };
+
+  const resetForm = () => {
+    clearProblem();
+    setPlace(null);
+    setPriorityWaitingAreaId(null);
+    setVehicle("jeep");
+    setUseWaitingArea(true);
+    setPassengers(minPickupPassengers);
+    ridersRef.current = [];
+    setRiders([]);
+    setDraftRequestId(null);
+    savedLocationKey.current = null;
+    setPinOpen(false);
+    setWaitingAreaMapOpen(false);
+    setFormKey((key) => key + 1);
+  };
+
+  const markLeft = useCallback(
+    () =>
+      setActive((current) =>
+        current ? { ...current, arrived: false, arrivedAt: null } : current,
+      ),
+    [],
+  );
+
+  const markArrived = useCallback(
+    () =>
+      setActive((current) =>
+        current
+          ? {
+              ...current,
+              arrived: true,
+              arrivedAt: current.arrivedAt ?? new Date(),
+            }
+          : current,
+      ),
+    [],
+  );
 
   if (boarded) {
     return (
@@ -471,32 +612,24 @@ export default function PickupScreen() {
     );
   }
 
-  if (waitingAreaGate) {
+  if (sharedRide && !active) {
     return (
-      <WaitingAreaConfirmation
-        area={waitingAreaGate.area}
+      <SharedRideScreen
+        ride={sharedRide}
         busy={busy}
         problem={problem}
-        problemSource={problemSource || "Pickup request"}
-        onRequest={() =>
-          sendPickupRequest(
-            {
-              name: waitingAreaGate.area.name,
-              lat: waitingAreaGate.area.lat,
-              lng: waitingAreaGate.area.lng,
-              waitingAreaType: waitingAreaGate.area.type,
-            },
-            waitingAreaGate.vehicle,
-            waitingAreaGate.passengers,
-            waitingAreaGate.riders,
-            waitingAreaGate.draftRequestId,
-          )
-        }
-        onBack={() => {
-          clearProblem();
-          setWaitingAreaGate(null);
-        }}
+        onLeave={leaveRide}
+        onBack={goBack}
       />
+    );
+  }
+
+  if (!sharedRideLoaded && !sharedRide && !active) {
+    return (
+      <View style={styles.loadingScreen}>
+        <StatusBar style="dark" />
+        <LoadingLogo label="Checking your pickup" />
+      </View>
     );
   }
 
@@ -508,6 +641,28 @@ export default function PickupScreen() {
         problem={problem}
         problemSource={problemSource || "Pickup request"}
         onCancel={cancel}
+        onBack={goBack}
+        onArrived={markArrived}
+        onLeft={markLeft}
+      />
+    );
+  }
+
+  if (activeRental && !active) {
+    return (
+      <RentalInProgress
+        rental={activeRental}
+        onOpenRental={() => router.replace(Routes.commuterRental)}
+        onBack={goBack}
+      />
+    );
+  }
+
+  if (locationPermission === "undetermined" && !primerSkipped) {
+    return (
+      <LocationPrimer
+        onAllow={allowLocation}
+        onSkip={() => setPrimerSkipped(true)}
         onBack={goBack}
       />
     );
@@ -527,19 +682,41 @@ export default function PickupScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.body}>
-          <PlaceSearchField
-            value={place}
-            onChange={(next) => {
-              clearProblem();
-              setPriorityWaitingAreaId(null);
-              setWaitingAreaMapOpen(false);
-              setPlace(next);
-            }}
-            onProblem={(message) => showProblem("Pickup location", message)}
-            placeholder="Search places..."
-            icon={<Search color={brandBlue} size={20} strokeWidth={2} />}
-            allowCurrentLocation
-          />
+          {locationPermission === "blocked" && (
+            <View style={styles.locationBlocked}>
+              <Text style={styles.locationBlockedText}>
+                {blockedLocationMessage} You need it to reach your pickup point
+                and let drivers see your request.
+              </Text>
+              <LocationSettingsButton color={brandBlue} background="#ffffff" />
+            </View>
+          )}
+          <ErrorOutline
+            invalid={problemSource === "Pickup location"}
+            color={error}
+          >
+            <PlaceSearchField
+              key={`place-${formKey}`}
+              value={place}
+              onChange={(next) => {
+                clearProblem();
+                setPriorityWaitingAreaId(null);
+                setWaitingAreaMapOpen(false);
+                setPlace(next);
+              }}
+              onProblem={(message) => showProblem("Pickup location", message)}
+              disabled={locationLocked}
+              placeholder="Search places..."
+              icon={<Search color={brandBlue} size={20} strokeWidth={2} />}
+              allowCurrentLocation
+            />
+          </ErrorOutline>
+          {locationLocked && (
+            <Text style={styles.lockedHint}>
+              The pickup location is locked while an invitation is waiting for a
+              reply. Remove the companion to change it.
+            </Text>
+          )}
 
           {canRecommendWaitingArea && place && !recommendedWaitingArea && (
             <View style={styles.recommendCard}>
@@ -597,13 +774,19 @@ export default function PickupScreen() {
               </View>
             )}
           {place && (
-            <View style={styles.locationChoice}>
+            <View
+              style={[
+                styles.locationChoice,
+                problemSource === "Waiting area" && styles.invalidOutline,
+              ]}
+            >
               <Text style={styles.locationChoiceTitle}>
                 WHERE SHOULD YOUR DRIVER PICK YOU UP?
               </Text>
               <Pressable
                 accessibilityRole="radio"
                 accessibilityState={{ checked: useWaitingArea }}
+                disabled={locationLocked}
                 onPress={() => {
                   clearProblem();
                   setUseWaitingArea(true);
@@ -633,6 +816,7 @@ export default function PickupScreen() {
               <Pressable
                 accessibilityRole="radio"
                 accessibilityState={{ checked: !useWaitingArea }}
+                disabled={locationLocked}
                 onPress={() => {
                   clearProblem();
                   setUseWaitingArea(false);
@@ -667,10 +851,12 @@ export default function PickupScreen() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Pin a different pickup location on the map"
+            accessibilityState={{ disabled: locationLocked }}
+            disabled={locationLocked}
             onPress={() => setPinOpen(true)}
             style={({ pressed }) => [
               styles.pinOption,
-              pressed && styles.pressed,
+              (pressed || locationLocked) && styles.pressed,
             ]}
           >
             <View style={styles.pinOptionIcon}>
@@ -703,10 +889,20 @@ export default function PickupScreen() {
           />
           <VehiclePicker
             value={vehicle}
+            disabled={locationLocked}
             onChange={(next) => {
+              const capacity = pickupVehicleCapacity[next];
+              if (activeCompanionCount + 1 > capacity) {
+                showProblem(
+                  "Passenger count",
+                  `A ${pickupVehicleNames[next]} fits up to ${capacity} passengers. Remove a companion before switching.`,
+                );
+                return;
+              }
               clearProblem();
               setPriorityWaitingAreaId(null);
               setWaitingAreaMapOpen(false);
+              setPassengers((current) => Math.min(current, capacity));
               setVehicle(next);
               setUseWaitingArea(next === "jeep");
             }}
@@ -717,10 +913,13 @@ export default function PickupScreen() {
             title="Share a Ride?"
           />
           <ShareRideField
+            key={`share-${formKey}`}
             riders={riders}
-            max={maxRiders}
+            max={maxRidersFor(vehicle)}
             onInvite={inviteCompanion}
             onRemove={removeCompanion}
+            invalid={problemSource === "Share a ride"}
+            onProblem={(message) => showProblem("Share a ride", message)}
             onChange={(next) => {
               clearProblem();
               setCompanionList(next);
@@ -732,21 +931,34 @@ export default function PickupScreen() {
               <Users color={brandBlue} size={18} strokeWidth={2} />
             </View>
             <View>
-              <Text style={styles.passengerLabel}>Number of Passengers</Text>
+              <View style={styles.passengerLabelRow}>
+                <Text style={styles.passengerLabel}>Number of Passengers</Text>
+                {problemSource === "Passenger count" && (
+                  <ErrorMark color={error} />
+                )}
+              </View>
               <PassengerStepper
                 value={passengers}
-                onChange={setPassengers}
+                onChange={(next) => {
+                  if (problemSource === "Passenger count") clearProblem();
+                  setPassengers(next);
+                }}
                 min={Math.max(minPickupPassengers, activeCompanionCount + 1)}
-                max={maxPickupPassengers}
+                max={pickupVehicleCapacity[vehicle]}
               />
+              <Text style={styles.passengerHint}>
+                Including you. A {vehicle === "jeep" ? "jeepney" : "tricycle"}{" "}
+                fits up to {pickupVehicleCapacity[vehicle]}.
+              </Text>
             </View>
           </View>
 
           {!online && <ConnectionRequired action="A pickup request" />}
           {!!problem && online && (
-            <PickupAlert
-              source={problemSource || "Pickup request"}
+            <ErrorAlert
+              title={problemSource || "Pickup request"}
               message={problem}
+              style={{ marginTop: 12 }}
             />
           )}
           <ModuleButton
@@ -758,8 +970,15 @@ export default function PickupScreen() {
                   : !online
                     ? "OFFLINE"
                     : hasPendingCompanions
-                      ? "WAITING FOR COMPANIONS"
+                      ? pendingNames.length === 1
+                        ? `WAITING FOR ${pendingNames[0].toUpperCase()} TO RESPOND`
+                        : `WAITING FOR ${pendingNames.length} COMPANIONS`
                       : "CONFIRM"
+            }
+            disabledHint={
+              hasPendingCompanions && !busy
+                ? `${pendingNames.join(", ")} ${pendingNames.length === 1 ? "hasn’t" : "haven’t"} answered yet. You can confirm once everyone responds, or remove them.`
+                : undefined
             }
             disabled={
               busy || companionOperations > 0 || !online || hasPendingCompanions
@@ -829,6 +1048,46 @@ function RecommendedWaitingAreaMap({
 }
 
 const styles = StyleSheet.create({
+  locationBlocked: {
+    gap: 4,
+    marginBottom: 12,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: "#fef3c7",
+  },
+  locationBlockedText: {
+    color: "#78350f",
+    fontFamily: "Sora",
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  passengerHint: {
+    marginTop: 6,
+    color: mutedText,
+    fontFamily: "Sora",
+    fontSize: 11,
+  },
+  loadingScreen: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ffffff",
+  },
+  lockedHint: {
+    marginTop: 6,
+    marginHorizontal: 4,
+    color: mutedText,
+    fontFamily: "Sora",
+    fontSize: 10,
+    lineHeight: 13,
+  },
+  invalidOutline: { borderWidth: 1.5, borderColor: error },
+  passengerLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginBottom: 8,
+  },
   screen: { flex: 1, backgroundColor: "#ffffff" },
   flex: { flex: 1 },
   body: { paddingHorizontal: 12, paddingTop: 18 },
@@ -862,7 +1121,7 @@ const styles = StyleSheet.create({
   locationChoiceTitle: {
     color: mutedText,
     fontFamily: "SoraBold",
-    fontSize: 9,
+    fontSize: 10,
     marginBottom: 2,
   },
   locationChoiceOption: {
@@ -901,7 +1160,7 @@ const styles = StyleSheet.create({
   locationChoiceDescription: {
     color: mutedText,
     fontFamily: "Sora",
-    fontSize: 9,
+    fontSize: 10,
     marginTop: 2,
   },
   recommendIcon: {
@@ -912,7 +1171,7 @@ const styles = StyleSheet.create({
     borderRadius: 17,
     backgroundColor: "#1e9e45",
   },
-  recommendLabel: { color: mutedText, fontFamily: "SoraBold", fontSize: 8 },
+  recommendLabel: { color: mutedText, fontFamily: "SoraBold", fontSize: 10 },
   recommendName: {
     color: brandBlue,
     fontFamily: "SoraBold",
@@ -937,7 +1196,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: brandBlue,
   },
-  mapActionText: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 9 },
+  mapActionText: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 10 },
   waitingAreaMapScreen: { flex: 1, backgroundColor: "#ffffff" },
   waitingAreaMapTop: {
     position: "absolute",
@@ -1027,6 +1286,5 @@ const styles = StyleSheet.create({
     color: brandBlue,
     fontFamily: "SoraBold",
     fontSize: 11,
-    marginBottom: 8,
   },
 });

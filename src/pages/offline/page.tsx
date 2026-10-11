@@ -12,9 +12,10 @@ import { BrandLogo } from "@/components/brand-logo";
 import { LoadingLogo } from "@/components/LoadingLogo";
 import { Routes } from "@/constants/routes";
 import { checkOnline, useOnline } from "@/hooks/use-online";
+import { palette } from "@/constants/colors";
 
-const headerBlue = "#1034A6";
-const brandBlue = "#193caf";
+const headerBlue = palette.header;
+const brandBlue = palette.brand;
 
 export default function OfflineScreen() {
   const insets = useSafeAreaInsets();

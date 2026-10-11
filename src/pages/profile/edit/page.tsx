@@ -47,8 +47,19 @@ import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
 import { useOnline } from "@/hooks/use-online";
 import { goBackOr } from "@/utils/navigation";
+import {
+  ErrorAlert,
+  ErrorOutline,
+  firstFieldError,
+} from "@/components/error-alert";
 
 const { brandBlue, error: errorRed, mutedText, text } = moduleColors;
+const fieldOrder = ["email", "contact", "birthDate"] as const;
+const fieldTitles = {
+  email: "Email address",
+  contact: "Contact number",
+  birthDate: "Birth date",
+};
 
 const minimumBirthDate = new Date(1900, 0, 1);
 
@@ -157,6 +168,10 @@ export default function EditProfileScreen() {
   };
 
   const pictureUri = picture?.uri ?? profile.pictureUrl;
+
+  const errorField = firstFieldError(errors, fieldOrder);
+  const alertTitle = errorField ? fieldTitles[errorField] : "Profile";
+  const alertMessage = errorField ? errors[errorField] : saveError;
 
   return (
     <View style={styles.screen}>
@@ -281,18 +296,31 @@ export default function EditProfileScreen() {
               />
             </Field>
 
-            {!!saveError && <Text style={styles.saveError}>{saveError}</Text>}
             {!online && (
               <Text style={styles.offlineHint}>
                 Connect to the internet before changing your profile.
               </Text>
             )}
 
+            {!!alertMessage && (
+              <ErrorAlert
+                title={alertTitle}
+                message={alertMessage}
+                style={styles.saveError}
+              />
+            )}
             <ModuleButton
               label={saving ? "SAVING..." : "SAVE CHANGES"}
               disabled={saving || !hasChanges || !online}
+              disabledHint={
+                online && !saving && !hasChanges
+                  ? "Change something above to save."
+                  : undefined
+              }
               onPress={save}
-              style={styles.saveButton}
+              style={
+                alertMessage ? styles.saveButtonAfterError : styles.saveButton
+              }
             />
           </View>
         </Animated.ScrollView>
@@ -322,9 +350,10 @@ function Field({
 }) {
   return (
     <View style={styles.field}>
-      <FieldLabel>{label}</FieldLabel>
-      {children}
-      {!!error && <Text style={styles.fieldError}>{error}</Text>}
+      <FieldLabel invalid={!!error}>{label}</FieldLabel>
+      <ErrorOutline invalid={!!error} color={errorRed}>
+        {children}
+      </ErrorOutline>
     </View>
   );
 }
@@ -395,30 +424,18 @@ const styles = StyleSheet.create({
   lockedHint: {
     color: mutedText,
     fontFamily: "Sora",
-    fontSize: 9,
+    fontSize: 10,
     marginTop: 6,
   },
   pendingHint: {
     color: brandBlue,
     fontFamily: "Sora",
-    fontSize: 9,
+    fontSize: 10,
     marginTop: 6,
   },
   contactIcon: { flexDirection: "row", alignItems: "center", gap: 10 },
   contactPrefix: { color: text, fontFamily: "Sora", fontSize: 11 },
-  fieldError: {
-    color: errorRed,
-    fontFamily: "Sora",
-    fontSize: 9,
-    marginTop: 6,
-  },
-  saveError: {
-    color: errorRed,
-    fontFamily: "Sora",
-    fontSize: 10,
-    textAlign: "center",
-    marginTop: 18,
-  },
+  saveError: { marginTop: 28 },
   offlineHint: {
     color: "#6b6b6b",
     fontFamily: "Sora",
@@ -427,4 +444,5 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   saveButton: { marginTop: 28 },
+  saveButtonAfterError: { marginTop: 12 },
 });

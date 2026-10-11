@@ -1,6 +1,5 @@
 import { Image } from "expo-image";
 import ArrowRight from "lucide-react-native/icons/arrow-right";
-import ChevronLeft from "lucide-react-native/icons/chevron-left";
 import Minus from "lucide-react-native/icons/minus";
 import Plus from "lucide-react-native/icons/plus";
 import type { ReactNode } from "react";
@@ -18,22 +17,18 @@ import {
 import Animated, {
   type CSSTransitionProperties,
 } from "react-native-reanimated";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import {
-  ExpandedOnly,
-  headerLayoutTransition,
-  headerLogoTransition,
-  headerTitleTransition,
-} from "@/components/scroll-chrome";
+import { ErrorMark } from "@/components/error-alert";
+import { CollapsibleHeader } from "@/components/scroll-chrome";
+import { palette } from "@/constants/colors";
 
 export const moduleColors = {
-  brandBlue: "#193caf",
-  headerBlue: "#1034A6",
+  brandBlue: palette.brand,
+  headerBlue: palette.header,
   softBlue: "#e3ecfb",
   mutedText: "#6b6b6b",
   text: "#111111",
-  error: "#d93025",
+  error: palette.danger,
 };
 
 const { brandBlue, headerBlue, softBlue, mutedText } = moduleColors;
@@ -76,69 +71,30 @@ export function ModuleHeader({
   subtitle,
   icon,
   onBack,
-  collapsed = false,
-  children,
   titleStyle,
+  children,
+  footerHeight,
 }: {
   title: string;
   subtitle: string;
   icon: ReactNode;
   onBack?: () => void;
   collapsed?: boolean;
-  children?: ReactNode;
   titleStyle?: StyleProp<TextStyle>;
+  children?: ReactNode;
+  footerHeight?: number;
 }) {
-  const insets = useSafeAreaInsets();
-
   return (
-    <Animated.View
-      layout={headerLayoutTransition}
-      style={[
-        styles.header,
-        collapsed && styles.headerCollapsed,
-        { paddingTop: insets.top + (collapsed ? 10 : 16) },
-      ]}
+    <CollapsibleHeader
+      title={title}
+      subtitle={subtitle}
+      icon={icon}
+      onBack={onBack}
+      titleStyle={titleStyle}
+      footerHeight={footerHeight}
     >
-      <View style={[styles.headerRow, collapsed && styles.headerRowCollapsed]}>
-        {onBack && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Go back"
-            hitSlop={10}
-            onPress={onBack}
-            style={[styles.backButton, collapsed && styles.backButtonCollapsed]}
-          >
-            <ChevronLeft color="#ffffff" size={22} strokeWidth={2.5} />
-          </Pressable>
-        )}
-        <View style={[styles.headerText, !onBack && styles.headerTextNoBack]}>
-          <Animated.Text
-            style={[
-              styles.title,
-              collapsed && styles.titleCollapsed,
-              titleStyle,
-              headerTitleTransition,
-            ]}
-            numberOfLines={collapsed ? 1 : undefined}
-          >
-            {title}
-          </Animated.Text>
-          <ExpandedOnly collapsed={collapsed}>
-            <Text style={styles.subtitle}>{subtitle}</Text>
-          </ExpandedOnly>
-        </View>
-        <Animated.View
-          style={[
-            styles.headerIcon,
-            collapsed && styles.headerIconCollapsed,
-            headerLogoTransition,
-          ]}
-        >
-          {icon}
-        </Animated.View>
-      </View>
       {children}
-    </Animated.View>
+    </CollapsibleHeader>
   );
 }
 
@@ -192,21 +148,41 @@ export function SoftField({
   );
 }
 
-export function FieldLabel({ children }: { children: string }) {
-  return <Text style={styles.fieldLabel}>{children}</Text>;
+export function FieldLabel({
+  children,
+  invalid = false,
+}: {
+  children: string;
+  invalid?: boolean;
+}) {
+  if (!invalid) return <Text style={styles.fieldLabel}>{children}</Text>;
+  return (
+    <View style={styles.fieldLabelRow}>
+      <Text style={[styles.fieldLabel, styles.fieldLabelInRow]}>
+        {children}
+      </Text>
+      <ErrorMark color={moduleColors.error} />
+    </View>
+  );
 }
 
 export function VehiclePicker<T extends string = Vehicle>({
   value,
   onChange,
   options = vehicleOptions as VehicleOption<T>[],
+  disabled = false,
 }: {
   value: T;
   onChange: (vehicle: T) => void;
   options?: VehicleOption<T>[];
+  disabled?: boolean;
 }) {
   return (
-    <View style={styles.vehicleRow}>
+    <View
+      style={[styles.vehicleRow, disabled && styles.vehicleRowDisabled]}
+      pointerEvents={disabled ? "none" : "auto"}
+      accessibilityState={{ disabled }}
+    >
       {options.map((option) => {
         const selected = option.value === value;
         return (
@@ -330,6 +306,7 @@ export function Chip({
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={label}
       accessibilityState={{ selected }}
       onPress={onPress}
       style={[grow && styles.grow, style]}
@@ -355,32 +332,39 @@ export function ModuleButton({
   label,
   onPress,
   disabled,
+  disabledHint,
   style,
 }: {
   label: string;
   onPress?: () => void;
   disabled?: boolean;
+  disabledHint?: string;
   style?: StyleProp<ViewStyle>;
 }) {
   return (
-    <Pressable
-      accessibilityRole="button"
-      disabled={disabled}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.button,
-        (pressed || disabled) && styles.pressed,
-        style,
-      ]}
-    >
-      <Text style={styles.buttonText}>{label}</Text>
-      <ArrowRight
-        color="#ffffff"
-        size={20}
-        strokeWidth={2.5}
-        style={styles.buttonArrow}
-      />
-    </Pressable>
+    <>
+      <Pressable
+        accessibilityRole="button"
+        disabled={disabled}
+        onPress={onPress}
+        style={({ pressed }) => [
+          styles.button,
+          (pressed || disabled) && styles.pressed,
+          style,
+        ]}
+      >
+        <Text style={styles.buttonText}>{label}</Text>
+        <ArrowRight
+          color="#ffffff"
+          size={20}
+          strokeWidth={2.5}
+          style={styles.buttonArrow}
+        />
+      </Pressable>
+      {disabled && !!disabledHint && (
+        <Text style={styles.buttonHint}>{disabledHint}</Text>
+      )}
+    </>
   );
 }
 
@@ -482,7 +466,15 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginBottom: 8,
   },
+  fieldLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginBottom: 8,
+  },
+  fieldLabelInRow: { marginBottom: 0 },
   vehicleRow: { flexDirection: "row", gap: 10 },
+  vehicleRowDisabled: { opacity: 0.6 },
   vehicleOption: { flex: 1 },
   vehicleTile: {
     width: "100%",
@@ -553,4 +545,12 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   buttonArrow: { position: "absolute", right: 18 },
+  buttonHint: {
+    marginTop: 8,
+    color: mutedText,
+    fontFamily: "Sora",
+    fontSize: 11,
+    lineHeight: 16,
+    textAlign: "center",
+  },
 });

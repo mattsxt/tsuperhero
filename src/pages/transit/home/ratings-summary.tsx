@@ -7,11 +7,12 @@ import {
   type RatingSummary,
   type Review,
 } from "@/api/v1/ratings/controllers";
-import { LoadingLogo } from "@/components/LoadingLogo";
 import { EmptyState } from "@/components/empty-state";
 import { homeColors } from "@/components/home-ui";
 import { StarRow } from "@/components/star-rating";
 import { usePolling } from "@/hooks/use-polling";
+import { ErrorAlert } from "@/components/error-alert";
+import { SkeletonCards } from "@/components/skeleton";
 
 const { brandBlue, mutedText, cardEdgeBlue } = homeColors;
 const starGold = "#f5b301";
@@ -42,9 +43,9 @@ export function RatingsSummary() {
 
   if (!summary) {
     return problem ? (
-      <Text style={styles.problem}>{problem}</Text>
+      <ErrorAlert title="Ratings" message={problem} style={styles.problem} />
     ) : (
-      <LoadingLogo style={styles.loading} />
+      <SkeletonCards count={1} height={120} style={styles.loading} />
     );
   }
 
@@ -130,13 +131,7 @@ function ReviewCard({ review }: { review: Review }) {
 const styles = StyleSheet.create({
   wrap: { gap: 10, paddingHorizontal: 8 },
   loading: { marginTop: 24 },
-  problem: {
-    color: "#d93025",
-    fontFamily: "Sora",
-    fontSize: 10,
-    marginTop: 12,
-    textAlign: "center",
-  },
+  problem: { marginTop: 12 },
   card: {
     flexDirection: "row",
     alignItems: "center",
@@ -151,14 +146,14 @@ const styles = StyleSheet.create({
   },
   scoreBlock: { alignItems: "center", gap: 4, minWidth: 82 },
   average: { color: brandBlue, fontFamily: "SoraBold", fontSize: 32 },
-  count: { color: mutedText, fontFamily: "Sora", fontSize: 9 },
+  count: { color: mutedText, fontFamily: "Sora", fontSize: 10 },
   bars: { flex: 1, gap: 4 },
   barRow: { flexDirection: "row", alignItems: "center", gap: 5 },
   barLabel: {
     width: 8,
     color: mutedText,
     fontFamily: "SoraBold",
-    fontSize: 9,
+    fontSize: 10,
     textAlign: "right",
   },
   barTrack: {
@@ -173,7 +168,7 @@ const styles = StyleSheet.create({
     minWidth: 18,
     color: mutedText,
     fontFamily: "Sora",
-    fontSize: 9,
+    fontSize: 10,
     textAlign: "right",
   },
   review: {
@@ -187,7 +182,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
-  reviewDate: { color: mutedText, fontFamily: "Sora", fontSize: 9 },
+  reviewDate: { color: mutedText, fontFamily: "Sora", fontSize: 10 },
   reviewText: {
     color: "#111111",
     fontFamily: "Sora",
@@ -195,5 +190,5 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     fontStyle: "italic",
   },
-  reviewMeta: { color: mutedText, fontFamily: "Sora", fontSize: 9 },
+  reviewMeta: { color: mutedText, fontFamily: "Sora", fontSize: 10 },
 });

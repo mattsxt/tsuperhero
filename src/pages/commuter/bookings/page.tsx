@@ -17,7 +17,6 @@ import {
   type Booking,
   type BookingKind,
 } from "@/api/v1/pickups/controllers";
-import { LoadingLogo } from "@/components/LoadingLogo";
 import { EmptyState } from "@/components/empty-state";
 import { PickupIcon } from "@/components/module-icons";
 import { Chip, ModuleHeader, moduleColors } from "@/components/module-ui";
@@ -31,8 +30,11 @@ import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
 import { TripHistory } from "@/pages/commuter/bookings/trip-history";
 import { goBackOr } from "@/utils/navigation";
+import { ErrorAlert } from "@/components/error-alert";
+import { SkeletonCards } from "@/components/skeleton";
+import { palette } from "@/constants/colors";
 
-const { brandBlue, softBlue, text, error } = moduleColors;
+const { brandBlue, softBlue, text } = moduleColors;
 const cardEdgeBlue = "#1a2f8f";
 
 type BookingTab = BookingKind | "trips";
@@ -148,10 +150,16 @@ export default function BookingsScreen() {
               <TripHistory />
             </View>
           ) : bookings === null ? (
-            <LoadingLogo style={styles.loading} />
+            <SkeletonCards style={styles.loading} />
           ) : visible.length === 0 ? (
             <>
-              {!!problem && <Text style={styles.problem}>{problem}</Text>}
+              {!!problem && (
+                <ErrorAlert
+                  title="Bookings"
+                  message={problem}
+                  style={styles.problem}
+                />
+              )}
               <EmptyState
                 icon={
                   tab === "rental" ? (
@@ -322,17 +330,11 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     borderWidth: 2,
     borderColor: "#ffffff",
-    backgroundColor: "#e5383b",
+    backgroundColor: palette.danger,
   },
-  countText: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 9 },
+  countText: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 10 },
   loading: { marginTop: 48 },
-  problem: {
-    color: error,
-    fontFamily: "Sora",
-    fontSize: 10,
-    marginTop: 16,
-    textAlign: "center",
-  },
+  problem: { marginTop: 16 },
   list: { gap: 10, marginTop: 16 },
   card: {
     gap: 12,
@@ -353,7 +355,7 @@ const styles = StyleSheet.create({
   kind: {
     color: "#6b6b6b",
     fontFamily: "SoraBold",
-    fontSize: 8,
+    fontSize: 10,
     letterSpacing: 0.8,
   },
   destination: {

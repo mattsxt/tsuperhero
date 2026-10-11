@@ -1,7 +1,11 @@
+import "../../global.css";
+
 import { useFonts } from "expo-font";
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
+import { HeroUINativeProvider } from "heroui-native";
 import { useColorScheme } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { AnimatedSplashOverlay } from "@/components/animated-icon";
 import { NotificationSync } from "@/components/notification-sync";
@@ -25,42 +29,58 @@ export default function RootLayout() {
   }
 
   return (
-    <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
-      <NotificationSync />
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="index" />
-        <Stack.Screen name="landing/index" />
-        <Stack.Screen
-          name="offline/index"
-          options={{ gestureEnabled: false }}
-        />
-        <Stack.Screen name="auth/login/index" />
-        <Stack.Screen name="auth/register/index" />
-        <Stack.Screen
-          name="auth/setup/index"
-          options={{ gestureEnabled: false }}
-        />
-        <Stack.Screen name="commuter/home/index" options={tabScreenOptions} />
-        <Stack.Screen name="transit/home/index" options={tabScreenOptions} />
-        <Stack.Screen name="notifications/index" options={tabScreenOptions} />
-        <Stack.Screen name="profile/index" options={tabScreenOptions} />
-        <Stack.Screen name="profile/edit/index" />
-        <Stack.Screen name="profile/security/index" />
-        <Stack.Screen name="profile/vehicles/index" />
-        <Stack.Screen name="commuter/pickup/index" />
-        <Stack.Screen name="commuter/rental/index" />
-        <Stack.Screen name="commuter/routes/index" />
-        <Stack.Screen
-          name="transit/start-trip/index"
-          options={{ gestureEnabled: false }}
-        />
-        <Stack.Screen name="transit/rental-requests/index" />
-        <Stack.Screen name="transit/trip-history/index" />
-        <Stack.Screen name="commuter/bookings/index" />
-      </Stack>
-      <OfflineBanner />
-      <ShareInviteModal />
-    </ThemeProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <HeroUINativeProvider>
+        <ThemeProvider
+          value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
+        >
+          <AnimatedSplashOverlay />
+          <NotificationSync />
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="index" />
+            <Stack.Screen name="landing/index" />
+            <Stack.Screen
+              name="offline/index"
+              options={{ gestureEnabled: false }}
+            />
+            <Stack.Screen name="auth/login/index" />
+            <Stack.Screen name="auth/register/index" />
+            <Stack.Screen
+              name="auth/setup/index"
+              options={{ gestureEnabled: false }}
+            />
+            <Stack.Screen
+              name="commuter/home/index"
+              options={tabScreenOptions}
+            />
+            <Stack.Screen
+              name="transit/home/index"
+              options={tabScreenOptions}
+            />
+            <Stack.Screen
+              name="notifications/index"
+              options={tabScreenOptions}
+            />
+            <Stack.Screen name="profile/index" options={tabScreenOptions} />
+            <Stack.Screen name="profile/edit/index" />
+            <Stack.Screen name="profile/security/index" />
+            <Stack.Screen name="profile/help/index" />
+            <Stack.Screen name="profile/vehicles/index" />
+            <Stack.Screen name="commuter/pickup/index" />
+            <Stack.Screen name="commuter/rental/index" />
+            <Stack.Screen name="commuter/routes/index" />
+            <Stack.Screen
+              name="transit/start-trip/index"
+              options={{ gestureEnabled: false }}
+            />
+            <Stack.Screen name="transit/rental-requests/index" />
+            <Stack.Screen name="transit/trip-history/index" />
+            <Stack.Screen name="commuter/bookings/index" />
+          </Stack>
+          <OfflineBanner />
+          <ShareInviteModal />
+        </ThemeProvider>
+      </HeroUINativeProvider>
+    </GestureHandlerRootView>
   );
 }

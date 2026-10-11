@@ -57,12 +57,10 @@ import {
   startLocationSharing,
   stopLocationSharing,
 } from "@/api/v1/operator/location-sharing";
-import {
-  clearOutbox,
-  sendLocation,
-} from "@/api/v1/operator/outbox";
+import { clearOutbox, sendLocation } from "@/api/v1/operator/outbox";
 import { watchLocation } from "@/api/v1/places/controllers";
 import { EmptyState } from "@/components/empty-state";
+import { ErrorAlert } from "@/components/error-alert";
 import { LoadingLogo } from "@/components/LoadingLogo";
 import { VehicleIcon } from "@/components/module-icons";
 import { ModuleHeader, moduleColors } from "@/components/module-ui";
@@ -70,16 +68,17 @@ import { TransitMap, type TransitMapState } from "@/components/transit-map";
 import { Routes } from "@/constants/routes";
 import { getDistanceMeters, getPairDistanceMeters } from "@/utils/geo";
 import { goBackOr } from "@/utils/navigation";
+import { palette } from "@/constants/colors";
 
-const panelNavy = "#1d3354";
-const routeCyan = "#7fd4f7";
+const panelNavy = palette.navy;
+const routeCyan = palette.cyan;
 const counterBlue = "#7dd3f5";
-const circleNavy = "#1034A6";
+const circleNavy = palette.header;
 const modalBlue = "#d6ecf8";
 const { brandBlue } = moduleColors;
 const chipBlue = "#a8dcf7";
 const locateBlue = "rgba(168, 220, 247, 0.85)";
-const declineRed = "#b91c1c";
+const declineRed = palette.danger;
 const maxPickupCards = 3;
 
 const toastMs = 4_000;
@@ -104,14 +103,25 @@ const pathLengthMeters = (path: LatLng[]) =>
       0,
     );
 
-type ToastTone = "danger" | "success" | "info";
+type ToastTone = "danger" | "success" | "info" | "error";
 
 type Toast = {
   id: number;
   text: string;
   tone: ToastTone;
   dismissible: boolean;
+  title?: string;
 };
+
+function nextError(title: string, text: string) {
+  return (current: Toast | null): Toast => ({
+    id: (current?.id ?? 0) + 1,
+    text,
+    tone: "error",
+    dismissible: true,
+    title,
+  });
+}
 
 function nextToast(text: string, tone: ToastTone, dismissible = true) {
   return (current: Toast | null): Toast => ({
@@ -280,7 +290,7 @@ function Trip({ details }: { details: AssignmentDetails }) {
       if (!result.ok) {
         if (!active) return;
         setLocationError(result.error);
-        setToast(nextToast(result.error, "danger"));
+        setToast(nextError("Location", result.error));
         return;
       }
       if (active) subscription = result.data;
@@ -313,7 +323,9 @@ function Trip({ details }: { details: AssignmentDetails }) {
           shareFailing.current = false;
         } else if (tripActive.current && !shareFailing.current) {
           shareFailing.current = true;
-          setToast(nextToast("Couldn't share your location.", "danger"));
+          setToast(
+            nextError("Location sharing", "Couldn't share your location."),
+          );
         }
       } finally {
         sending = false;
@@ -410,7 +422,10 @@ function Trip({ details }: { details: AssignmentDetails }) {
     queueTripState(status, count, markedFull).then((result) => {
       if (result.status === "failed")
         setToast(
-          nextToast(`Couldn't update your trip: ${result.error}`, "danger"),
+          nextError(
+            "Trip status",
+            `Couldn't update your trip: ${result.error}`,
+          ),
         );
     });
   }, [starting, finalizing, status, count, markedFull]);
@@ -433,7 +448,7 @@ function Trip({ details }: { details: AssignmentDetails }) {
 
   const leave = () => {
     if (onTrip) {
-      setToast(nextToast("Stop the trip before leaving.", "danger"));
+      setToast(nextError("Trip in progress", "Stop the trip before leaving."));
       return;
     }
     goBackOr(Routes.transitHome);
@@ -444,7 +459,9 @@ function Trip({ details }: { details: AssignmentDetails }) {
       "hardwareBackPress",
       () => {
         if (!onTrip) return false;
-        setToast(nextToast("Stop the trip before leaving.", "danger"));
+        setToast(
+          nextError("Trip in progress", "Stop the trip before leaving."),
+        );
         return true;
       },
     );
@@ -465,7 +482,7 @@ function Trip({ details }: { details: AssignmentDetails }) {
   const start = async () => {
     if (starting) return;
     if (locationError) {
-      setToast(nextToast("Allow location access to start a trip.", "danger"));
+      setToast(nextError("Location", "Allow location access to start a trip."));
       return;
     }
     setStarting(true);
@@ -474,7 +491,9 @@ function Trip({ details }: { details: AssignmentDetails }) {
     const result = await startTrip(pathLengthMeters(path));
     setStarting(false);
     if (!result.ok) {
-      setToast(nextToast(result.error || "Couldn't start the trip.", "danger"));
+      setToast(
+        nextError("Start trip", result.error || "Couldn't start the trip."),
+      );
       return;
     }
     clearOutbox();
@@ -509,7 +528,7 @@ function Trip({ details }: { details: AssignmentDetails }) {
     setFinalizing(false);
     setConfirmingStop(false);
     if (!result.ok) {
-      setToast(nextToast("Couldn't finalize the trip. Try again.", "danger"));
+      setToast(nextError("End trip", "Couldn't finalize the trip. Try again."));
       return;
     }
     tripActive.current = false;
@@ -540,11 +559,11 @@ function Trip({ details }: { details: AssignmentDetails }) {
     if (acceptingId) return;
     if (pickup.passengers > seatsLeft) {
       setToast(
-        nextToast(
+        nextError(
+          "Pickup request",
           markedFull
             ? "You marked the vehicle as full, so you can't accept new passengers."
             : `This request needs ${pickup.passengers} ${pickup.passengers === 1 ? "seat" : "seats"}, but only ${Math.max(seatsLeft, 0)} ${seatsLeft === 1 ? "is" : "are"} left.`,
-          "danger",
         ),
       );
       return;
@@ -554,7 +573,7 @@ function Trip({ details }: { details: AssignmentDetails }) {
     setAcceptingId(null);
     declineRequest(pickup);
     if (!result.ok) {
-      setToast(nextToast(result.error, "danger"));
+      setToast(nextError("Pickup request", result.error));
       return;
     }
     if (!tripActive.current) return;
@@ -572,9 +591,9 @@ function Trip({ details }: { details: AssignmentDetails }) {
     if (count >= capacity) {
       setMarkedFull(true);
       setToast(
-        nextToast(
+        nextError(
+          "Vehicle full",
           "The vehicle is already full. You can't mark it as not full.",
-          "danger",
         ),
       );
       return;
@@ -679,7 +698,18 @@ function Trip({ details }: { details: AssignmentDetails }) {
         pointerEvents="box-none"
         style={[styles.overlayStack, { bottom: overlayBottom }]}
       >
-        {toast && (
+        {toast?.tone === "error" && (
+          <Animated.View
+            key={toast.id}
+            entering={overlayEnter}
+            exiting={overlayExit}
+            layout={overlayLayout}
+            style={styles.errorToast}
+          >
+            <ErrorAlert title={toast.title ?? "Trip"} message={toast.text} />
+          </Animated.View>
+        )}
+        {toast && toast.tone !== "error" && (
           <Animated.View
             key={toast.id}
             entering={overlayEnter}
@@ -751,6 +781,7 @@ function Trip({ details }: { details: AssignmentDetails }) {
         style={({ pressed }) => [
           styles.locateButton,
           { top: headerHeight + 12 },
+          !!locationError && styles.locateError,
           pressed && styles.pressed,
         ]}
       >
@@ -770,12 +801,7 @@ function Trip({ details }: { details: AssignmentDetails }) {
           <Text style={styles.coverage} numberOfLines={1}>
             {coverageTitle.toUpperCase().replace(" – ", " - ")}
           </Text>
-          <View
-            style={[
-              styles.sharing,
-              onTrip && styles.sharingOn,
-            ]}
-          >
+          <View style={[styles.sharing, onTrip && styles.sharingOn]}>
             <Animated.View
               style={[
                 styles.sharingDot,
@@ -1047,8 +1073,8 @@ function CounterButton({
 }
 
 const tripButtonTones = {
-  start: { backgroundColor: "#a3f7a3", color: "#15803d" },
-  stop: { backgroundColor: "#f87e7e", color: "#b91c1c" },
+  start: { backgroundColor: "#a3f7a3", color: palette.success },
+  stop: { backgroundColor: "#f87e7e", color: palette.danger },
   full: { backgroundColor: "#fcc419", color: "#8a5300" },
   fullOff: { backgroundColor: "#d6d6d6", color: "#a1a1a1" },
 };
@@ -1086,8 +1112,12 @@ function TripButton({
 }
 
 const toastTones = {
-  danger: { container: { backgroundColor: "#b91c1c" }, color: "#ffffff" },
-  success: { container: { backgroundColor: "#b5f5b5" }, color: "#166534" },
+  danger: { container: { backgroundColor: palette.danger }, color: "#ffffff" },
+  error: { container: {}, color: palette.danger },
+  success: {
+    container: { backgroundColor: "#b5f5b5" },
+    color: palette.success,
+  },
   info: { container: { backgroundColor: "#1e3a6e" }, color: "#ffffff" },
 };
 
@@ -1152,7 +1182,7 @@ const styles = StyleSheet.create({
   pickupMeta: {
     color: panelNavy,
     fontFamily: "Sora",
-    fontSize: 9,
+    fontSize: 10,
     lineHeight: 12,
   },
   pickupWarn: { color: declineRed, fontFamily: "SoraBold" },
@@ -1176,6 +1206,8 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     elevation: 4,
   },
+  errorToast: { alignSelf: "stretch", elevation: 4 },
+  locateError: { borderWidth: 1.5, borderColor: palette.danger },
   toastText: {
     flexShrink: 1,
     fontFamily: "SoraBold",
@@ -1222,7 +1254,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#9ca3af",
   },
   sharingDotOn: { backgroundColor: "#4ade80" },
-  sharingText: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 8 },
+  sharingText: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 10 },
   infoRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1249,7 +1281,7 @@ const styles = StyleSheet.create({
   infoLabel: {
     color: "rgba(255, 255, 255, 0.65)",
     fontFamily: "Sora",
-    fontSize: 8,
+    fontSize: 10,
     lineHeight: 11,
   },
   infoValue: {

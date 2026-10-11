@@ -8,14 +8,15 @@ import type {
 } from "@/api/v1/transit-routes/controllers";
 import { VehicleIcon } from "@/components/module-icons";
 import { moduleColors } from "@/components/module-ui";
+import { palette } from "@/constants/colors";
 
 const { brandBlue, headerBlue, mutedText, softBlue, text } = moduleColors;
 
 const occupancyColors: Record<OccupancyLevel, string> = {
-  Available: "#15803d",
+  Available: palette.success,
   Moderate: "#b45309",
   "Almost Full": "#c2410c",
-  Full: "#b91c1c",
+  Full: palette.danger,
 };
 
 export function VehicleCard({
@@ -301,7 +302,7 @@ const cardStyles = StyleSheet.create({
     backgroundColor: headerBlue,
   },
   plate: { color: brandBlue, fontFamily: "SoraBold", fontSize: 14 },
-  type: { color: mutedText, fontFamily: "Sora", fontSize: 9, marginTop: 1 },
+  type: { color: mutedText, fontFamily: "Sora", fontSize: 10, marginTop: 1 },
   status: {
     maxWidth: 96,
     paddingHorizontal: 8,
@@ -309,7 +310,7 @@ const cardStyles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: softBlue,
   },
-  statusText: { color: brandBlue, fontFamily: "SoraBold", fontSize: 8 },
+  statusText: { color: brandBlue, fontFamily: "SoraBold", fontSize: 10 },
   route: {
     flexDirection: "row",
     alignItems: "center",
@@ -325,7 +326,7 @@ const cardStyles = StyleSheet.create({
     flexShrink: 1,
     color: brandBlue,
     fontFamily: "SoraBold",
-    fontSize: 9,
+    fontSize: 10,
   },
   capacityRow: {
     flexDirection: "row",
@@ -333,5 +334,5 @@ const cardStyles = StyleSheet.create({
     justifyContent: "space-between",
   },
   occupancy: { fontFamily: "SoraBold", fontSize: 11 },
-  capacity: { color: text, fontFamily: "Sora", fontSize: 9 },
+  capacity: { color: text, fontFamily: "Sora", fontSize: 10 },
 });

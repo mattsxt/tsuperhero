@@ -16,8 +16,9 @@ import {
 } from "@/api/v1/places/controllers";
 import { moduleColors, SoftField } from "@/components/module-ui";
 import { LoadingLogo } from "@/components/LoadingLogo";
+import { ErrorAlert } from "@/components/error-alert";
 
-const { brandBlue, error: errorRed, mutedText, softBlue, text } = moduleColors;
+const { brandBlue, mutedText, softBlue, text } = moduleColors;
 
 const maxSuggestions = 6;
 
@@ -36,7 +37,9 @@ export function PlaceSearchField({
   icon,
   allowCurrentLocation = false,
   onProblem,
+  disabled = false,
 }: {
+  disabled?: boolean;
   value: Place | null;
   onChange: (place: Place | null) => void;
   placeholder: string;
@@ -148,13 +151,17 @@ export function PlaceSearchField({
         }}
         placeholder={placeholder}
         autoCorrect={false}
+        editable={!disabled}
+        accessibilityState={{ disabled }}
+        style={disabled ? styles.disabled : undefined}
         icon={icon}
         trailing={
           <View style={styles.trailing}>
             {busy ? (
               <LoadingLogo color={brandBlue} size={18} />
             ) : (
-              query.length > 0 && (
+              query.length > 0 &&
+              !disabled && (
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={`Clear ${placeholder.toLowerCase()}`}
@@ -165,7 +172,7 @@ export function PlaceSearchField({
                 </Pressable>
               )
             )}
-            {allowCurrentLocation && (
+            {allowCurrentLocation && !disabled && (
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Use my current location"
@@ -180,7 +187,7 @@ export function PlaceSearchField({
         }
       />
 
-      {open && (
+      {open && query.trim().length >= minPlaceQueryLength && (
         <Animated.View
           entering={FadeIn.duration(150)}
           exiting={FadeOut.duration(100)}
@@ -216,17 +223,15 @@ export function PlaceSearchField({
               <Text style={styles.statusText}>Searching places...</Text>
             </View>
           ) : suggestions.length === 0 ? (
-            <Text style={styles.statusText}>
-              {query.trim().length < minPlaceQueryLength
-                ? "Type at least 2 letters to search places."
-                : "No places found."}
-            </Text>
+            <Text style={styles.statusText}>No places found.</Text>
           ) : null}
 
           {!searching && !!searchError && (
-            <Text style={[styles.statusText, styles.errorText]}>
-              Place search is unavailable.
-            </Text>
+            <ErrorAlert
+              title="Place search"
+              message="Place search is unavailable. Try again in a moment."
+              style={styles.searchError}
+            />
           )}
           {suggestions.length > 0 && (
             <Text style={styles.attribution}>Powered by Mapbox</Text>
@@ -238,6 +243,7 @@ export function PlaceSearchField({
 }
 
 const styles = StyleSheet.create({
+  disabled: { opacity: 0.6 },
   pressed: { opacity: 0.7 },
   trailing: { flexDirection: "row", alignItems: "center", gap: 12 },
   dropdown: {
@@ -269,7 +275,7 @@ const styles = StyleSheet.create({
   rowSubtitle: {
     color: mutedText,
     fontFamily: "Sora",
-    fontSize: 9,
+    fontSize: 10,
     marginTop: 1,
   },
   status: {
@@ -286,12 +292,12 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 4,
   },
-  errorText: { color: errorRed },
+  searchError: { margin: 8 },
   attribution: {
     alignSelf: "flex-end",
     color: mutedText,
     fontFamily: "Sora",
-    fontSize: 8,
+    fontSize: 10,
     marginTop: 2,
     marginRight: 4,
   },

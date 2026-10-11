@@ -3,15 +3,16 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { moduleColors } from "@/components/module-ui";
 import { StarBadge } from "@/components/star-rating";
+import { palette } from "@/constants/colors";
 
 const { brandBlue, softBlue, text } = moduleColors;
 
 const tones = {
-  completed: { background: "#dcfce7", color: "#15803d" },
+  completed: { background: "#dcfce7", color: palette.success },
   live: { background: softBlue, color: brandBlue },
   pending: { background: "#fef3c7", color: "#92400e" },
-  accepted: { background: "#dcfce7", color: "#15803d" },
-  rejected: { background: "#fee2e2", color: "#b91c1c" },
+  accepted: { background: "#dcfce7", color: palette.success },
+  rejected: { background: "#fee2e2", color: palette.danger },
   muted: { background: "#eceef2", color: "#6b7280" },
 } as const;
 
@@ -57,7 +58,7 @@ export function RatingFeedback({ feedback }: { feedback: string }) {
 
 const styles = StyleSheet.create({
   pill: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 999 },
-  pillText: { fontFamily: "SoraBold", fontSize: 8 },
+  pillText: { fontFamily: "SoraBold", fontSize: 10 },
   ratingCell: {
     flexGrow: 1,
     alignItems: "flex-end",

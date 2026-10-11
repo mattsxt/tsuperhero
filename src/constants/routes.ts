@@ -17,6 +17,7 @@ export const Routes = {
   profile: "/profile",
   profileEdit: "/profile/edit",
   profileSecurity: "/profile/security",
+  profileHelp: "/profile/help",
   profileVehicles: "/profile/vehicles",
 } as const;
 

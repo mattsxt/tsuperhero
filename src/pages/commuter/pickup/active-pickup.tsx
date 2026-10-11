@@ -1,14 +1,23 @@
 import { StatusBar } from "expo-status-bar";
 import ClockFading from "lucide-react-native/icons/clock-fading";
+import Footprints from "lucide-react-native/icons/footprints";
+import LocateFixed from "lucide-react-native/icons/locate-fixed";
 import MapPin from "lucide-react-native/icons/map-pin";
+import MapPinX from "lucide-react-native/icons/map-pin-x";
+import RadioTower from "lucide-react-native/icons/radio-tower";
 import Users from "lucide-react-native/icons/users";
-import { useEffect, useMemo, useRef, useState } from "react";
+import Hourglass from "lucide-react-native/icons/hourglass";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
   formatEta,
+  loadPickupCompanionStatuses,
   loadPickupDriver,
+  markPickupArrived,
+  markPickupAway,
+  type Rider,
   type PickupDriver,
   type PickupRequest,
 } from "@/api/v1/pickups/controllers";
@@ -28,15 +37,21 @@ import { BrandLogo } from "@/components/brand-logo";
 import { LoadingLogo } from "@/components/LoadingLogo";
 import type { WaitingArea } from "@/api/v1/waiting-areas/controllers";
 
-import { PickupAlert } from "./pickup-alert";
 import {
   waitingAreaArrivalMeters,
   WaitingAreaDirectionsMap,
 } from "./waiting-area-directions-map";
+import { ConfirmModal } from "@/components/confirm-modal";
+import { CompanionAvatars } from "./companion-avatars";
+import { ErrorAlert } from "@/components/error-alert";
+import { formatDistance } from "@/api/v1/waiting-areas/controllers";
+import { LocationSettingsButton } from "@/components/location-settings-button";
+import { useNow } from "@/hooks/use-now";
+import { palette } from "@/constants/colors";
 
-const panelNavy = "#1d3354";
-const routeCyan = "#7fd4f7";
-const cancelRed = "#e5383b";
+const panelNavy = palette.navy;
+const routeCyan = palette.cyan;
+const cancelRed = palette.danger;
 
 const driverPollMs = 3_000;
 const rerouteMeters = 40;
@@ -44,6 +59,11 @@ const rerouteMs = 30_000;
 const arrivingMeters = 30;
 const roadFactor = 1.3;
 const fallbackKmh = 15;
+const arrivalRetryMs = 10_000;
+const awayMeters = 150;
+const awayGraceMs = 2 * 60_000;
+const noDriverMs = 10 * 60_000;
+const companionPollMs = 5_000;
 
 type Coordinates = { lat: number; lng: number };
 
@@ -59,6 +79,8 @@ export function ActivePickup({
   problemSource,
   onCancel,
   onBack,
+  onArrived,
+  onLeft,
 }: {
   request: PickupRequest;
   busy: boolean;
@@ -66,6 +88,8 @@ export function ActivePickup({
   problemSource: string;
   onCancel: () => void;
   onBack: () => void;
+  onArrived: () => void;
+  onLeft: () => void;
 }) {
   const insets = useSafeAreaInsets();
   const [headerHeight, setHeaderHeight] = useState(140);
@@ -74,6 +98,15 @@ export function ActivePickup({
   const [driver, setDriver] = useState<PickupDriver | null>(null);
   const [eta, setEta] = useState<EtaRoute | null>(null);
   const lastRouted = useRef<{ at: number; from: Coordinates } | null>(null);
+  const [locationError, setLocationError] = useState<string | null>(null);
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const [arrivalProblem, setArrivalProblem] = useState("");
+  const lastArrivalAttempt = useRef(0);
+  const lastAwayReport = useRef(0);
+  const mounted = useRef(true);
+  const [awaySince, setAwaySince] = useState<number | null>(null);
+  const [recenters, setRecenters] = useState(0);
+  const [companions, setCompanions] = useState<Rider[]>([]);
 
   const matched = request.status === "accepted";
   const pickupPoint = useMemo(
@@ -81,6 +114,15 @@ export function ActivePickup({
     [request.lat, request.lng],
   );
   const driverLocation = matched ? (driver?.location ?? null) : null;
+  const handleLocation = useCallback(
+    (location: Coordinates | null) => {
+      setMe(location);
+      if (!location) return;
+      const away = getDistanceMeters(location, pickupPoint) > awayMeters;
+      setAwaySince((since) => (away ? (since ?? Date.now()) : null));
+    },
+    [pickupPoint],
+  );
   const waitingArea = useMemo<WaitingArea>(
     () => ({
       id: `pickup-waiting-area-${request.id}`,
@@ -91,11 +133,17 @@ export function ActivePickup({
       routeId: null,
       vicinity: null,
     }),
-    [request.id, request.pickupName, request.waitingAreaType, request.lat, request.lng],
+    [
+      request.id,
+      request.pickupName,
+      request.waitingAreaType,
+      request.lat,
+      request.lng,
+    ],
   );
 
   useEffect(() => {
-    if (request.vehicle === "jeep") return;
+    if (request.vehicle === "jeep" || !matched) return;
     let active = true;
     let subscription: { remove: () => void } | null = null;
     watchLocation(({ coords }) =>
@@ -109,7 +157,58 @@ export function ActivePickup({
       active = false;
       subscription?.remove();
     };
-  }, [request.vehicle]);
+  }, [request.vehicle, matched]);
+
+  const distance = me ? getDistanceMeters(me, pickupPoint) : null;
+  const withinRange = distance !== null && distance <= waitingAreaArrivalMeters;
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (matched || request.arrived || !withinRange || !me) return;
+    if (Date.now() - lastArrivalAttempt.current < arrivalRetryMs) return;
+    lastArrivalAttempt.current = Date.now();
+    markPickupArrived(request.id, me).then((result) => {
+      if (!mounted.current) return;
+      if (result.ok) {
+        setArrivalProblem("");
+        onArrived();
+      } else {
+        setArrivalProblem(result.error);
+      }
+    });
+  }, [matched, request.arrived, request.id, withinRange, me, onArrived]);
+
+  const now = useNow(5_000, !matched);
+  const awayMs = request.arrived && awaySince !== null ? now - awaySince : 0;
+  const awayTooLong = awayMs >= awayGraceMs;
+  useEffect(() => {
+    if (matched || !request.arrived || !awayTooLong || !me) return;
+    if (Date.now() - lastAwayReport.current < arrivalRetryMs) return;
+    lastAwayReport.current = Date.now();
+    markPickupAway(request.id, me).then((result) => {
+      if (mounted.current && result.ok && !result.data) onLeft();
+    });
+  }, [matched, request.arrived, request.id, awayTooLong, me, onLeft]);
+
+  const waitingMs =
+    request.arrived && request.arrivedAt
+      ? now - request.arrivedAt.getTime()
+      : 0;
+  const noDriverYet = !matched && waitingMs >= noDriverMs;
+
+  usePolling(async () => {
+    const result = await loadPickupCompanionStatuses(request.id);
+    if (result.ok) {
+      setCompanions(
+        result.data.filter((rider) => rider.inviteStatus === "accepted"),
+      );
+    }
+  }, companionPollMs);
 
   usePolling(
     async () => {
@@ -175,7 +274,10 @@ export function ActivePickup({
           ])
         : null,
       userLocation: me,
-      focus: null,
+      focus:
+        recenters > 0 && me
+          ? { key: `me-${recenters}`, lat: me.lat, lng: me.lng, zoom: 17 }
+          : null,
       fit: {
         key: `${request.id}:${me ? 1 : 0}:${driverLocation ? 1 : 0}`,
         points,
@@ -192,20 +294,44 @@ export function ActivePickup({
     eta,
     headerHeight,
     cardHeight,
+    recenters,
   ]);
 
   return (
     <View style={styles.screen}>
       <StatusBar style="light" />
-      {request.vehicle === "jeep" ? (
+      {!matched || request.vehicle === "jeep" ? (
         <WaitingAreaDirectionsMap
           area={waitingArea}
-          onLocationChange={setMe}
+          onLocationChange={handleLocation}
+          onLocationError={setLocationError}
+          locateTop={headerHeight + 12}
           padTop={headerHeight + 30}
           padBottom={cardHeight + 30}
         />
       ) : (
-        <TransitMap state={mapState} />
+        <>
+          <TransitMap state={mapState} />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Center the map on your location"
+            accessibilityState={{ disabled: !me }}
+            disabled={!me}
+            onPress={() => setRecenters((count) => count + 1)}
+            style={({ pressed }) => [
+              styles.locateButton,
+              { top: headerHeight + 12 },
+              pressed && styles.pressed,
+            ]}
+          >
+            <LocateFixed
+              color={palette.brand}
+              size={20}
+              strokeWidth={2.2}
+              style={!me && styles.locateIdle}
+            />
+          </Pressable>
+        </>
       )}
 
       <View
@@ -225,7 +351,10 @@ export function ActivePickup({
         onLayout={(event) => setCardHeight(event.nativeEvent.layout.height)}
       >
         {matched ? (
-          <MatchedDetails driver={driver} etaText={etaText} />
+          <>
+            <MatchedDetails driver={driver} etaText={etaText} />
+            <CompanionAvatars companions={companions} />
+          </>
         ) : (
           <>
             <View style={styles.waitingRow}>
@@ -239,45 +368,163 @@ export function ActivePickup({
                 <Users color={panelNavy} size={16} strokeWidth={2.4} />
               </View>
               <Text style={styles.passengerCount}>{request.passengers}</Text>
-              <LoadingLogo
-                color={routeCyan}
-                size={24}
-                label="Waiting for a driver"
-              />
+              {request.arrived ? (
+                <LoadingLogo
+                  color={routeCyan}
+                  size={24}
+                  label="Waiting for a driver"
+                />
+              ) : (
+                <Footprints color={routeCyan} size={22} strokeWidth={2.2} />
+              )}
             </View>
-            {request.vehicle === "jeep" && (
-              <Text style={styles.waitingAreaMessage}>
-                {!me
-                  ? `Your pickup is at ${request.pickupName}. Enable location to confirm you’re at the waiting area.`
-                  : getDistanceMeters(me, pickupPoint) <= waitingAreaArrivalMeters
-                    ? `You’re at ${request.pickupName}. Stay here for your driver.`
-                    : `Please go to ${request.pickupName} and stay there so your driver can find you.`}
-              </Text>
+            <ArrivalGuide
+              arrived={request.arrived}
+              located={!!me}
+              locationError={locationError}
+              distance={distance}
+              withinRange={withinRange}
+              awayMs={awayMs}
+              waitingMs={waitingMs}
+            />
+            <CompanionAvatars companions={companions} />
+            {noDriverYet && (
+              <View style={styles.noDriver}>
+                <Hourglass color="#92400e" size={16} strokeWidth={2.2} />
+                <View style={styles.flex}>
+                  <Text style={styles.noDriverTitle}>No driver yet</Text>
+                  <Text style={styles.noDriverBody}>
+                    Drivers nearby may be full or on another route. You can keep
+                    waiting, or cancel and request a different vehicle.
+                  </Text>
+                </View>
+              </View>
             )}
-            {!!problem && (
-              <PickupAlert
-                source={problemSource}
-                message={problem}
-                compact
-              />
+            {problem ? (
+              <ErrorAlert title={problemSource} message={problem} />
+            ) : (
+              !!arrivalProblem &&
+              withinRange && (
+                <ErrorAlert title="Arrival" message={arrivalProblem} />
+              )
             )}
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Cancel pickup request"
               disabled={busy}
-              onPress={onCancel}
+              onPress={() => setConfirmCancel(true)}
               style={({ pressed }) => [
                 styles.cancelButton,
                 (pressed || busy) && styles.pressed,
               ]}
             >
               <Text style={styles.cancelText}>
-                {busy ? "CANCELLING..." : "CANCEL REQUEST"}
+                {busy
+                  ? "CANCELLING..."
+                  : noDriverYet
+                    ? "CANCEL AND TRY ANOTHER VEHICLE"
+                    : "CANCEL REQUEST"}
               </Text>
             </Pressable>
           </>
         )}
       </View>
+
+      <ConfirmModal
+        visible={confirmCancel}
+        title="Cancel this pickup request?"
+        message="Your request will be withdrawn and drivers will no longer see it. You can request a new pickup afterwards."
+        confirmLabel="Cancel request"
+        cancelLabel="Keep request"
+        destructive
+        icon={<MapPinX color="#ffffff" size={22} strokeWidth={2.2} />}
+        onCancel={() => setConfirmCancel(false)}
+        onConfirm={() => {
+          setConfirmCancel(false);
+          onCancel();
+        }}
+      />
+    </View>
+  );
+}
+
+function ArrivalGuide({
+  arrived,
+  located,
+  locationError,
+  distance,
+  withinRange,
+  awayMs,
+  waitingMs,
+}: {
+  arrived: boolean;
+  located: boolean;
+  locationError: string | null;
+  distance: number | null;
+  withinRange: boolean;
+  awayMs: number;
+  waitingMs: number;
+}) {
+  const visible = arrived;
+  const waitingMinutes = Math.floor(waitingMs / 60_000);
+  const awayLeft = Math.max(0, Math.ceil((awayGraceMs - awayMs) / 60_000));
+  const [title, body] = arrived
+    ? awayMs > 0
+      ? [
+          "You moved away from the pickup point",
+          `Head back within ${awayLeft} ${awayLeft === 1 ? "minute" : "minutes"}, or drivers will stop seeing your request until you return.`,
+        ]
+      : [
+          "You’re at the pickup point",
+          waitingMinutes > 0
+            ? `Nearby drivers can see your request. You’ve been waiting ${waitingMinutes} ${waitingMinutes === 1 ? "minute" : "minutes"}. Stay here so your driver can find you.`
+            : "Nearby drivers can now see your request. Stay here so your driver can find you.",
+        ]
+    : locationError
+      ? [
+          "Turn on your location",
+          "We need it to confirm you’re at the pickup point. Drivers won’t see your request until then.",
+        ]
+      : !located
+        ? [
+            "Finding your location…",
+            "Drivers will see your request once you’re at the pickup point.",
+          ]
+        : withinRange
+          ? [
+              "Confirming you’ve arrived…",
+              "Hold on. We’re letting nearby drivers know you’re here.",
+            ]
+          : [
+              "Head to the pickup point",
+              `You’re ${formatDistance(distance ?? 0)} away. Follow the route on the map. Drivers will see your request once you get there.`,
+            ];
+
+  return (
+    <View style={styles.guide}>
+      <View
+        style={[
+          styles.guideBadge,
+          visible ? styles.guideBadgeLive : styles.guideBadgeHidden,
+        ]}
+      >
+        <RadioTower
+          color={visible ? palette.success : "#92400e"}
+          size={12}
+          strokeWidth={2.4}
+        />
+        <Text
+          style={[
+            styles.guideBadgeText,
+            { color: visible ? palette.success : "#92400e" },
+          ]}
+        >
+          {visible ? "VISIBLE TO DRIVERS" : "NOT VISIBLE TO DRIVERS YET"}
+        </Text>
+      </View>
+      <Text style={styles.guideTitle}>{title}</Text>
+      <Text style={styles.guideBody}>{body}</Text>
+      {!!locationError && !arrived && <LocationSettingsButton />}
     </View>
   );
 }
@@ -340,6 +587,17 @@ function MatchedDetails({
 }
 
 const styles = StyleSheet.create({
+  locateButton: {
+    position: "absolute",
+    right: 12,
+    width: 34,
+    height: 34,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 9,
+    backgroundColor: "rgba(168, 220, 247, 0.85)",
+  },
+  locateIdle: { opacity: 0.5 },
   screen: { flex: 1, backgroundColor: "#e8eaed" },
   headerWrap: { position: "absolute", top: 0, left: 0, right: 0 },
   pressed: { opacity: 0.75 },
@@ -375,12 +633,55 @@ const styles = StyleSheet.create({
     fontFamily: "SoraBold",
     fontSize: 16,
   },
-  waitingAreaMessage: {
+  guide: { gap: 4, marginTop: 14 },
+  flex: { flex: 1 },
+  companionRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  companionName: {
+    flex: 1,
     color: "#ffffff",
+    fontFamily: "SoraBold",
+    fontSize: 12,
+  },
+  companionStatus: {
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 999,
+  },
+  companionStatusText: { fontFamily: "SoraBold", fontSize: 10 },
+  noDriver: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 14,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: "#fef3c7",
+  },
+  noDriverTitle: { color: "#92400e", fontFamily: "SoraBold", fontSize: 12 },
+  noDriverBody: {
+    color: "#78350f",
+    fontFamily: "Sora",
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  guideBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 5,
+    marginBottom: 4,
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 999,
+  },
+  guideBadgeLive: { backgroundColor: "#dcfce7" },
+  guideBadgeHidden: { backgroundColor: "#fef3c7" },
+  guideBadgeText: { fontFamily: "SoraBold", fontSize: 10 },
+  guideTitle: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 13 },
+  guideBody: {
+    color: "#d6e2f5",
     fontFamily: "Sora",
     fontSize: 10,
     lineHeight: 15,
-    marginTop: 12,
   },
   cancelButton: {
     height: 50,
@@ -404,7 +705,7 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 14,
   },
-  etaLabel: { color: "#ffffff", fontFamily: "Sora", fontSize: 7 },
+  etaLabel: { color: "#ffffff", fontFamily: "Sora", fontSize: 10 },
   etaValue: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 12 },
   vehicleRow: {
     flexDirection: "row",
@@ -415,6 +716,6 @@ const styles = StyleSheet.create({
   plateBlock: { maxWidth: 90 },
   plate: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 15 },
   vehicleColumn: { flex: 1, gap: 2 },
-  vehicleText: { color: "#ffffff", fontFamily: "Sora", fontSize: 8 },
+  vehicleText: { color: "#ffffff", fontFamily: "Sora", fontSize: 10 },
   vehicleLoading: { marginTop: 16, alignSelf: "flex-start" },
 });

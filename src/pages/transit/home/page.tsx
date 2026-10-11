@@ -1,17 +1,17 @@
 import { BlurTargetView } from "expo-blur";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import Clock from "lucide-react-native/icons/clock";
-import Inbox from "lucide-react-native/icons/inbox";
+import BriefcaseBusiness from "lucide-react-native/icons/briefcase-business";
 import Route from "lucide-react-native/icons/route";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { loadHome, peekHomeName } from "@/api/v1/profile/controllers";
+import { loadJobBoard } from "@/api/v1/rentals/controllers";
 import { BottomNav, bottomNavHeight } from "@/components/bottom-nav";
-import { LoadingLogo } from "@/components/LoadingLogo";
 import {
   ActionCard,
   ActionRow,
@@ -23,6 +23,7 @@ import {
 import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
 import { RatingsSummary } from "@/pages/transit/home/ratings-summary";
+import { HomeSkeleton } from "@/components/skeleton";
 
 const { brandBlue } = homeColors;
 
@@ -32,6 +33,19 @@ export default function TransitHomeScreen() {
   const blurTarget = useRef<View | null>(null);
   const [firstName, setFirstName] = useState(() =>
     peekHomeName("transit_personnel"),
+  );
+  const [openJobs, setOpenJobs] = useState(0);
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      loadJobBoard().then((result) => {
+        if (active && result.ok) setOpenJobs(result.data.length);
+      });
+      return () => {
+        active = false;
+      };
+    }, []),
   );
 
   useEffect(() => {
@@ -53,11 +67,7 @@ export default function TransitHomeScreen() {
   }, []);
 
   if (firstName === null) {
-    return (
-      <View style={styles.loadingScreen}>
-        <LoadingLogo color={brandBlue} />
-      </View>
-    );
+    return <HomeSkeleton />;
   }
 
   return (
@@ -82,10 +92,21 @@ export default function TransitHomeScreen() {
                 onPress={() => router.push(Routes.transitStartTrip)}
               />
               <ActionCard
-                title="Rental Requests"
-                description="Review charter requests from commuters"
-                icon={<Inbox color={brandBlue} size={40} strokeWidth={1.8} />}
+                title="Rental Jobs"
+                description="Take charter trips posted by commuters"
+                icon={
+                  <BriefcaseBusiness
+                    color={brandBlue}
+                    size={40}
+                    strokeWidth={1.8}
+                  />
+                }
                 onPress={() => router.push(Routes.transitRentalRequests)}
+                badge={
+                  openJobs > 0
+                    ? `${openJobs > 9 ? "9+" : openJobs} NEW`
+                    : undefined
+                }
               />
               <ActionCard
                 title="Trip History"

@@ -32,8 +32,9 @@ import {
 } from "@/api/v1/ratings/controllers";
 import { LoadingLogo } from "@/components/LoadingLogo";
 import { moduleColors } from "@/components/module-ui";
+import { ErrorAlert } from "@/components/error-alert";
 
-const { brandBlue, mutedText, softBlue, text, error } = moduleColors;
+const { brandBlue, mutedText, softBlue, text } = moduleColors;
 const starGold = "#f5b301";
 const starEmpty = "#d6dbe6";
 const scores = [1, 2, 3, 4, 5];
@@ -297,7 +298,13 @@ export function RateTripModal({
                 {feedback.length}/{maxFeedbackLength}
               </Text>
 
-              {!!problem && <Text style={styles.problem}>{problem}</Text>}
+              {!!problem && (
+                <ErrorAlert
+                  title="Rating"
+                  message={problem}
+                  style={styles.problem}
+                />
+              )}
 
               <View style={styles.actions}>
                 <Pressable
@@ -353,7 +360,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: "#fef3c7",
   },
-  badgeText: { color: "#92400e", fontFamily: "SoraBold", fontSize: 9 },
+  badgeText: { color: "#92400e", fontFamily: "SoraBold", fontSize: 10 },
   inputRow: {
     flexDirection: "row",
     justifyContent: "center",
@@ -415,17 +422,11 @@ const styles = StyleSheet.create({
   counter: {
     color: mutedText,
     fontFamily: "Sora",
-    fontSize: 9,
+    fontSize: 10,
     marginTop: 4,
     textAlign: "right",
   },
-  problem: {
-    color: error,
-    fontFamily: "Sora",
-    fontSize: 10,
-    marginTop: 8,
-    textAlign: "center",
-  },
+  problem: { marginTop: 8 },
   actions: { flexDirection: "row", gap: 12, marginTop: 16 },
   button: {
     flex: 1,

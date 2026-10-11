@@ -4,42 +4,36 @@ import BusFront from "lucide-react-native/icons/bus-front";
 import CalendarDays from "lucide-react-native/icons/calendar-days";
 import ChevronLeft from "lucide-react-native/icons/chevron-left";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
-import Award from "lucide-react-native/icons/award";
-import CircleCheck from "lucide-react-native/icons/circle-check";
 import Flag from "lucide-react-native/icons/flag";
+import Megaphone from "lucide-react-native/icons/megaphone";
+import PersonStanding from "lucide-react-native/icons/person-standing";
 import MapPin from "lucide-react-native/icons/map-pin";
 import NotebookPen from "lucide-react-native/icons/notebook-pen";
-import TriangleAlert from "lucide-react-native/icons/triangle-alert";
-import UserRoundCheck from "lucide-react-native/icons/user-round-check";
 import Users from "lucide-react-native/icons/users";
 import { useCallback, useEffect, useState } from "react";
-import {
-  Alert,
-  BackHandler,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { BackHandler, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, { useAnimatedRef } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import type { Place } from "@/api/v1/places/controllers";
 import {
+  loadActivePickup,
+  loadMySharedRide,
+} from "@/api/v1/pickups/controllers";
+import {
+  activeRentalOf,
   cancelRental,
   combineDateTime,
-  findRentalDrivers,
+  formatRentalTime,
   loadMyRentals,
-  requestRental,
-  type CharterVehicle,
+  postRental,
+  fleetSize,
+  type Fleet,
   type Rental,
-  type RentalDriver,
   type RentalTrip,
   type TripType,
 } from "@/api/v1/rentals/controllers";
-import { LoadingLogo } from "@/components/LoadingLogo";
 import { DateTimeField } from "@/components/date-time-field";
-import { EmptyState } from "@/components/empty-state";
 import {
   Chip,
   FieldLabel,
@@ -49,44 +43,29 @@ import {
   PassengerStepper,
   SectionTitle,
   SoftField,
-  VehiclePicker,
-  type VehicleOption,
 } from "@/components/module-ui";
 import { ConnectionRequired } from "@/components/connection-required";
+import { ErrorAlert, ErrorOutline } from "@/components/error-alert";
 import { PlaceSearchField } from "@/components/place-search-field";
 import { RentalCard } from "@/components/rental-card";
 import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
 import { checkOnline, useOnline } from "@/hooks/use-online";
 import { usePolling } from "@/hooks/use-polling";
+import { SkeletonCards } from "@/components/skeleton";
+import { palette } from "@/constants/colors";
+
+import { ActiveRental } from "./active-rental";
+import { FleetPicker, fleetLabel, fleetSeats, maxFleet } from "./fleet-picker";
 
 const { brandBlue, softBlue, text, error } = moduleColors;
 
-type Step = 1 | 2 | 3;
+type Step = 1 | 2;
 
-const stepTitles = ["Trip details", "Vehicle", "Driver"];
+const stepTitles = ["Trip details", "Vehicle & post"];
 
-const charterVehicles: VehicleOption<CharterVehicle>[] = [
-  { value: "van", label: "VAN", icon: require("@/assets/images/van.svg") },
-  {
-    value: "jeep",
-    label: "JEEP",
-    icon: require("@/assets/images/jeepney.svg"),
-  },
-  { value: "bus", label: "BUS", icon: require("@/assets/images/bus.svg") },
-];
-
-const vehicleCapacity: Record<CharterVehicle, number> = {
-  van: 14,
-  jeep: 20,
-  bus: 50,
-};
-
-const vehicleNames: Record<CharterVehicle, string> = {
-  van: "Van",
-  jeep: "Jeepney",
-  bus: "Bus",
-};
+const emptyFleet: Fleet = { van: 0, jeep: 0, bus: 0, tricy: 0 };
+const startingFleet: Fleet = { ...emptyFleet, jeep: 1 };
 
 const occasions = [
   "Family Trip",
@@ -117,6 +96,29 @@ function sameDay(a: Date, b: Date) {
   return a.toDateString() === b.toDateString();
 }
 
+type RentalField =
+  | "pickup"
+  | "destination"
+  | "tripDate"
+  | "pickupTime"
+  | "returnDate"
+  | "returnTime"
+  | "occasion"
+  | "vehicle";
+
+type StepProblem = [field: RentalField, message: string] | null;
+
+const rentalFieldTitles: Record<RentalField, string> = {
+  pickup: "Pickup location",
+  destination: "Destination",
+  tripDate: "Trip date",
+  pickupTime: "Pickup time",
+  returnDate: "Return date",
+  returnTime: "Return pickup time",
+  occasion: "Occasion",
+  vehicle: "Vehicle",
+};
+
 function minutesOfDay(date: Date) {
   return date.getHours() * 60 + date.getMinutes();
 }
@@ -126,7 +128,13 @@ export default function RentalScreen() {
   const chrome = useScrollChrome();
   const scrollRef = useAnimatedRef<Animated.ScrollView>();
   const [step, setStep] = useState<Step>(1);
-  const [problem, setProblem] = useState("");
+  const [problem, setProblemMessage] = useState("");
+  const [problemField, setProblemField] = useState<RentalField | null>(null);
+  const setProblem = (message: string, field: RentalField | null = null) => {
+    setProblemMessage(message);
+    setProblemField(message ? field : null);
+  };
+  const invalid = (field: RentalField) => problemField === field;
 
   const [pickup, setPickup] = useState<Place | null>(null);
   const [destination, setDestination] = useState<Place | null>(null);
@@ -138,21 +146,35 @@ export default function RentalScreen() {
   const [occasion, setOccasion] = useState("");
   const [passengers, setPassengers] = useState(1);
   const [notes, setNotes] = useState("");
-  const [vehicle, setVehicle] = useState<CharterVehicle>("van");
-  const [drivers, setDrivers] = useState<RentalDriver[] | null>(null);
-  const [driverId, setDriverId] = useState<string | null>(null);
+  const [fleet, setFleet] = useState<Fleet>(startingFleet);
   const [sending, setSending] = useState(false);
   const [rentals, setRentals] = useState<Rental[]>([]);
-  const [cancellingId, setCancellingId] = useState<string | null>(null);
-  const [notice, setNotice] = useState("");
+  const [rentalsLoaded, setRentalsLoaded] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState("");
+  const [pickupInProgress, setPickupInProgress] = useState(false);
   const online = useOnline();
 
   const refreshRentals = useCallback(async () => {
-    const result = await loadMyRentals();
+    const [result, pickup, shared] = await Promise.all([
+      loadMyRentals(),
+      loadActivePickup(),
+      loadMySharedRide(),
+    ]);
     if (result.ok) setRentals(result.data);
+    setRentalsLoaded(true);
+    if (pickup.ok && shared.ok) {
+      setPickupInProgress(!!pickup.data || !!shared.data);
+    }
   }, []);
 
   usePolling(refreshRentals, rentalPollMs);
+
+  const activeRental = activeRentalOf(rentals);
+  const pastRequests = rentals.filter(
+    (rental) => rental.expired || rental.status === "rejected",
+  );
+  const showForm = rentalsLoaded && !activeRental && !pickupInProgress;
 
   const buildTrip = (): RentalTrip | null => {
     if (!pickup || !destination || !tripDate || !pickupTime) return null;
@@ -171,20 +193,6 @@ export default function RentalScreen() {
     };
   };
 
-  const searchDrivers = async () => {
-    const trip = buildTrip();
-    if (!trip) return;
-    setDrivers(null);
-    setDriverId(null);
-    const result = await findRentalDrivers(vehicle, trip);
-    if (!result.ok) {
-      setDrivers([]);
-      setProblem(result.error);
-      return;
-    }
-    setDrivers(result.data);
-  };
-
   const resetForm = () => {
     setPickup(null);
     setDestination(null);
@@ -196,62 +204,45 @@ export default function RentalScreen() {
     setOccasion("");
     setPassengers(1);
     setNotes("");
-    setVehicle("van");
-    setDrivers(null);
-    setDriverId(null);
+    setFleet(startingFleet);
   };
 
-  const sendRequest = async () => {
+  const postRequest = async () => {
+    const vehicleProblem = getVehicleProblem();
+    if (vehicleProblem) return setProblem(vehicleProblem[1], vehicleProblem[0]);
     const trip = buildTrip();
-    const driver = drivers?.find((item) => item.driverId === driverId);
-    if (!trip || !driver || sending) return;
+    if (!trip || sending) return;
     setSending(true);
     setProblem("");
     if (!(await checkOnline())) {
       setSending(false);
       return setProblem(
-        "You're offline. Connect to the internet to send your request.",
+        "You're offline. Connect to the internet to post your request.",
       );
     }
-    const result = await requestRental(driver, trip);
+    const result = await postRental(fleet, trip);
     setSending(false);
-    if (!result.ok) {
-      setProblem(result.error);
-      searchDrivers();
-      return;
-    }
+    if (!result.ok) return setProblem(result.error);
     resetForm();
-    setNotice(
-      `Request sent to ${driver.name}. We'll notify you when they respond.`,
-    );
     goToStep(1);
     refreshRentals();
   };
 
-  const confirmCancel = (rental: Rental) => {
-    Alert.alert(
-      "Cancel this rental?",
-      `Your rental to ${rental.destination} will be cancelled and the driver will be notified.`,
-      [
-        { text: "Keep", style: "cancel" },
-        {
-          text: "Cancel rental",
-          style: "destructive",
-          onPress: async () => {
-            setCancellingId(rental.id);
-            const result = await cancelRental(rental.id);
-            setCancellingId(null);
-            if (!result.ok) {
-              Alert.alert("Couldn't cancel", result.error);
-              return;
-            }
-            setRentals((current) =>
-              current.filter((item) => item.id !== rental.id),
-            );
-          },
-        },
-      ],
+  const cancelActive = async () => {
+    if (!activeRental || cancelling) return;
+    setCancelling(true);
+    setCancelError("");
+    const result = await cancelRental(activeRental.id);
+    setCancelling(false);
+    if (!result.ok) return setCancelError(result.error);
+    setRentals((current) =>
+      current.filter((item) => item.id !== activeRental.id),
     );
+    refreshRentals();
+  };
+
+  const clearProblemFor = (field: RentalField) => {
+    if (problemField === field) setProblem("");
   };
 
   const goToStep = (next: Step) => {
@@ -265,55 +256,71 @@ export default function RentalScreen() {
     else router.back();
   };
 
-  const getTripProblem = () => {
-    if (!pickup) return "Choose your pickup location from the suggestions.";
-    if (!destination) return "Choose your destination from the suggestions.";
+  const getTripProblem = (): StepProblem => {
+    if (!pickup)
+      return ["pickup", "Choose your pickup location from the suggestions."];
+    if (!destination)
+      return ["destination", "Choose your destination from the suggestions."];
     if (pickup.id === destination.id) {
-      return "Your pickup location and destination can't be the same.";
+      return [
+        "destination",
+        "Your pickup location and destination can't be the same.",
+      ];
     }
-    if (!tripDate) return "Select the date of your trip.";
-    if (!pickupTime) return "Select your pickup time.";
+    if (!tripDate) return ["tripDate", "Select the date of your trip."];
+    if (!pickupTime) return ["pickupTime", "Select your pickup time."];
     if (tripType === "round_trip") {
-      if (!returnDate) return "Select your return date.";
+      if (!returnDate) return ["returnDate", "Select your return date."];
       if (!sameOrAfter(returnDate, tripDate)) {
-        return "The return date can't be before the trip date.";
+        return ["returnDate", "The return date can't be before the trip date."];
       }
-      if (!returnTime) return "Select your return pickup time.";
+      if (!returnTime) return ["returnTime", "Select your return pickup time."];
       if (
         sameDay(returnDate, tripDate) &&
         minutesOfDay(returnTime) <= minutesOfDay(pickupTime)
       ) {
-        return "The return pickup time must be after your pickup time.";
+        return [
+          "returnTime",
+          "The return pickup time must be after your pickup time.",
+        ];
       }
     }
-    if (!occasion) return "Select the occasion of your trip.";
+    if (!occasion) return ["occasion", "Select the occasion of your trip."];
     return null;
   };
 
-  const getVehicleProblem = () =>
-    passengers > vehicleCapacity[vehicle]
-      ? `A ${vehicleNames[vehicle].toLowerCase()} fits up to ${vehicleCapacity[vehicle]} passengers. Choose a bigger vehicle.`
-      : null;
-
-  const stepProblems: Record<Step, () => string | null> = {
-    1: getTripProblem,
-    2: getVehicleProblem,
-    3: () => (driverId ? null : "Choose a driver to send your request to."),
+  const getVehicleProblem = (): StepProblem => {
+    const count = fleetSize(fleet);
+    if (count === 0) return ["vehicle", "Add at least one vehicle to rent."];
+    if (count > maxFleet) {
+      return ["vehicle", `You can rent up to ${maxFleet} vehicles at a time.`];
+    }
+    const seats = fleetSeats(fleet);
+    if (passengers > seats) {
+      return [
+        "vehicle",
+        `These vehicles seat up to ${seats} passengers. Add another vehicle or choose bigger ones.`,
+      ];
+    }
+    return null;
   };
 
-  const canGoForward = step < 3 && !stepProblems[step]();
+  const stepProblems: Record<Step, () => StepProblem> = {
+    1: getTripProblem,
+    2: getVehicleProblem,
+  };
+
+  const canGoForward = step < 2 && !stepProblems[step]();
   const canGoBackward = step > 1;
 
   const advance = () => {
     const problem = stepProblems[step]();
-    if (problem) return setProblem(problem);
+    if (problem) return setProblem(problem[1], problem[0]);
     const trip = buildTrip();
     if (step === 1 && trip && trip.pickupTime.getTime() <= Date.now()) {
-      return setProblem("Choose a pickup time later than now.");
+      return setProblem("Choose a pickup time later than now.", "pickupTime");
     }
-    setNotice("");
-    if (step === 2) searchDrivers();
-    goToStep((step + 1) as Step);
+    goToStep(2);
   };
 
   const retreat = () => {
@@ -343,84 +350,80 @@ export default function RentalScreen() {
         onScroll={chrome.scrollHandler}
         scrollEventThrottle={16}
         contentContainerStyle={{
-          paddingTop: chrome.headerHeight,
+          paddingTop: chrome.headerHeight + (showForm ? stepProgressHeight : 0),
           paddingBottom: insets.bottom + 24,
         }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.body}>
-          {step === 1 && (
+          {!rentalsLoaded && (
+            <SkeletonCards count={1} height={220} style={styles.loading} />
+          )}
+          {rentalsLoaded && activeRental && (
+            <ActiveRental
+              rental={activeRental}
+              busy={cancelling}
+              problem={cancelError}
+              onCancel={cancelActive}
+            />
+          )}
+          {rentalsLoaded && !activeRental && pickupInProgress && (
+            <View style={styles.blocked}>
+              <View style={styles.blockedIcon}>
+                <PersonStanding color={brandBlue} size={26} strokeWidth={2} />
+              </View>
+              <Text style={styles.blockedTitle}>
+                You have a pickup in progress
+              </Text>
+              <Text style={styles.blockedText}>
+                You can only have one request at a time. Finish or cancel your
+                pickup, then come back to post a rental.
+              </Text>
+              <ModuleButton
+                label="GO TO PICKUP"
+                onPress={() => router.push(Routes.commuterPickup)}
+              />
+            </View>
+          )}
+          {showForm && step === 1 && (
             <>
-              {!!notice && (
-                <View style={[styles.infoCard, styles.successCard]}>
-                  <CircleCheck color="#15803d" size={18} strokeWidth={2} />
-                  <Text style={[styles.infoText, styles.successText]}>
-                    {notice}
-                  </Text>
-                </View>
-              )}
-              {rentals.length > 0 && (
-                <>
-                  <SectionTitle
-                    icon={
-                      <BusFront color="#ffffff" size={18} strokeWidth={2} />
-                    }
-                    title="Your rental requests"
-                  />
-                  <View style={styles.rentalList}>
-                    {rentals.map((rental) => (
-                      <RentalCard
-                        key={rental.id}
-                        rental={rental}
-                        viewer="commuter"
-                        disabled={!!cancellingId}
-                        actions={
-                          (rental.status === "pending" && !rental.expired) ||
-                          rental.status === "accepted"
-                            ? [
-                                {
-                                  label: "CANCEL RENTAL",
-                                  tone: "danger",
-                                  busy: cancellingId === rental.id,
-                                  onPress: () => confirmCancel(rental),
-                                },
-                              ]
-                            : []
-                        }
-                      />
-                    ))}
-                  </View>
-                </>
-              )}
               <SectionTitle
                 icon={<MapPin color="#ffffff" size={18} strokeWidth={2} />}
                 title="Where are we going?"
               />
-              <FieldLabel>PREFERRED PICKUP LOCATION</FieldLabel>
-              <PlaceSearchField
-                value={pickup}
-                onChange={(place) => {
-                  setProblem("");
-                  setPickup(place);
-                }}
-                onProblem={setProblem}
-                placeholder="Search pickup location..."
-                icon={<MapPin color={brandBlue} size={18} strokeWidth={2} />}
-                allowCurrentLocation
-              />
+              <FieldLabel invalid={invalid("pickup")}>
+                PREFERRED PICKUP LOCATION
+              </FieldLabel>
+              <ErrorOutline invalid={invalid("pickup")} color={error}>
+                <PlaceSearchField
+                  value={pickup}
+                  onChange={(place) => {
+                    setProblem("");
+                    setPickup(place);
+                  }}
+                  onProblem={(message) => setProblem(message, "pickup")}
+                  placeholder="Search pickup location..."
+                  icon={<MapPin color={brandBlue} size={18} strokeWidth={2} />}
+                  allowCurrentLocation
+                />
+              </ErrorOutline>
               <View style={styles.gap} />
-              <FieldLabel>DESTINATION</FieldLabel>
-              <PlaceSearchField
-                value={destination}
-                onChange={(place) => {
-                  setProblem("");
-                  setDestination(place);
-                }}
-                onProblem={setProblem}
-                placeholder="Search destination..."
-                icon={<Flag color={brandBlue} size={18} strokeWidth={2} />}
-              />
+              <FieldLabel invalid={invalid("destination")}>
+                DESTINATION
+              </FieldLabel>
+              <ErrorOutline invalid={invalid("destination")} color={error}>
+                <PlaceSearchField
+                  value={destination}
+                  onChange={(place) => {
+                    setProblem("");
+                    setDestination(place);
+                  }}
+                  onProblem={(message) => setProblem(message, "destination")}
+                  placeholder="Search destination..."
+                  icon={<Flag color={brandBlue} size={18} strokeWidth={2} />}
+                />
+              </ErrorOutline>
 
               <SectionTitle
                 icon={
@@ -446,59 +449,90 @@ export default function RentalScreen() {
 
               <View style={[styles.row, styles.gapTop]}>
                 <View style={styles.flex}>
-                  <FieldLabel>TRIP DATE</FieldLabel>
-                  <DateTimeField
-                    mode="date"
-                    value={tripDate}
-                    onChange={setTripDate}
-                    placeholder="Select date"
-                    minimumDate={startOfToday()}
-                  />
+                  <FieldLabel invalid={invalid("tripDate")}>
+                    TRIP DATE
+                  </FieldLabel>
+                  <ErrorOutline invalid={invalid("tripDate")} color={error}>
+                    <DateTimeField
+                      mode="date"
+                      value={tripDate}
+                      onChange={(value) => {
+                        clearProblemFor("tripDate");
+                        setTripDate(value);
+                      }}
+                      placeholder="Select date"
+                      minimumDate={startOfToday()}
+                    />
+                  </ErrorOutline>
                 </View>
                 <View style={styles.flex}>
-                  <FieldLabel>PICKUP TIME</FieldLabel>
-                  <DateTimeField
-                    mode="time"
-                    value={pickupTime}
-                    onChange={setPickupTime}
-                    placeholder="Select time"
-                  />
+                  <FieldLabel invalid={invalid("pickupTime")}>
+                    PICKUP TIME
+                  </FieldLabel>
+                  <ErrorOutline invalid={invalid("pickupTime")} color={error}>
+                    <DateTimeField
+                      mode="time"
+                      value={pickupTime}
+                      onChange={(value) => {
+                        clearProblemFor("pickupTime");
+                        setPickupTime(value);
+                      }}
+                      placeholder="Select time"
+                    />
+                  </ErrorOutline>
                 </View>
               </View>
 
               {tripType === "round_trip" && (
                 <View style={[styles.row, styles.gapTop]}>
                   <View style={styles.flex}>
-                    <FieldLabel>RETURN DATE</FieldLabel>
-                    <DateTimeField
-                      mode="date"
-                      value={returnDate}
-                      onChange={setReturnDate}
-                      placeholder="Select date"
-                      minimumDate={tripDate ?? startOfToday()}
-                    />
+                    <FieldLabel invalid={invalid("returnDate")}>
+                      RETURN DATE
+                    </FieldLabel>
+                    <ErrorOutline invalid={invalid("returnDate")} color={error}>
+                      <DateTimeField
+                        mode="date"
+                        value={returnDate}
+                        onChange={(value) => {
+                          clearProblemFor("returnDate");
+                          setReturnDate(value);
+                        }}
+                        placeholder="Select date"
+                        minimumDate={tripDate ?? startOfToday()}
+                      />
+                    </ErrorOutline>
                   </View>
                   <View style={styles.flex}>
-                    <FieldLabel>RETURN PICKUP TIME</FieldLabel>
-                    <DateTimeField
-                      mode="time"
-                      value={returnTime}
-                      onChange={setReturnTime}
-                      placeholder="Select time"
-                    />
+                    <FieldLabel invalid={invalid("returnTime")}>
+                      RETURN PICKUP TIME
+                    </FieldLabel>
+                    <ErrorOutline invalid={invalid("returnTime")} color={error}>
+                      <DateTimeField
+                        mode="time"
+                        value={returnTime}
+                        onChange={(value) => {
+                          clearProblemFor("returnTime");
+                          setReturnTime(value);
+                        }}
+                        placeholder="Select time"
+                      />
+                    </ErrorOutline>
                   </View>
                 </View>
               )}
 
               <View style={styles.gapTop}>
-                <FieldLabel>OCCASION</FieldLabel>
+                <FieldLabel invalid={invalid("occasion")}>OCCASION</FieldLabel>
                 <View style={[styles.chipRow, styles.chipWrap]}>
                   {occasions.map((option) => (
                     <Chip
                       key={option}
                       label={option}
                       selected={occasion === option}
-                      onPress={() => setOccasion(option)}
+                      onPress={() => {
+                        clearProblemFor("occasion");
+                        setOccasion(option);
+                      }}
                       style={styles.occasionChip}
                     />
                   ))}
@@ -513,6 +547,7 @@ export default function RentalScreen() {
                   min={1}
                   max={maxPassengers}
                 />
+                <Text style={styles.passengerHint}>Including you.</Text>
               </View>
 
               <View style={styles.gapTop}>
@@ -528,106 +563,96 @@ export default function RentalScreen() {
                 />
               </View>
 
-              <Problem message={problem} />
+              <Problem message={problem} field={problemField} />
               <ModuleButton label="CHOOSE VEHICLE" onPress={advance} />
-            </>
-          )}
 
-          {step === 2 && (
-            <>
-              <SectionTitle
-                icon={<BusFront color="#ffffff" size={18} strokeWidth={2} />}
-                title="Choose a vehicle to rent"
-              />
-              <VehiclePicker
-                value={vehicle}
-                onChange={(next) => {
-                  setProblem("");
-                  setVehicle(next);
-                }}
-                options={charterVehicles}
-              />
-              <View style={styles.infoCard}>
-                <Users color={brandBlue} size={18} strokeWidth={2} />
-                <Text style={styles.infoText}>
-                  A {vehicleNames[vehicle].toLowerCase()} seats up to{" "}
-                  <Text style={styles.bold}>{vehicleCapacity[vehicle]}</Text>{" "}
-                  passengers. You have{" "}
-                  <Text style={styles.bold}>{passengers}</Text>.
-                </Text>
-              </View>
-              {passengers > vehicleCapacity[vehicle] && (
-                <View style={[styles.infoCard, styles.warningCard]}>
-                  <TriangleAlert color={error} size={18} strokeWidth={2} />
-                  <Text style={[styles.infoText, styles.warningText]}>
-                    Too many passengers for this vehicle. Choose a bigger one.
-                  </Text>
-                </View>
-              )}
-
-              <Problem message={problem} />
-              <ModuleButton label="FIND DRIVERS" onPress={advance} />
-            </>
-          )}
-
-          {step === 3 && (
-            <>
-              <SectionTitle
-                icon={
-                  <UserRoundCheck color="#ffffff" size={18} strokeWidth={2} />
-                }
-                title="Available drivers"
-              />
-              {drivers === null ? (
-                <LoadingLogo style={styles.loading} label="Finding drivers" />
-              ) : drivers.length === 0 ? (
-                <EmptyState
-                  icon={
-                    <UserRoundCheck
-                      color={brandBlue}
-                      size={32}
-                      strokeWidth={1.8}
-                    />
-                  }
-                  title="No drivers available"
-                  message={`No ${vehicleNames[vehicle].toLowerCase()} driver is free for ${passengers} ${passengers === 1 ? "passenger" : "passengers"} on that date. Try another date or vehicle.`}
-                />
-              ) : (
+              {pastRequests.length > 0 && (
                 <>
-                  <Text style={styles.driverHint}>
-                    {drivers.length}{" "}
-                    {drivers.length === 1 ? "driver is" : "drivers are"} free
-                    for your trip. Choose one to send your request.
-                  </Text>
-                  <View style={styles.driverList}>
-                    {drivers.map((driver) => (
-                      <DriverOption
-                        key={driver.driverId}
-                        driver={driver}
-                        selected={driver.driverId === driverId}
-                        onPress={() => {
-                          setProblem("");
-                          setDriverId(driver.driverId);
-                        }}
+                  <SectionTitle
+                    icon={
+                      <BusFront color="#ffffff" size={18} strokeWidth={2} />
+                    }
+                    title="Recent requests"
+                  />
+                  <View style={styles.rentalList}>
+                    {pastRequests.map((rental) => (
+                      <RentalCard
+                        key={rental.id}
+                        rental={rental}
+                        viewer="commuter"
                       />
                     ))}
                   </View>
-                  {!online && <ConnectionRequired action="A rental request" />}
-                  {online && <Problem message={problem} />}
-                  <ModuleButton
-                    label={
-                      sending
-                        ? "SENDING..."
-                        : online
-                          ? "SEND REQUEST"
-                          : "OFFLINE"
-                    }
-                    disabled={!driverId || sending || !online}
-                    onPress={sendRequest}
-                  />
                 </>
               )}
-              {drivers?.length === 0 && <Problem message={problem} />}
+            </>
+          )}
+
+          {showForm && step === 2 && (
+            <>
+              <SectionTitle
+                icon={<BusFront color="#ffffff" size={18} strokeWidth={2} />}
+                title="Choose vehicles to rent"
+              />
+              <ErrorOutline invalid={invalid("vehicle")} color={error}>
+                <FleetPicker
+                  fleet={fleet}
+                  onChange={(next) => {
+                    clearProblemFor("vehicle");
+                    setFleet(next);
+                  }}
+                />
+              </ErrorOutline>
+              <View style={styles.infoCard}>
+                <Users color={brandBlue} size={18} strokeWidth={2} />
+                <Text style={styles.infoText}>
+                  You have <Text style={styles.bold}>{passengers}</Text>{" "}
+                  {passengers === 1 ? "passenger" : "passengers"}. Mix any
+                  vehicles you need, up to {maxFleet}. Each vehicle can be taken
+                  by a different driver.
+                </Text>
+              </View>
+
+              <SectionTitle
+                icon={<Megaphone color="#ffffff" size={18} strokeWidth={2} />}
+                title="Review and post"
+              />
+              <View style={styles.review}>
+                <Text style={styles.reviewEyebrow}>YOUR RENTAL TO</Text>
+                <Text style={styles.reviewTitle} numberOfLines={2}>
+                  {destination?.name ?? "Your destination"}
+                </Text>
+                <Text style={styles.reviewLine} numberOfLines={2}>
+                  From {pickup?.name ?? "your pickup location"}
+                </Text>
+                {tripDate && pickupTime && (
+                  <Text style={styles.reviewLine}>
+                    {formatRentalTime(combineDateTime(tripDate, pickupTime))}
+                    {tripType === "round_trip" && returnDate && returnTime
+                      ? ` · return ${formatRentalTime(combineDateTime(returnDate, returnTime))}`
+                      : ""}
+                  </Text>
+                )}
+                <Text style={styles.reviewLine}>
+                  {passengers} {passengers === 1 ? "passenger" : "passengers"} ·{" "}
+                  {fleetLabel(fleet) || "No vehicles yet"} · {occasion}
+                </Text>
+              </View>
+
+              {!online && <ConnectionRequired action="A rental request" />}
+              {online && <Problem message={problem} field={problemField} />}
+              <ModuleButton
+                label={
+                  sending ? "POSTING..." : online ? "POST REQUEST" : "OFFLINE"
+                }
+                disabled={sending || !online}
+                onPress={postRequest}
+              />
+              <Text style={styles.postHint}>
+                Your request goes to every available driver of these vehicles.
+                Each vehicle is booked by its own driver, and you&apos;ll be
+                notified as each one accepts.
+              </Text>
             </>
           )}
         </View>
@@ -639,39 +664,40 @@ export default function RentalScreen() {
           subtitle="Charter a private vehicle for your trips, outings and special occasions."
           icon={<BusFront color="#ffffff" size={44} strokeWidth={1.8} />}
           onBack={goHome}
-          collapsed={chrome.collapsed}
+          footerHeight={showForm ? stepProgressHeight : 0}
         >
-          <StepProgress
-            step={step}
-            collapsed={chrome.collapsed}
-            canGoBack={canGoBackward}
-            canGoForward={canGoForward}
-            onBack={retreat}
-            onForward={advance}
-          />
+          {showForm && (
+            <StepProgress
+              step={step}
+              canGoBack={canGoBackward}
+              canGoForward={canGoForward}
+              onBack={retreat}
+              onForward={advance}
+            />
+          )}
         </ModuleHeader>
       </StickyHeader>
     </View>
   );
 }
 
+const stepProgressHeight = 54;
+
 function StepProgress({
   step,
-  collapsed,
   canGoBack,
   canGoForward,
   onBack,
   onForward,
 }: {
   step: Step;
-  collapsed: boolean;
   canGoBack: boolean;
   canGoForward: boolean;
   onBack: () => void;
   onForward: () => void;
 }) {
   return (
-    <View style={[styles.progress, collapsed && styles.progressCollapsed]}>
+    <View style={styles.progress}>
       <View style={styles.progressRow}>
         <StepArrow
           direction="back"
@@ -732,72 +758,30 @@ function StepArrow({
   );
 }
 
-function DriverOption({
-  driver,
-  selected,
-  onPress,
+function Problem({
+  message,
+  field,
 }: {
-  driver: RentalDriver;
-  selected: boolean;
-  onPress: () => void;
+  message: string;
+  field: RentalField | null;
 }) {
+  if (!message) return null;
   return (
-    <Pressable
-      accessibilityRole="radio"
-      accessibilityState={{ selected }}
-      accessibilityLabel={`${driver.name}, ${driver.vehicleType} ${driver.plateNumber}, seats ${driver.maxCapacity}`}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.driver,
-        selected && styles.driverSelected,
-        pressed && styles.pressed,
-      ]}
-    >
-      <View style={styles.driverAvatar}>
-        <Text style={styles.driverInitial}>
-          {driver.name.charAt(0).toUpperCase()}
-        </Text>
-      </View>
-      <View style={styles.flex}>
-        <Text style={styles.driverName} numberOfLines={1}>
-          {driver.name}
-        </Text>
-        <Text style={styles.driverMeta} numberOfLines={1}>
-          {driver.plateNumber} · {driver.isModern ? "Modern " : ""}
-          {driver.vehicleType} · {driver.maxCapacity} seats
-        </Text>
-        <View style={styles.driverTags}>
-          {driver.yearsOfExperience !== null && (
-            <View style={styles.driverTag}>
-              <Award color={brandBlue} size={11} strokeWidth={2.2} />
-              <Text style={styles.driverTagText}>
-                {driver.yearsOfExperience}{" "}
-                {driver.yearsOfExperience === 1 ? "yr" : "yrs"} driving
-              </Text>
-            </View>
-          )}
-          {!!driver.cooperative && (
-            <View style={styles.driverTag}>
-              <Text style={styles.driverTagText} numberOfLines={1}>
-                {driver.cooperative}
-              </Text>
-            </View>
-          )}
-        </View>
-      </View>
-      <View style={[styles.radio, selected && styles.radioSelected]}>
-        {selected && <View style={styles.radioDot} />}
-      </View>
-    </Pressable>
+    <ErrorAlert
+      title={field ? rentalFieldTitles[field] : "Rental request"}
+      message={message}
+      style={styles.problem}
+    />
   );
 }
 
-function Problem({ message }: { message: string }) {
-  if (!message) return null;
-  return <Text style={styles.problem}>{message}</Text>;
-}
-
 const styles = StyleSheet.create({
+  passengerHint: {
+    marginTop: 6,
+    color: "#6b6b6b",
+    fontFamily: "Sora",
+    fontSize: 11,
+  },
   screen: { flex: 1, backgroundColor: "#ffffff" },
   body: { paddingHorizontal: 12, paddingTop: 4 },
   flex: { flex: 1 },
@@ -805,8 +789,7 @@ const styles = StyleSheet.create({
   gap: { height: 14 },
   gapTop: { marginTop: 16 },
   bold: { fontFamily: "SoraBold" },
-  progress: { marginTop: 18 },
-  progressCollapsed: { marginTop: 10 },
+  progress: { marginTop: 14 },
   progressRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -851,7 +834,6 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: softBlue,
   },
-  warningCard: { marginTop: 10, backgroundColor: "#fde8e6" },
   infoText: {
     flex: 1,
     color: text,
@@ -859,77 +841,64 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 16,
   },
-  warningText: { color: error },
-  successCard: { marginTop: 14, backgroundColor: "#dcfce7" },
-  successText: { color: "#166534" },
   rentalList: { gap: 10 },
   loading: { marginTop: 48 },
   pressed: { opacity: 0.8 },
-  driverHint: {
-    color: text,
+  problem: { marginTop: 16 },
+  review: {
+    gap: 4,
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: palette.navy,
+  },
+  reviewEyebrow: { color: palette.cyan, fontFamily: "SoraBold", fontSize: 10 },
+  reviewTitle: {
+    color: "#ffffff",
+    fontFamily: "SoraBold",
+    fontSize: 18,
+    lineHeight: 24,
+  },
+  reviewLine: {
+    color: "#d6e2f5",
+    fontFamily: "Sora",
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  postHint: {
+    marginTop: 10,
+    color: "#6b6b6b",
     fontFamily: "Sora",
     fontSize: 11,
     lineHeight: 16,
-    marginTop: 4,
+    textAlign: "center",
   },
-  driverList: { gap: 10, marginTop: 12 },
-  driver: {
-    flexDirection: "row",
+  blocked: {
     alignItems: "center",
-    gap: 12,
-    padding: 12,
-    borderWidth: 1.5,
-    borderColor: "#d9e2f3",
-    borderRadius: 12,
-    backgroundColor: "#ffffff",
-  },
-  driverSelected: { borderColor: brandBlue, backgroundColor: softBlue },
-  driverAvatar: {
-    width: 40,
-    height: 40,
-    alignItems: "center",
-    justifyContent: "center",
+    gap: 8,
+    marginTop: 24,
+    padding: 20,
     borderRadius: 20,
-    backgroundColor: brandBlue,
+    backgroundColor: softBlue,
   },
-  driverInitial: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 16 },
-  driverName: { color: brandBlue, fontFamily: "SoraBold", fontSize: 13 },
-  driverMeta: { color: text, fontFamily: "Sora", fontSize: 10, marginTop: 2 },
-  driverTags: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 6 },
-  driverTag: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    maxWidth: "100%",
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 999,
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#d9e2f3",
-  },
-  driverTagText: { color: brandBlue, fontFamily: "SoraBold", fontSize: 8 },
-  radio: {
-    width: 20,
-    height: 20,
+  blockedIcon: {
+    width: 56,
+    height: 56,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: "#b9c6e4",
+    borderRadius: 28,
+    backgroundColor: "#ffffff",
   },
-  radioSelected: { borderColor: brandBlue },
-  radioDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: brandBlue,
+  blockedTitle: {
+    color: brandBlue,
+    fontFamily: "SoraBold",
+    fontSize: 16,
+    textAlign: "center",
   },
-  problem: {
-    color: error,
+  blockedText: {
+    color: text,
     fontFamily: "Sora",
-    fontSize: 10,
-    marginTop: 16,
+    fontSize: 12,
+    lineHeight: 18,
     textAlign: "center",
   },
 });

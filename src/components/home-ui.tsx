@@ -1,18 +1,13 @@
 import ArrowRight from "lucide-react-native/icons/arrow-right";
 import type { ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import Animated from "react-native-reanimated";
 
 import { BrandLogo } from "@/components/brand-logo";
-import {
-  ExpandedOnly,
-  headerLayoutTransition,
-  headerLogoTransition,
-  headerTitleTransition,
-} from "@/components/scroll-chrome";
+import { CollapsibleHeader } from "@/components/scroll-chrome";
+import { palette } from "@/constants/colors";
 
 export const homeColors = {
-  brandBlue: "#193caf",
+  brandBlue: palette.brand,
   mutedText: "#6b6b6b",
   cardBorder: "#e6e6e6",
   cardEdgeBlue: "#1a2f8f",
@@ -23,50 +18,18 @@ const { brandBlue, mutedText, cardBorder, cardEdgeBlue } = homeColors;
 export function HomeHeader({
   firstName,
   subtitle,
-  collapsed,
-  topInset,
 }: {
   firstName: string;
   subtitle: string;
-  collapsed: boolean;
-  topInset: number;
+  collapsed?: boolean;
+  topInset?: number;
 }) {
   return (
-    <Animated.View
-      layout={headerLayoutTransition}
-      style={[
-        styles.header,
-        collapsed && styles.headerCollapsed,
-        { paddingTop: topInset + (collapsed ? 10 : 20) },
-      ]}
-    >
-      <View style={[styles.headerRow, collapsed && styles.headerRowCollapsed]}>
-        <View style={styles.headerText}>
-          <Animated.Text
-            style={[
-              styles.greeting,
-              collapsed && styles.greetingCollapsed,
-              headerTitleTransition,
-            ]}
-            numberOfLines={collapsed ? 1 : undefined}
-          >
-            Hello, {firstName}!
-          </Animated.Text>
-          <ExpandedOnly collapsed={collapsed}>
-            <Text style={styles.subGreeting}>{subtitle}</Text>
-          </ExpandedOnly>
-        </View>
-        <Animated.View
-          style={[
-            styles.headerLogo,
-            collapsed && styles.headerLogoCollapsed,
-            headerLogoTransition,
-          ]}
-        >
-          <BrandLogo />
-        </Animated.View>
-      </View>
-    </Animated.View>
+    <CollapsibleHeader
+      title={`Hello, ${firstName}!`}
+      subtitle={subtitle}
+      icon={<BrandLogo />}
+    />
   );
 }
 
@@ -79,11 +42,13 @@ export function ActionCard({
   description,
   icon,
   onPress,
+  badge,
 }: {
   title: string;
   description: string;
   icon: ReactNode;
   onPress?: () => void;
+  badge?: string;
 }) {
   return (
     <Pressable
@@ -96,6 +61,12 @@ export function ActionCard({
         pressed && styles.pressed,
       ]}
     >
+      {!!badge && (
+        <View style={styles.actionBadge}>
+          <View style={styles.actionBadgeDot} />
+          <Text style={styles.actionBadgeText}>{badge}</Text>
+        </View>
+      )}
       {icon}
       <Text style={styles.actionTitle}>{title}</Text>
       <Text style={styles.actionDescription}>{description}</Text>
@@ -157,7 +128,7 @@ const styles = StyleSheet.create({
     minHeight: 150,
     paddingHorizontal: 24,
     paddingBottom: 40,
-    backgroundColor: "#1034A6",
+    backgroundColor: palette.header,
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
     overflow: "hidden",
@@ -177,7 +148,7 @@ const styles = StyleSheet.create({
   subGreeting: {
     color: "#ffffff",
     fontFamily: "Sora",
-    fontSize: 9,
+    fontSize: 10,
     marginTop: 4,
   },
   headerCollapsed: { minHeight: 0, paddingBottom: 14 },
@@ -207,6 +178,29 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   pressed: { opacity: 0.85 },
+  actionBadge: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    borderRadius: 999,
+    backgroundColor: "#dcfce7",
+  },
+  actionBadgeDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: palette.success,
+  },
+  actionBadgeText: {
+    color: palette.success,
+    fontFamily: "SoraBold",
+    fontSize: 10,
+  },
   actionTitle: {
     color: brandBlue,
     fontFamily: "SoraBold",
@@ -217,7 +211,7 @@ const styles = StyleSheet.create({
   actionDescription: {
     color: mutedText,
     fontFamily: "Sora",
-    fontSize: 8,
+    fontSize: 10,
     lineHeight: 11,
     textAlign: "center",
     marginTop: 4,
@@ -263,8 +257,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 5,
     borderRadius: 9,
-    backgroundColor: "#e5383b",
+    backgroundColor: palette.danger,
   },
-  sectionCountText: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 9 },
+  sectionCountText: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 10 },
   sectionAction: { color: brandBlue, fontFamily: "SoraBold", fontSize: 11 },
 });

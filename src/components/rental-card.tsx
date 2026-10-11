@@ -23,6 +23,8 @@ import {
   StatusPill,
   type PillTone,
 } from "@/components/card-badges";
+import { ErrorAlert } from "@/components/error-alert";
+import { palette } from "@/constants/colors";
 
 const { brandBlue, softBlue, text } = moduleColors;
 const cardEdgeBlue = "#1a2f8f";
@@ -46,11 +48,13 @@ export function RentalCard({
   viewer,
   actions = [],
   disabled = false,
+  error,
 }: {
   rental: Rental;
   viewer: "commuter" | "driver";
   actions?: RentalAction[];
   disabled?: boolean;
+  error?: string;
 }) {
   const statusTone: PillTone = rental.expired
     ? "muted"
@@ -151,6 +155,7 @@ export function RentalCard({
         <RatingFeedback feedback={rental.rating.feedback} />
       )}
 
+      {!!error && <ErrorAlert title="Rental" message={error} />}
       {actions.length > 0 && (
         <View style={styles.actions}>
           {actions.map((action) => (
@@ -236,7 +241,7 @@ const styles = StyleSheet.create({
   kind: {
     color: "#6b6b6b",
     fontFamily: "SoraBold",
-    fontSize: 8,
+    fontSize: 10,
     letterSpacing: 0.8,
   },
   destination: {
@@ -286,7 +291,7 @@ const actionStyles = StyleSheet.create({
   },
   danger: {
     borderWidth: 1.5,
-    borderColor: "#e5383b",
+    borderColor: palette.danger,
     backgroundColor: "#ffffff",
   },
 });
@@ -294,5 +299,5 @@ const actionStyles = StyleSheet.create({
 const actionTextStyles = StyleSheet.create({
   primary: { color: "#ffffff" },
   secondary: { color: brandBlue },
-  danger: { color: "#e5383b" },
+  danger: { color: palette.danger },
 });

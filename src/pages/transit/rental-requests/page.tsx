@@ -1,91 +1,148 @@
 import { StatusBar } from "expo-status-bar";
+import BriefcaseBusiness from "lucide-react-native/icons/briefcase-business";
+import CircleCheck from "lucide-react-native/icons/circle-check";
 import Inbox from "lucide-react-native/icons/inbox";
 import { useCallback, useMemo, useState } from "react";
-import { Alert, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
+  acceptRentalJob,
   completeRental,
+  dismissRentalJob,
+  loadJobBoard,
   loadRentalRequests,
   respondToRental,
   type Rental,
 } from "@/api/v1/rentals/controllers";
-import { LoadingLogo } from "@/components/LoadingLogo";
+import { ConfirmModal } from "@/components/confirm-modal";
 import { EmptyState } from "@/components/empty-state";
+import { ErrorAlert } from "@/components/error-alert";
 import { Chip, ModuleHeader, moduleColors } from "@/components/module-ui";
 import { RentalCard, type RentalAction } from "@/components/rental-card";
 import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
+import { SkeletonCards } from "@/components/skeleton";
+import { palette } from "@/constants/colors";
 import { Routes } from "@/constants/routes";
 import { usePolling } from "@/hooks/use-polling";
 import { goBackOr } from "@/utils/navigation";
 
-const { brandBlue, error } = moduleColors;
+import { JobCard } from "./job-card";
+import { JobModal } from "./job-modal";
 
-type Tab = "pending" | "accepted" | "declined" | "done";
+const { brandBlue } = moduleColors;
+
+type Tab = "board" | "mine" | "history";
 
 const tabs: { value: Tab; label: string }[] = [
-  { value: "pending", label: "Pending" },
-  { value: "accepted", label: "Accepted" },
-  { value: "declined", label: "Declined" },
-  { value: "done", label: "Done" },
+  { value: "board", label: "Job board" },
+  { value: "mine", label: "My jobs" },
+  { value: "history", label: "History" },
 ];
 
 const emptyMessages: Record<Tab, string> = {
-  pending: "Charter requests from commuters will show up here.",
-  accepted: "You haven't accepted any requests yet.",
-  declined: "You haven't declined any requests.",
-  done: "Rentals you complete will show up here.",
+  board:
+    "No open rental jobs for your vehicle right now. New requests from commuters show up here.",
+  mine: "Jobs you accept are saved here.",
+  history: "Rentals you complete will show up here.",
 };
 
 const pollMs = 10_000;
 
-function tabOf(rental: Rental): Tab {
-  if (rental.status === "completed") return "done";
-  if (rental.status === "rejected" || rental.expired) return "declined";
-  return rental.status;
-}
+const isMine = (rental: Rental) =>
+  rental.status === "accepted" ||
+  (rental.status === "pending" && !rental.expired);
 
-export default function RentalRequestsScreen() {
+export default function RentalJobsScreen() {
   const insets = useSafeAreaInsets();
   const chrome = useScrollChrome();
-  const [tab, setTab] = useState<Tab>("pending");
-  const [rentals, setRentals] = useState<Rental[] | null>(null);
+  const [tab, setTab] = useState<Tab>("board");
+  const [board, setBoard] = useState<Rental[] | null>(null);
+  const [jobs, setJobs] = useState<Rental[] | null>(null);
   const [problem, setProblem] = useState("");
+
+  const [selected, setSelected] = useState<Rental | null>(null);
+  const [jobBusy, setJobBusy] = useState<"accept" | "dismiss" | null>(null);
+  const [jobProblem, setJobProblem] = useState("");
+  const [booked, setBooked] = useState(false);
+
   const [busy, setBusy] = useState<{ id: string; action: string } | null>(null);
+  const [actionError, setActionError] = useState<{
+    id: string;
+    message: string;
+  } | null>(null);
+  const [confirm, setConfirm] = useState<{
+    rental: Rental;
+    action: "complete" | "decline";
+  } | null>(null);
 
   const refresh = useCallback(async () => {
-    const result = await loadRentalRequests();
-    if (result.ok) {
-      setRentals(result.data);
-      setProblem("");
-    } else {
-      setRentals((current) => current ?? []);
-      setProblem(result.error);
-    }
+    const [open, mine] = await Promise.all([
+      loadJobBoard(),
+      loadRentalRequests(),
+    ]);
+    if (open.ok) setBoard(open.data);
+    else setBoard((current) => current ?? []);
+    if (mine.ok) setJobs(mine.data);
+    else setJobs((current) => current ?? []);
+    setProblem(!open.ok ? open.error : !mine.ok ? mine.error : "");
   }, []);
 
   usePolling(refresh, pollMs);
 
-  const counts = useMemo(() => {
-    const totals: Record<Tab, number> = {
-      pending: 0,
-      accepted: 0,
-      declined: 0,
-      done: 0,
+  const lists = useMemo(() => {
+    const all = jobs ?? [];
+    return {
+      board: board ?? [],
+      mine: all.filter(isMine),
+      history: all.filter((rental) => !isMine(rental)).reverse(),
     };
-    (rentals ?? []).forEach((rental) => {
-      totals[tabOf(rental)] += 1;
-    });
-    return totals;
-  }, [rentals]);
+  }, [board, jobs]);
+  const loading = tab === "board" ? board === null : jobs === null;
+  const visible = lists[tab];
 
-  const visible = useMemo(() => {
-    const list = (rentals ?? []).filter((rental) => tabOf(rental) === tab);
-    return tab === "pending" || tab === "accepted"
-      ? list
-      : list.slice().reverse();
-  }, [rentals, tab]);
+  const openJob = (job: Rental) => {
+    setJobProblem("");
+    setBooked(false);
+    setSelected(job);
+  };
+
+  const closeJob = () => {
+    setSelected(null);
+    setBooked(false);
+    setJobProblem("");
+  };
+
+  const acceptJob = async () => {
+    if (!selected || jobBusy) return;
+    setJobBusy("accept");
+    setJobProblem("");
+    const result = await acceptRentalJob(selected);
+    setJobBusy(null);
+    if (!result.ok) {
+      setJobProblem(result.error);
+      refresh();
+      return;
+    }
+    setBooked(true);
+    setBoard((current) =>
+      (current ?? []).filter((job) => job.id !== selected.id),
+    );
+    refresh();
+  };
+
+  const dismissJob = async () => {
+    if (!selected || jobBusy) return;
+    setJobBusy("dismiss");
+    const result = await dismissRentalJob(selected.id);
+    setJobBusy(null);
+    if (!result.ok) return setJobProblem(result.error);
+    setBoard((current) =>
+      (current ?? []).filter((job) => job.id !== selected.id),
+    );
+    closeJob();
+  };
 
   const run = async (
     rental: Rental,
@@ -93,43 +150,14 @@ export default function RentalRequestsScreen() {
     task: () => Promise<{ ok: boolean; error?: string }>,
   ) => {
     setBusy({ id: rental.id, action });
+    setActionError(null);
     const result = await task();
     setBusy(null);
-    if (!result.ok) Alert.alert("Something went wrong", result.error);
+    if (!result.ok) {
+      setActionError({ id: rental.id, message: result.error ?? "" });
+    }
     refresh();
   };
-
-  const accept = (rental: Rental) =>
-    run(rental, "accept", () => respondToRental(rental.id, true));
-
-  const decline = (rental: Rental) =>
-    Alert.alert(
-      "Decline this request?",
-      `The commuter will be told you can't take their trip to ${rental.destination}.`,
-      [
-        { text: "Keep", style: "cancel" },
-        {
-          text: "Decline",
-          style: "destructive",
-          onPress: () =>
-            run(rental, "decline", () => respondToRental(rental.id, false)),
-        },
-      ],
-    );
-
-  const complete = (rental: Rental) =>
-    Alert.alert(
-      "Mark as completed?",
-      "Only do this once the trip is finished. It will be added to the commuter's bookings.",
-      [
-        { text: "Not yet", style: "cancel" },
-        {
-          text: "Complete",
-          onPress: () =>
-            run(rental, "complete", () => completeRental(rental.id)),
-        },
-      ],
-    );
 
   const actionsFor = (rental: Rental): RentalAction[] => {
     const isBusy = (action: string) =>
@@ -140,13 +168,14 @@ export default function RentalRequestsScreen() {
           label: "DECLINE",
           tone: "danger",
           busy: isBusy("decline"),
-          onPress: () => decline(rental),
+          onPress: () => setConfirm({ rental, action: "decline" }),
         },
         {
           label: "ACCEPT",
           tone: "primary",
           busy: isBusy("accept"),
-          onPress: () => accept(rental),
+          onPress: () =>
+            run(rental, "accept", () => respondToRental(rental.id, true)),
         },
       ];
     }
@@ -156,7 +185,7 @@ export default function RentalRequestsScreen() {
           label: "MARK AS COMPLETED",
           tone: "primary",
           busy: isBusy("complete"),
-          onPress: () => complete(rental),
+          onPress: () => setConfirm({ rental, action: "complete" }),
         },
       ];
     }
@@ -180,42 +209,76 @@ export default function RentalRequestsScreen() {
       >
         <View style={styles.body}>
           <View style={styles.tabRow}>
-            {tabs.map((option) => (
-              <View key={option.value} style={styles.tab}>
-                <Chip
-                  label={option.label}
-                  selected={tab === option.value}
-                  onPress={() => setTab(option.value)}
-                  grow
-                />
-                {counts[option.value] > 0 && (
-                  <View
-                    pointerEvents="none"
-                    accessibilityLabel={`${counts[option.value]} ${option.label.toLowerCase()}`}
-                    style={[
-                      styles.count,
-                      option.value === "pending" && styles.countAlert,
-                    ]}
-                  >
-                    <Text style={styles.countText}>
-                      {counts[option.value] > 99 ? "99+" : counts[option.value]}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            ))}
+            {tabs.map((option) => {
+              const count = lists[option.value].length;
+              return (
+                <View key={option.value} style={styles.tab}>
+                  <Chip
+                    label={option.label}
+                    selected={tab === option.value}
+                    onPress={() => setTab(option.value)}
+                    grow
+                  />
+                  {option.value !== "history" && count > 0 && (
+                    <View
+                      pointerEvents="none"
+                      accessibilityLabel={`${count} ${option.label.toLowerCase()}`}
+                      style={[
+                        styles.count,
+                        option.value === "board" && styles.countAlert,
+                      ]}
+                    >
+                      <Text style={styles.countText}>
+                        {count > 99 ? "99+" : count}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              );
+            })}
           </View>
 
-          {!!problem && <Text style={styles.problem}>{problem}</Text>}
+          {tab === "board" && (
+            <Text style={styles.intro}>
+              Open charter requests for your vehicle. Tap a job to see the
+              details and take it. The first driver to accept gets the trip.
+            </Text>
+          )}
 
-          {rentals === null ? (
-            <LoadingLogo style={styles.loading} />
+          {!!problem && (
+            <ErrorAlert
+              title="Rental jobs"
+              message={problem}
+              style={styles.problem}
+            />
+          )}
+
+          {loading ? (
+            <SkeletonCards style={styles.loading} />
           ) : visible.length === 0 ? (
             <EmptyState
-              icon={<Inbox color={brandBlue} size={32} strokeWidth={1.8} />}
+              icon={
+                tab === "board" ? (
+                  <BriefcaseBusiness
+                    color={brandBlue}
+                    size={32}
+                    strokeWidth={1.8}
+                  />
+                ) : tab === "mine" ? (
+                  <Inbox color={brandBlue} size={32} strokeWidth={1.8} />
+                ) : (
+                  <CircleCheck color={brandBlue} size={32} strokeWidth={1.8} />
+                )
+              }
               message={emptyMessages[tab]}
               style={styles.centered}
             />
+          ) : tab === "board" ? (
+            <View style={styles.list}>
+              {visible.map((job) => (
+                <JobCard key={job.id} job={job} onPress={() => openJob(job)} />
+              ))}
+            </View>
           ) : (
             <View style={styles.list}>
               {visible.map((rental) => (
@@ -225,6 +288,11 @@ export default function RentalRequestsScreen() {
                   viewer="driver"
                   disabled={!!busy}
                   actions={actionsFor(rental)}
+                  error={
+                    actionError?.id === rental.id
+                      ? actionError.message
+                      : undefined
+                  }
                 />
               ))}
             </View>
@@ -234,13 +302,58 @@ export default function RentalRequestsScreen() {
 
       <StickyHeader chrome={chrome}>
         <ModuleHeader
-          title="Rental Requests"
-          subtitle="Review charter requests from commuters and choose which trips to take."
-          icon={<Inbox color="#ffffff" size={44} strokeWidth={1.8} />}
+          title="Rental Jobs"
+          subtitle="Browse charter requests from commuters and take the trips you want."
+          icon={
+            <BriefcaseBusiness color="#ffffff" size={44} strokeWidth={1.8} />
+          }
           onBack={goBack}
-          collapsed={chrome.collapsed}
         />
       </StickyHeader>
+
+      <JobModal
+        job={selected}
+        busy={jobBusy}
+        problem={jobProblem}
+        booked={booked}
+        onAccept={acceptJob}
+        onDismiss={dismissJob}
+        onClose={closeJob}
+        onViewJobs={() => {
+          closeJob();
+          setTab("mine");
+        }}
+      />
+
+      <ConfirmModal
+        visible={!!confirm}
+        title={
+          confirm?.action === "complete"
+            ? "Mark as completed?"
+            : "Decline this request?"
+        }
+        message={
+          confirm?.action === "complete"
+            ? "Only do this once the trip is finished. It will be added to the commuter's bookings."
+            : `The commuter will be told you can't take their trip to ${confirm?.rental.destination ?? "their destination"}.`
+        }
+        confirmLabel={confirm?.action === "complete" ? "Complete" : "Decline"}
+        cancelLabel="Not yet"
+        destructive={confirm?.action === "decline"}
+        onCancel={() => setConfirm(null)}
+        onConfirm={() => {
+          if (!confirm) return;
+          const { rental, action } = confirm;
+          setConfirm(null);
+          if (action === "complete") {
+            void run(rental, "complete", () => completeRental(rental.id));
+          } else {
+            void run(rental, "decline", () =>
+              respondToRental(rental.id, false),
+            );
+          }
+        }}
+      />
     </View>
   );
 }
@@ -265,15 +378,16 @@ const styles = StyleSheet.create({
     borderColor: "#ffffff",
     backgroundColor: brandBlue,
   },
-  countAlert: { backgroundColor: "#e5383b" },
-  countText: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 9 },
-  loading: { marginTop: 48 },
-  list: { gap: 10, marginTop: 16 },
-  problem: {
-    color: error,
+  countAlert: { backgroundColor: palette.danger },
+  countText: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 10 },
+  intro: {
+    marginTop: 14,
+    color: "#6b6b6b",
     fontFamily: "Sora",
-    fontSize: 10,
-    marginTop: 12,
-    textAlign: "center",
+    fontSize: 11,
+    lineHeight: 16,
   },
+  loading: { marginTop: 24 },
+  list: { gap: 12, marginTop: 16 },
+  problem: { marginTop: 12 },
 });

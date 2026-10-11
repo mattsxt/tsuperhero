@@ -1,4 +1,6 @@
+import LocateFixed from "lucide-react-native/icons/locate-fixed";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Pressable, StyleSheet } from "react-native";
 
 import { watchLocation } from "@/api/v1/places/controllers";
 import {
@@ -8,6 +10,7 @@ import {
 import type { WaitingArea } from "@/api/v1/waiting-areas/controllers";
 import { TransitMap, type TransitMapState } from "@/components/transit-map";
 import { waitingAreaPinColors } from "@/constants/waiting-area";
+import { palette } from "@/constants/colors";
 import { getDistanceMeters } from "@/utils/geo";
 
 type Coordinates = { lat: number; lng: number };
@@ -24,7 +27,9 @@ export function WaitingAreaDirectionsMap({
   padTop = 0,
   padBottom = 0,
   showRouting = true,
+  locateTop,
 }: {
+  locateTop?: number;
   area: WaitingArea;
   onLocationChange?: (location: Coordinates | null) => void;
   onLocationError?: (message: string | null) => void;
@@ -36,6 +41,10 @@ export function WaitingAreaDirectionsMap({
   const [fitOrigin, setFitOrigin] = useState<Coordinates | null>(null);
   const [walkingPath, setWalkingPath] = useState<LatLng[]>([]);
   const lastRouted = useRef<{ at: number; from: Coordinates } | null>(null);
+  const [recenter, setRecenter] = useState<{
+    key: number;
+    at: Coordinates;
+  } | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -113,7 +122,14 @@ export function WaitingAreaDirectionsMap({
       userLocation: location,
       pickupLine: showRouting ? walkingPath : [],
       pickupLineColor: waitingAreaPinColors[area.type],
-      focus: null,
+      focus: recenter
+        ? {
+            key: `me-${recenter.key}`,
+            lat: recenter.at.lat,
+            lng: recenter.at.lng,
+            zoom: 17,
+          }
+        : null,
       fit: {
         key: `waiting-area-${area.id}-${fitOrigin ? "user" : "area"}`,
         points,
@@ -121,7 +137,62 @@ export function WaitingAreaDirectionsMap({
       padTop,
       padBottom,
     };
-  }, [area, fitOrigin, location, walkingPath, padTop, padBottom, showRouting]);
+  }, [
+    area,
+    fitOrigin,
+    location,
+    walkingPath,
+    padTop,
+    padBottom,
+    showRouting,
+    recenter,
+  ]);
 
-  return <TransitMap state={mapState} />;
+  return (
+    <>
+      <TransitMap state={mapState} />
+      {locateTop !== undefined && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Center the map on your location"
+          accessibilityState={{ disabled: !location }}
+          disabled={!location}
+          onPress={() =>
+            location &&
+            setRecenter((current) => ({
+              key: (current?.key ?? 0) + 1,
+              at: location,
+            }))
+          }
+          style={({ pressed }) => [
+            locateStyles.button,
+            { top: locateTop },
+            pressed && locateStyles.pressed,
+          ]}
+        >
+          <LocateFixed
+            color={palette.brand}
+            size={20}
+            strokeWidth={2.2}
+            style={!location && locateStyles.idle}
+          />
+        </Pressable>
+      )}
+    </>
+  );
 }
+
+const locateStyles = StyleSheet.create({
+  button: {
+    position: "absolute",
+    right: 12,
+    width: 34,
+    height: 34,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 9,
+    backgroundColor: "rgba(168, 220, 247, 0.85)",
+  },
+  idle: { opacity: 0.5 },
+  pressed: { opacity: 0.75 },
+});

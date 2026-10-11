@@ -4,6 +4,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { BrandLogo } from "@/components/brand-logo";
+import { palette } from "@/constants/colors";
 
 type Variant = "badge" | "hero" | "splash";
 
@@ -72,7 +73,7 @@ const styles = StyleSheet.create({
     height: 104,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#1034A6",
+    backgroundColor: palette.header,
     borderRadius: 24,
   },
   compactBadge: { width: 60, height: 60, borderRadius: 16 },
@@ -92,7 +93,7 @@ const compactLogoStyles = StyleSheet.create({
 });
 
 const wordmarkStyles = StyleSheet.create({
-  badge: { color: "#193caf", fontSize: 43, lineHeight: 49, marginTop: 14 },
+  badge: { color: palette.brand, fontSize: 43, lineHeight: 49, marginTop: 14 },
   hero: { color: "#ffffff", fontSize: 60, lineHeight: 68, marginTop: 18 },
   splash: { color: "#ffffff", fontSize: 43, lineHeight: 52 },
 });

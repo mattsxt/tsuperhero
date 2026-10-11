@@ -39,18 +39,16 @@ import {
 } from "@/api/v1/profile/controllers";
 import { BottomNav, bottomNavHeight } from "@/components/bottom-nav";
 import {
-  ExpandedOnly,
-  headerLayoutTransition,
-  headerLogoTransition,
-  headerTitleTransition,
   StickyHeader,
   useScrollChrome,
+  CollapsibleHeader,
 } from "@/components/scroll-chrome";
 import type { AppRoute } from "@/constants/routes";
 import { useNotifications } from "@/hooks/use-notifications";
+import { palette } from "@/constants/colors";
 
-const brandBlue = "#193caf";
-const headerBlue = "#1034A6";
+const brandBlue = palette.brand;
+const headerBlue = palette.header;
 const iconBackground = "#d4ecf9";
 const mutedText = "#6b6b6b";
 const unreadBackground = "#eef4fe";
@@ -60,7 +58,9 @@ const typeIcons: Record<string, typeof Bell> = {
   pickup_boarded: CircleCheck,
   pickup_released: RotateCcw,
   pickup_shared: UsersRound,
+  pickup_location_changed: MapPin,
   pickup_shared_cancelled: CircleX,
+  share_ride_left: CircleX,
   shared_pickup_accepted: BusFront,
   shared_pickup_released: RotateCcw,
   shared_pickup_boarded: CircleCheck,
@@ -73,6 +73,7 @@ const typeIcons: Record<string, typeof Bell> = {
   rate_trip: Star,
   rating_received: Star,
   rental_request: Bus,
+  rental_job_booked: CircleCheck,
   rental_cancelled: CircleX,
 };
 
@@ -94,7 +95,6 @@ function formatWhen(date: Date) {
 export default function NotificationsScreen() {
   const insets = useSafeAreaInsets();
   const chrome = useScrollChrome();
-  const { collapsed } = chrome;
   const blurTarget = useRef<View | null>(null);
   const [homeRoute, setHomeRoute] = useState<AppRoute | null>(
     peekSignedInHomeRoute,
@@ -218,47 +218,11 @@ export default function NotificationsScreen() {
         </Animated.ScrollView>
 
         <StickyHeader chrome={chrome}>
-          <Animated.View
-            layout={headerLayoutTransition}
-            style={[
-              styles.header,
-              collapsed && styles.headerCollapsed,
-              { paddingTop: insets.top + (collapsed ? 10 : 16) },
-            ]}
-          >
-            <View
-              style={[
-                styles.headerRow,
-                collapsed && styles.headerRowCollapsedIcon,
-              ]}
-            >
-              <View style={styles.headerTextBlock}>
-                <Animated.Text
-                  style={[
-                    styles.title,
-                    collapsed && styles.titleCollapsed,
-                    headerTitleTransition,
-                  ]}
-                >
-                  Notifications
-                </Animated.Text>
-                <ExpandedOnly collapsed={collapsed}>
-                  <Text style={styles.subtitle}>
-                    Updates on your trips, rentals and pickups
-                  </Text>
-                </ExpandedOnly>
-              </View>
-              <Animated.View
-                style={[
-                  styles.headerIcon,
-                  collapsed && styles.headerIconCollapsed,
-                  headerLogoTransition,
-                ]}
-              >
-                <Bell color="#ffffff" size={40} strokeWidth={1.8} />
-              </Animated.View>
-            </View>
-          </Animated.View>
+          <CollapsibleHeader
+            title="Notifications"
+            subtitle="Updates on your trips, rentals and pickups"
+            icon={<Bell color="#ffffff" size={40} strokeWidth={1.8} />}
+          />
         </StickyHeader>
       </BlurTargetView>
 
@@ -431,7 +395,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   rowTitleUnread: { color: brandBlue, fontFamily: "SoraBold" },
-  rowTime: { color: mutedText, fontFamily: "Sora", fontSize: 9 },
+  rowTime: { color: mutedText, fontFamily: "Sora", fontSize: 10 },
   rowBody: {
     color: "#333333",
     fontFamily: "Sora",

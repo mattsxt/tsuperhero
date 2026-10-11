@@ -1,5 +1,4 @@
 import { router } from "expo-router";
-import CircleAlert from "lucide-react-native/icons/circle-alert";
 import Eye from "lucide-react-native/icons/eye";
 import EyeOff from "lucide-react-native/icons/eye-off";
 import { useState } from "react";
@@ -12,7 +11,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import Reanimated, { FadeInDown, FadeOut } from "react-native-reanimated";
+import Reanimated from "react-native-reanimated";
 
 import { login } from "@/api/v1/auth/controllers";
 import {
@@ -24,9 +23,10 @@ import { BrandHeader } from "@/components/brand-header";
 import { LoadingLogo } from "@/components/LoadingLogo";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { Routes } from "@/constants/routes";
+import { palette } from "@/constants/colors";
 
-const brandBlue = "#193caf";
-const errorRed = "#b3261e";
+const brandBlue = palette.brand;
+const errorRed = palette.danger;
 const welcomeMs = 1200;
 
 export default function LoginScreen() {
@@ -87,7 +87,10 @@ export default function LoginScreen() {
   if (signedIn) return <LoadingScreen />;
 
   return (
-    <AuthScreen compact={keyboardVisible}>
+    <AuthScreen
+      compact={keyboardVisible}
+      error={loginError ? { title: "Sign in", message: loginError } : undefined}
+    >
       <BrandHeader variant="badge" compact={keyboardVisible} />
 
       <Reanimated.Text
@@ -154,19 +157,6 @@ export default function LoginScreen() {
           </View>
         </View>
       </Animated.View>
-
-      {!!loginError && (
-        <Reanimated.View
-          entering={FadeInDown.duration(200)}
-          exiting={FadeOut.duration(150)}
-          style={styles.errorBox}
-          accessibilityRole="alert"
-          accessibilityLiveRegion="assertive"
-        >
-          <CircleAlert color={errorRed} size={15} strokeWidth={2.4} />
-          <Text style={styles.errorText}>{loginError}</Text>
-        </Reanimated.View>
-      )}
 
       {!emailLoginVisible ? (
         <Animated.View style={{ opacity: introOpacity }}>
@@ -238,32 +228,11 @@ const styles = StyleSheet.create({
   buttonDisabled: {
     opacity: 0.6,
   },
-  errorBox: {
-    width: 320,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginTop: 2,
-    marginBottom: 12,
-    paddingVertical: 9,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: "#f5c2c0",
-    borderRadius: 9,
-    backgroundColor: "#fdecea",
-  },
-  errorText: {
-    flex: 1,
-    color: errorRed,
-    fontFamily: "SoraBold",
-    fontSize: 10,
-    lineHeight: 14,
-  },
   inputError: { borderColor: errorRed },
   primaryButtonText: {
     color: "#ffffff",
     fontFamily: "SoraBold",
-    fontSize: 9,
+    fontSize: 10,
   },
   divider: {
     width: 320,
@@ -280,7 +249,7 @@ const styles = StyleSheet.create({
   dividerText: {
     color: "#d4d4d4",
     fontFamily: "Sora",
-    fontSize: 8,
+    fontSize: 10,
   },
   formReveal: {
     width: 320,
@@ -294,7 +263,7 @@ const styles = StyleSheet.create({
   fieldLabel: {
     color: "#111111",
     fontFamily: "SoraBold",
-    fontSize: 8,
+    fontSize: 10,
   },
   input: {
     width: 320,

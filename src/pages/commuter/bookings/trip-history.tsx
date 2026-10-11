@@ -8,6 +8,7 @@ import { loadTripHistory, type TripRide } from "@/api/v1/pickups/controllers";
 import { LoadingLogo } from "@/components/LoadingLogo";
 import { EmptyState } from "@/components/empty-state";
 import { moduleColors } from "@/components/module-ui";
+import { palette } from "@/constants/colors";
 
 const { brandBlue, mutedText, softBlue, text } = moduleColors;
 
@@ -119,7 +120,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#dcfce7",
   },
   badgeLive: { backgroundColor: softBlue },
-  badgeText: { color: "#15803d", fontFamily: "SoraBold", fontSize: 8 },
+  badgeText: { color: palette.success, fontFamily: "SoraBold", fontSize: 10 },
   badgeTextLive: { color: brandBlue },
   date: { color: mutedText, fontFamily: "Sora", fontSize: 10 },
   detail: { flexDirection: "row", alignItems: "center", gap: 8 },

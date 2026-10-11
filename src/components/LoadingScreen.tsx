@@ -14,9 +14,10 @@ import Animated, {
 
 import { BrandLogo } from "@/components/brand-logo";
 import { LoadingLogo } from "@/components/LoadingLogo";
+import { palette } from "@/constants/colors";
 
-const navy = "#1034A6";
-const brandBlue = "#193caf";
+const navy = palette.header;
+const brandBlue = palette.brand;
 const messageMs = 1600;
 
 const signInMessages = [

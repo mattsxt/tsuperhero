@@ -13,8 +13,8 @@ import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { searchRiders, type Rider } from "@/api/v1/pickups/controllers";
 import { LoadingLogo } from "@/components/LoadingLogo";
 import { moduleColors, SoftField } from "@/components/module-ui";
-
-import { PickupAlert } from "./pickup-alert";
+import { ErrorOutline } from "@/components/error-alert";
+import { palette } from "@/constants/colors";
 
 const { brandBlue, mutedText, softBlue, text } = moduleColors;
 const searchDelayMs = 300;
@@ -49,7 +49,11 @@ export function ShareRideField({
   onInvite,
   onRemove,
   max,
+  invalid = false,
+  onProblem,
 }: {
+  invalid?: boolean;
+  onProblem: (message: string) => void;
   riders: Rider[];
   onChange: (riders: Rider[]) => void;
   onInvite: (rider: Rider) => Promise<string | null>;
@@ -61,7 +65,7 @@ export function ShareRideField({
   const [results, setResults] = useState<Rider[]>([]);
   const [selectedRider, setSelectedRider] = useState<Rider | null>(null);
   const [searching, setSearching] = useState(false);
-  const [problem, setProblem] = useState("");
+  const [searchFailed, setSearchFailed] = useState(false);
   const [sending, setSending] = useState(false);
   const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -79,11 +83,11 @@ export function ShareRideField({
       if (!active) return;
       setSearching(false);
       if (!result.ok) {
-        setProblem(result.error);
+        setSearchFailed(true);
         setResults([]);
         return;
       }
-      setProblem("");
+      setSearchFailed(false);
       setResults(result.data);
     }, searchDelayMs);
     return () => {
@@ -102,11 +106,10 @@ export function ShareRideField({
   const send = async () => {
     if (!selectedRider || full || sending) return;
     setSending(true);
-    setProblem("");
     const error = await onInvite(selectedRider);
     setSending(false);
     if (error) {
-      setProblem(error);
+      onProblem(error);
       return;
     }
     onChange([...riders, { ...selectedRider, inviteStatus: "pending" }]);
@@ -120,7 +123,7 @@ export function ShareRideField({
   const remove = async (rider: Rider) => {
     const error = await onRemove(rider);
     if (error) {
-      setProblem(error);
+      onProblem(error);
       return;
     }
     onChange(riders.filter((item) => item.userId !== rider.userId));
@@ -131,76 +134,85 @@ export function ShareRideField({
   );
 
   return (
-    <View>
-      <SoftField
-        value={query}
-        onChangeText={(next) => {
-          setSelectedRider(null);
-          setQuery(next);
-          setOpen(true);
-          setSearching(next.trim().length >= minQueryLength);
-        }}
-        onFocus={() => {
-          if (blurTimer.current) clearTimeout(blurTimer.current);
-          setOpen(true);
-        }}
-        onBlur={() => {
-          blurTimer.current = setTimeout(() => setOpen(false), 200);
-        }}
-        editable={!full}
-        placeholder={
-          full
-            ? "You've added the most riders"
-            : "Search a user by name or email..."
-        }
-        accessibilityLabel="Search a user to share the ride with"
-        autoCapitalize="none"
-        autoCorrect={false}
-        icon={<UserRound color={brandBlue} size={20} strokeWidth={2} />}
-        trailing={
-          searching || sending ? (
-            <LoadingLogo size={18} />
-          ) : (
-            <View style={styles.fieldActions}>
-              {query.length > 0 && !selectedRider && (
+    <View style={styles.section}>
+      <ErrorOutline invalid={invalid} color={moduleColors.error}>
+        <SoftField
+          value={query}
+          onChangeText={(next) => {
+            setSelectedRider(null);
+            setQuery(next);
+            setOpen(true);
+            setSearching(next.trim().length >= minQueryLength);
+          }}
+          onFocus={() => {
+            if (blurTimer.current) clearTimeout(blurTimer.current);
+            setOpen(true);
+          }}
+          onBlur={() => {
+            blurTimer.current = setTimeout(() => setOpen(false), 200);
+          }}
+          editable={!full}
+          placeholder={
+            full
+              ? "You've added the most riders"
+              : "Search a user by name or email..."
+          }
+          accessibilityLabel="Search a user to share the ride with"
+          autoCapitalize="none"
+          autoCorrect={false}
+          icon={<UserRound color={brandBlue} size={20} strokeWidth={2} />}
+          trailing={
+            searching || sending ? (
+              <LoadingLogo size={18} />
+            ) : (
+              <View style={styles.fieldActions}>
+                {query.length > 0 && !selectedRider && (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Clear user search"
+                    hitSlop={8}
+                    onPress={() => {
+                      setQuery("");
+                      setResults([]);
+                    }}
+                  >
+                    <X color={mutedText} size={18} strokeWidth={2} />
+                  </Pressable>
+                )}
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel="Clear user search"
-                  hitSlop={8}
-                  onPress={() => {
-                    setQuery("");
-                    setResults([]);
+                  accessibilityLabel={
+                    selectedRider
+                      ? `Send an invitation to ${selectedRider.name}`
+                      : "Select a search result before sending an invitation"
+                  }
+                  accessibilityState={{
+                    disabled: !selectedRider || full || sending,
                   }}
+                  disabled={!selectedRider || full || sending}
+                  hitSlop={8}
+                  onPress={send}
+                  style={({ pressed }) => [
+                    styles.sendButton,
+                    (!selectedRider || full || sending) &&
+                      styles.sendButtonDisabled,
+                    pressed && styles.pressed,
+                  ]}
                 >
-                  <X color={mutedText} size={18} strokeWidth={2} />
+                  <SendHorizontal
+                    color={
+                      !selectedRider || full || sending ? mutedText : brandBlue
+                    }
+                    size={19}
+                    strokeWidth={2.2}
+                  />
                 </Pressable>
-              )}
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={selectedRider ? `Send an invitation to ${selectedRider.name}` : "Select a search result before sending an invitation"}
-                accessibilityState={{
-                  disabled: !selectedRider || full || sending,
-                }}
-                disabled={!selectedRider || full || sending}
-                hitSlop={8}
-                onPress={send}
-                style={({ pressed }) => [
-                  styles.sendButton,
-                  (!selectedRider || full || sending) && styles.sendButtonDisabled,
-                  pressed && styles.pressed,
-                ]}
-              >
-                <SendHorizontal
-                  color={!selectedRider || full || sending ? mutedText : brandBlue}
-                  size={19}
-                  strokeWidth={2.2}
-                />
-              </Pressable>
-            </View>
-          )
-        }
-        style={styles.field}
-      />
+              </View>
+            )
+          }
+          style={styles.field}
+        />
+      </ErrorOutline>
 
       {open && trimmed.length >= minQueryLength && (
         <Animated.View
@@ -210,8 +222,10 @@ export function ShareRideField({
         >
           {searching && available.length === 0 ? (
             <Text style={styles.status}>Searching users...</Text>
-          ) : problem ? (
-            <PickupAlert source="Share a ride" message={problem} compact />
+          ) : searchFailed ? (
+            <Text style={styles.status}>
+              Couldn’t search users right now. Try again in a moment.
+            </Text>
           ) : available.length === 0 ? (
             <Text style={styles.status}>
               No registered commuter matches “{trimmed}”.
@@ -244,9 +258,6 @@ export function ShareRideField({
           )}
         </Animated.View>
       )}
-      {!!problem && !open && (
-        <PickupAlert source="Share a ride" message={problem} compact />
-      )}
 
       {riders.length > 0 && (
         <View style={styles.chips}>
@@ -277,9 +288,9 @@ export function ShareRideField({
                 {rider.name}
               </Text>
               {rider.inviteStatus === "accepted" ? (
-                <MailCheck color="#16803c" size={17} strokeWidth={2} />
+                <MailCheck color={palette.success} size={17} strokeWidth={2} />
               ) : rider.inviteStatus === "rejected" ? (
-                <MailX color="#c62828" size={17} strokeWidth={2} />
+                <MailX color={palette.danger} size={17} strokeWidth={2} />
               ) : (
                 <MailClock color="#7b8494" size={17} strokeWidth={2} />
               )}
@@ -307,6 +318,7 @@ export function ShareRideField({
 }
 
 const styles = StyleSheet.create({
+  section: { gap: 12 },
   field: { gap: 14, paddingHorizontal: 16 },
   fieldActions: { flexDirection: "row", alignItems: "center", gap: 10 },
   sendButton: {
@@ -320,7 +332,6 @@ const styles = StyleSheet.create({
   sendButtonDisabled: { opacity: 0.55 },
   pressed: { opacity: 0.7 },
   dropdown: {
-    marginTop: 6,
     paddingVertical: 4,
     borderRadius: 10,
     borderWidth: 1,
@@ -355,7 +366,7 @@ const styles = StyleSheet.create({
     backgroundColor: brandBlue,
   },
   avatarText: { color: "#ffffff", fontFamily: "SoraBold" },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
+  chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: {
     flexDirection: "row",
     alignItems: "center",
@@ -371,8 +382,8 @@ const styles = StyleSheet.create({
   chipAccepted: { backgroundColor: "#e8f5ec", borderColor: "#a8d5b5" },
   chipRejected: { backgroundColor: "#fdecec", borderColor: "#efb0b0" },
   chipTextPending: { color: "#68717e" },
-  chipTextAccepted: { color: "#16803c" },
-  chipTextRejected: { color: "#c62828" },
+  chipTextAccepted: { color: palette.success },
+  chipTextRejected: { color: palette.danger },
   chipText: {
     flexShrink: 1,
     fontFamily: "SoraBold",
@@ -381,9 +392,8 @@ const styles = StyleSheet.create({
   hint: {
     color: mutedText,
     fontFamily: "Sora",
-    fontSize: 9,
+    fontSize: 10,
     lineHeight: 13,
-    marginTop: 8,
-    marginLeft: 4,
+    marginHorizontal: 4,
   },
 });

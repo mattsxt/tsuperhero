@@ -12,6 +12,7 @@ import Animated, {
   type SharedValue,
 } from "react-native-reanimated";
 import Svg, { Circle, Path } from "react-native-svg";
+import { palette } from "@/constants/colors";
 
 type Point = [number, number];
 type Segment = Point[];
@@ -131,7 +132,7 @@ function Stop({
 
 export function LoadingLogo({
   size = 40,
-  color = "#193caf",
+  color = palette.brand,
   label = "Loading",
   style,
 }: {

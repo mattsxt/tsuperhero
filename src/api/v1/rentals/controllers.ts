@@ -2,7 +2,6 @@ import { getCommuterId } from "@/api/v1/pickups/controllers";
 import type { Place } from "@/api/v1/places/controllers";
 import {
   rentalRoutes,
-  type RentalDriverRow,
   type RentalRow,
   type RentalVehicleType,
 } from "@/api/v1/rentals/routes";
@@ -10,7 +9,8 @@ import { unwrapCached } from "@/api/v1/cache";
 import { attempt, failure, unwrap, type Result } from "@/api/v1/result";
 import { checkOnline } from "@/hooks/use-online";
 
-export type CharterVehicle = "van" | "jeep" | "bus";
+export type CharterVehicle = "van" | "jeep" | "bus" | "tricy";
+export type Fleet = Record<CharterVehicle, number>;
 export type TripType = "one_way" | "round_trip";
 export type RentalStatus = RentalRow["status"];
 
@@ -18,24 +18,47 @@ const vehicleTypes: Record<CharterVehicle, RentalVehicleType> = {
   van: "Van",
   jeep: "Jeepney",
   bus: "Bus",
+  tricy: "Tricycle",
 };
 
-export type RentalDriver = {
-  driverId: string;
-  vehicleId: string;
-  name: string;
-  yearsOfExperience: number | null;
-  plateNumber: string;
+export const charterVehicleOrder: CharterVehicle[] = [
+  "jeep",
+  "van",
+  "bus",
+  "tricy",
+];
+
+export const fleetSize = (fleet: Fleet) =>
+  charterVehicleOrder.reduce((total, vehicle) => total + fleet[vehicle], 0);
+
+export function describeFleet(types: string[]) {
+  const counts = new Map<string, number>();
+  types.forEach((type) => counts.set(type, (counts.get(type) ?? 0) + 1));
+  return [...counts]
+    .map(([type, count]) => `${count} ${type}${count === 1 ? "" : "s"}`)
+    .join(", ");
+}
+
+export type RentalUnit = {
+  id: string;
   vehicleType: string;
-  maxCapacity: number;
-  isModern: boolean;
-  cooperative: string | null;
+  status: "open" | "booked" | "completed";
+  isMine: boolean;
+  driverName: string | null;
+  plateNumber: string | null;
+  driverContact: string | null;
 };
 
 export type Rental = {
   id: string;
+  units: RentalUnit[];
+  unitId: string | null;
+  unitVehicleType: string | null;
   status: RentalStatus;
   expired: boolean;
+  driverAssigned: boolean;
+  requestedAt: Date;
+  scheduleConflict: boolean;
   pickupLocation: string;
   destination: string;
   pickupTime: Date;
@@ -70,24 +93,26 @@ export function combineDateTime(date: Date, time: Date) {
   return combined;
 }
 
-const toDriver = (row: RentalDriverRow): RentalDriver => ({
-  driverId: row.driver_id,
-  vehicleId: row.vehicle_id,
-  name: row.driver_name,
-  yearsOfExperience: row.years_of_experience,
-  plateNumber: row.plate_number,
-  vehicleType: row.vehicle_type,
-  maxCapacity: row.max_capacity,
-  isModern: row.is_modern,
-  cooperative: row.cooperative_name,
-});
-
 const toRental = (row: RentalRow): Rental => {
   const pickupTime = new Date(row.pickup_time);
   return {
     id: row.request_id,
+    units: (row.units ?? []).map((unit) => ({
+      id: unit.unit_id,
+      vehicleType: unit.vehicle_type,
+      status: unit.status,
+      isMine: unit.is_mine,
+      driverName: unit.driver_name,
+      plateNumber: unit.plate_number,
+      driverContact: unit.driver_contact,
+    })),
+    unitId: row.unit_id ?? null,
+    unitVehicleType: row.unit_vehicle_type ?? null,
     status: row.status,
     expired: row.status === "pending" && pickupTime.getTime() <= Date.now(),
+    driverAssigned: row.driver_assigned ?? row.status !== "pending",
+    requestedAt: new Date(row.requested_at),
+    scheduleConflict: !!row.schedule_conflict,
     pickupLocation: row.pickup_location ?? "Pickup location",
     destination: row.destination,
     pickupTime,
@@ -97,7 +122,7 @@ const toRental = (row: RentalRow): Rental => {
     passengers: row.passengers,
     notes: row.notes,
     plateNumber: row.plate_number,
-    vehicleType: row.vehicle_type,
+    vehicleType: row.vehicle_type ?? row.requested_vehicle_type ?? null,
     driverName: row.driver_name,
     driverContact: row.driver_contact,
     commuterName: row.commuter_name,
@@ -109,32 +134,18 @@ const toRental = (row: RentalRow): Rental => {
   };
 };
 
-export function findRentalDrivers(
-  vehicle: CharterVehicle,
-  trip: RentalTrip,
-): Promise<Result<RentalDriver[]>> {
-  return attempt(async () => {
-    const rows: RentalDriverRow[] =
-      (await unwrap(
-        rentalRoutes.findDrivers(
-          vehicleTypes[vehicle],
-          trip.passengers,
-          trip.pickupTime.toISOString(),
-          trip.tripType === "round_trip" && trip.returnTime
-            ? trip.returnTime.toISOString()
-            : null,
-        ),
-      )) ?? [];
-    return rows.map(toDriver);
-  });
-}
-
-export async function requestRental(
-  driver: RentalDriver,
+export async function postRental(
+  fleet: Fleet,
   trip: RentalTrip,
 ): Promise<Result<string>> {
+  const vehicles = charterVehicleOrder.flatMap((vehicle) =>
+    Array.from({ length: fleet[vehicle] }, () => vehicleTypes[vehicle]),
+  );
+  if (vehicles.length === 0) return failure("Choose at least one vehicle.");
   if (!(await checkOnline())) {
-    return failure("You're offline. Connect to the internet to request a rental.");
+    return failure(
+      "You're offline. Connect to the internet to post your request.",
+    );
   }
   if (trip.pickupTime.getTime() <= Date.now()) {
     return failure("Choose a pickup time in the future.");
@@ -142,8 +153,8 @@ export async function requestRental(
   return attempt(async () => {
     await getCommuterId();
     return unwrap(
-      rentalRoutes.request({
-        p_driver_id: driver.driverId,
+      rentalRoutes.post({
+        p_vehicles: vehicles,
         p_pickup_location: trip.pickup.name,
         p_pickup_latitude: trip.pickup.lat,
         p_pickup_longitude: trip.pickup.lng,
@@ -192,6 +203,39 @@ export function respondToRental(
   return attempt(() => unwrap(rentalRoutes.respond(id, accept)));
 }
 
+export function loadJobBoard(): Promise<Result<Rental[]>> {
+  return attempt(async () => {
+    const rows: RentalRow[] =
+      (await unwrapCached("rental-job-board", rentalRoutes.jobBoard())) ?? [];
+    return rows.map(toRental);
+  });
+}
+
+export async function acceptRentalJob(job: Rental): Promise<Result<unknown>> {
+  if (!job.unitId) return failure("This job is no longer available.");
+  if (!(await checkOnline())) {
+    return failure("Reconnect to the internet to accept this job.");
+  }
+  const unitId = job.unitId;
+  return attempt(() => unwrap(rentalRoutes.acceptJob(unitId)));
+}
+
+export function dismissRentalJob(id: string): Promise<Result<unknown>> {
+  return attempt(() => unwrap(rentalRoutes.dismissJob(id)));
+}
+
+export function activeRentalOf(rentals: Rental[]): Rental | null {
+  const now = Date.now();
+  return (
+    rentals.find((rental) => {
+      if (rental.status === "pending") return !rental.expired;
+      if (rental.status !== "accepted") return false;
+      const end = (rental.returnTime ?? rental.pickupTime).getTime();
+      return end + 12 * 60 * 60_000 > now;
+    }) ?? null
+  );
+}
+
 export function completeRental(id: string): Promise<Result<unknown>> {
   return attempt(() => unwrap(rentalRoutes.complete(id)));
 }
@@ -210,7 +254,7 @@ export function formatRentalTime(date: Date) {
 }
 
 export const rentalStatusLabels: Record<RentalStatus, string> = {
-  pending: "Waiting for driver",
+  pending: "Waiting for a driver",
   accepted: "Booked",
   rejected: "Declined",
   completed: "Completed",

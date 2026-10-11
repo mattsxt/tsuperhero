@@ -31,8 +31,11 @@ import {
 import { BrandHeader } from "@/components/brand-header";
 import { PasswordStrength } from "@/components/password-strength";
 import { Routes } from "@/constants/routes";
+import { palette } from "@/constants/colors";
 
-const brandBlue = "#193caf";
+const stepErrorTitles = ["Email address", "Verification code", "Password"];
+
+const brandBlue = palette.brand;
 const inputWidth = 320;
 const stepFadeMs = 260;
 
@@ -99,8 +102,18 @@ export default function RegisterScreen() {
   const goToPreviousStep = () =>
     setStep((currentStep) => Math.max(currentStep - 1, 1));
 
+  const stepError =
+    step === 1 ? emailError : step === 2 ? codeError : passwordError;
+
   return (
-    <AuthScreen compact={keyboardVisible}>
+    <AuthScreen
+      compact={keyboardVisible}
+      error={
+        stepError && step < 4
+          ? { title: stepErrorTitles[step - 1], message: stepError }
+          : undefined
+      }
+    >
       <BrandHeader variant="badge" compact={keyboardVisible} />
 
       {step < 4 && (
@@ -140,9 +153,6 @@ export default function RegisterScreen() {
                   keyboardType="email-address"
                   style={[styles.input, emailError && styles.inputError]}
                 />
-                {!!emailError && (
-                  <Text style={styles.errorText}>{emailError}</Text>
-                )}
               </View>
             )}
 
@@ -205,13 +215,13 @@ export default function RegisterScreen() {
                       autoComplete="one-time-code"
                       textContentType="oneTimeCode"
                       maxLength={codeLength}
-                      style={styles.codeInput}
+                      style={[
+                        styles.codeInput,
+                        !!codeError && styles.inputError,
+                      ]}
                     />
                   ))}
                 </View>
-                {!!codeError && (
-                  <Text style={styles.errorText}>{codeError}</Text>
-                )}
               </View>
             )}
 
@@ -362,7 +372,6 @@ function PasswordStep({
           )}
         </Pressable>
       </View>
-      {!!passwordError && <Text style={styles.errorText}>{passwordError}</Text>}
       <PasswordStrength password={password} />
     </View>
   );
@@ -441,7 +450,7 @@ const styles = StyleSheet.create({
   description: {
     color: "#171717",
     fontFamily: "Sora",
-    fontSize: 9,
+    fontSize: 10,
     lineHeight: 13,
     textAlign: "center",
     marginBottom: 27,
@@ -455,12 +464,12 @@ const styles = StyleSheet.create({
   fieldLabel: {
     color: "#090909",
     fontFamily: "SoraBold",
-    fontSize: 9,
+    fontSize: 10,
   },
   resendText: {
     color: "#171717",
     fontFamily: "Sora",
-    fontSize: 8,
+    fontSize: 10,
   },
   resendButton: {
     flexDirection: "row",
@@ -478,13 +487,7 @@ const styles = StyleSheet.create({
     fontFamily: "Sora",
     fontSize: 11,
   },
-  inputError: { borderColor: "#d93025" },
-  errorText: {
-    color: "#d93025",
-    fontFamily: "Sora",
-    fontSize: 8,
-    marginTop: 4,
-  },
+  inputError: { borderColor: palette.danger },
   codeRow: { flexDirection: "row", gap: 8 },
   codeInput: {
     flex: 1,
@@ -506,7 +509,7 @@ const styles = StyleSheet.create({
     borderColor: brandBlue,
     borderRadius: 10,
   },
-  passwordInputWrapError: { borderColor: "#d93025" },
+  passwordInputWrapError: { borderColor: palette.danger },
   passwordInput: {
     flex: 1,
     height: "100%",
@@ -529,12 +532,12 @@ const styles = StyleSheet.create({
   primaryButtonText: {
     color: "#ffffff",
     fontFamily: "SoraBold",
-    fontSize: 9,
+    fontSize: 10,
   },
   accountText: {
     color: "#111111",
     fontFamily: "Sora",
-    fontSize: 6,
+    fontSize: 10,
     textAlign: "center",
     marginTop: 10,
   },
