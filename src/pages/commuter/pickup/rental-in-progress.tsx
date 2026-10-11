@@ -3,7 +3,7 @@ import BusFront from "lucide-react-native/icons/bus-front";
 import MapPin from "lucide-react-native/icons/map-pin";
 import { StyleSheet, Text, View } from "react-native";
 
-import { formatRentalTime, type Rental } from "@/api/v1/rentals/controllers";
+import { rentalCooldownMs, type Rental } from "@/api/v1/rentals/controllers";
 import {
   ModuleButton,
   ModuleHeader,
@@ -14,14 +14,16 @@ const { brandBlue, softBlue, text } = moduleColors;
 
 export function RentalInProgress({
   rental,
+  at,
   onOpenRental,
   onBack,
 }: {
   rental: Rental;
+  /** The rental pickup (or return pickup) that pauses pickups right now. */
+  at: Date;
   onOpenRental: () => void;
   onBack: () => void;
 }) {
-  const booked = rental.status === "accepted";
   return (
     <View style={styles.screen}>
       <StatusBar style="light" />
@@ -36,22 +38,31 @@ export function RentalInProgress({
           <View style={styles.icon}>
             <BusFront color={brandBlue} size={26} strokeWidth={2} />
           </View>
-          <Text style={styles.title}>You have a rental in progress</Text>
+          <Text style={styles.title}>Pickups are paused for your rental</Text>
           <Text style={styles.text}>
-            Your rental to {rental.destination} on{" "}
-            {formatRentalTime(rental.pickupTime)} is{" "}
-            {booked ? "booked" : "waiting for a driver"}. You can only have one
-            request at a time, so pickups open again once it&apos;s done or
-            cancelled.
+            Your rental to {rental.destination} picks you up at {clock(at)}.
+            Pickups are paused from{" "}
+            {clock(new Date(at.getTime() - rentalCooldownMs))} to{" "}
+            {clock(new Date(at.getTime() + rentalCooldownMs))}, so the trips
+            don&apos;t overlap.
           </Text>
-          <ModuleButton label="VIEW MY RENTAL" onPress={onOpenRental} />
+          <ModuleButton
+            label="VIEW MY RENTAL"
+            onPress={onOpenRental}
+            style={styles.button}
+          />
         </View>
       </View>
     </View>
   );
 }
 
+const clock = (date: Date) =>
+  date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+
 const styles = StyleSheet.create({
+  // Full width: in the centred card it would shrink and the arrow would cover the label.
+  button: { alignSelf: "stretch", marginTop: 16 },
   screen: { flex: 1, backgroundColor: "#ffffff" },
   body: { paddingHorizontal: 16, paddingTop: 24 },
   card: {

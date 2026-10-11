@@ -10,7 +10,9 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
+  loadRideParty,
   updateCompanionPresence,
+  type Rider,
   type SharedRide,
 } from "@/api/v1/pickups/controllers";
 import { formatDistance } from "@/api/v1/waiting-areas/controllers";
@@ -22,6 +24,9 @@ import { LocationSettingsButton } from "@/components/location-settings-button";
 import { ModuleHeader, moduleColors } from "@/components/module-ui";
 import { getDistanceMeters } from "@/utils/geo";
 
+import { usePolling } from "@/hooks/use-polling";
+
+import { CompanionAvatars } from "./companion-avatars";
 import { WaitingAreaDirectionsMap } from "./waiting-area-directions-map";
 import { palette } from "@/constants/colors";
 
@@ -96,6 +101,13 @@ export function SharedRideScreen({
     });
   }, [me, ride]);
 
+  // Everyone else in the ride (the inviter and other companions), and who has arrived.
+  const [party, setParty] = useState<Rider[]>([]);
+  usePolling(async () => {
+    const result = await loadRideParty(ride.requestId);
+    if (result.ok) setParty(result.data);
+  }, 5_000);
+
   const trackLocationError = useCallback(
     (message: string | null) => setLocationError(message),
     [],
@@ -154,6 +166,7 @@ export function SharedRideScreen({
         </View>
 
         <Text style={styles.message}>{stage.message(ride)}</Text>
+        <CompanionAvatars companions={party} />
         {locationError ? (
           <View>
             <ErrorAlert title="Your location" message={locationError} />

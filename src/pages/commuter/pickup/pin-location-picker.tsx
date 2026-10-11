@@ -113,9 +113,10 @@ export function PinLocationPicker({
       nearestRoute.route.vicinity,
     );
   }, [nearestRoute, pickupCenter, routeAreas, routePaths]);
-  const recommendationKey = baseRecommendation && pickupCenter
-    ? `${baseRecommendation.id}:${pickupCenter.lat}:${pickupCenter.lng}`
-    : "";
+  const recommendationKey =
+    baseRecommendation && pickupCenter
+      ? `${baseRecommendation.id}:${pickupCenter.lat}:${pickupCenter.lng}`
+      : "";
   const recommendedArea =
     routedRecommendation?.key === recommendationKey
       ? routedRecommendation.area

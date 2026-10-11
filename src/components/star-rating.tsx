@@ -78,7 +78,7 @@ export function StarBadge({ score }: { score: number }) {
   );
 }
 
-function StarInput({
+export function StarInput({
   value,
   onChange,
 }: {

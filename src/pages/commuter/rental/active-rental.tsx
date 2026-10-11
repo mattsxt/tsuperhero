@@ -4,6 +4,7 @@ import CircleCheck from "lucide-react-native/icons/circle-check";
 import MapPin from "lucide-react-native/icons/map-pin";
 import NotebookPen from "lucide-react-native/icons/notebook-pen";
 import Phone from "lucide-react-native/icons/phone";
+import UserMinus from "lucide-react-native/icons/user-minus";
 import Repeat from "lucide-react-native/icons/repeat";
 import Sparkles from "lucide-react-native/icons/sparkles";
 import Users from "lucide-react-native/icons/users";
@@ -41,15 +42,27 @@ function postedAgo(date: Date) {
 export function ActiveRental({
   rental,
   busy,
+  completing,
   problem,
   onCancel,
+  onComplete,
+  removingId,
+  onRemoveDriver,
 }: {
+  /** The vehicle whose driver is being removed. */
+  removingId: string | null;
+  onRemoveDriver: (unitId: string) => void;
   rental: Rental;
   busy: boolean;
+  completing: boolean;
   problem: string;
   onCancel: () => void;
+  /** The commuter (not the drivers) marks the rental done after the trip. */
+  onComplete: () => void;
 }) {
   const [confirming, setConfirming] = useState(false);
+  const [confirmingDone, setConfirmingDone] = useState(false);
+  const [removeTarget, setRemoveTarget] = useState<RentalUnit | null>(null);
   const booked = rental.status === "accepted";
   const units: RentalUnit[] = rental.units.length
     ? rental.units
@@ -62,6 +75,8 @@ export function ActiveRental({
           driverName: rental.driverName,
           plateNumber: rental.plateNumber,
           driverContact: rental.driverContact,
+          driverId: null,
+          myScore: null,
         },
       ];
   const bookedCount = units.filter((unit) => unit.status !== "open").length;
@@ -175,6 +190,15 @@ export function ActiveRental({
                     {unit.plateNumber}
                   </Text>
                 )}
+                {unit.status !== "open" && !!unit.driverContact && (
+                  <Text
+                    style={styles.driverPhone}
+                    numberOfLines={1}
+                    accessibilityLabel={`Mobile number ${unit.driverContact}`}
+                  >
+                    {unit.driverContact}
+                  </Text>
+                )}
               </View>
               {unit.status !== "open" && !!unit.driverContact && (
                 <Pressable
@@ -187,6 +211,24 @@ export function ActiveRental({
                   ]}
                 >
                   <Phone color={palette.navy} size={18} strokeWidth={2.2} />
+                </Pressable>
+              )}
+              {unit.status === "booked" && rental.units.length > 0 && (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Remove ${unit.driverName ?? "this driver"} from your rental`}
+                  disabled={!!removingId || busy}
+                  onPress={() => setRemoveTarget(unit)}
+                  style={({ pressed }) => [
+                    styles.remove,
+                    (pressed || removingId === unit.id) && styles.pressed,
+                  ]}
+                >
+                  {removingId === unit.id ? (
+                    <LoadingLogo color="#ffffff" size={16} label="Removing" />
+                  ) : (
+                    <UserMinus color="#ffffff" size={17} strokeWidth={2.2} />
+                  )}
                 </Pressable>
               )}
             </View>
@@ -207,6 +249,27 @@ export function ActiveRental({
 
       {!!problem && <ErrorAlert title="Rental" message={problem} />}
 
+      {bookedCount > 0 && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Mark this rental as completed"
+          accessibilityState={{
+            disabled: completing || busy,
+            busy: completing,
+          }}
+          disabled={completing || busy}
+          onPress={() => setConfirmingDone(true)}
+          style={({ pressed }) => [
+            styles.complete,
+            (pressed || completing) && styles.pressed,
+          ]}
+        >
+          <Text style={styles.completeText}>
+            {completing ? "COMPLETING..." : "MARK AS COMPLETED"}
+          </Text>
+        </Pressable>
+      )}
+
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Cancel this rental"
@@ -225,6 +288,35 @@ export function ActiveRental({
       <Text style={styles.hint}>
         Need to change something? Cancel this request and post a new one.
       </Text>
+
+      <ConfirmModal
+        visible={!!removeTarget}
+        title={`Remove ${removeTarget?.driverName ?? "this driver"} from this rental?`}
+        message={`Their ${removeTarget?.vehicleType.toLowerCase() ?? "vehicle"} goes back on the job board for other drivers, and ${removeTarget?.driverName ?? "the driver"} will be notified.`}
+        confirmLabel="Remove driver"
+        cancelLabel="Keep driver"
+        destructive
+        icon={<UserMinus color="#ffffff" size={22} strokeWidth={2.2} />}
+        onCancel={() => setRemoveTarget(null)}
+        onConfirm={() => {
+          if (removeTarget) onRemoveDriver(removeTarget.id);
+          setRemoveTarget(null);
+        }}
+      />
+
+      <ConfirmModal
+        visible={confirmingDone}
+        title="Mark this rental as completed?"
+        message={`Do this once your trip is done. ${bookedCount === 1 ? "Your driver" : "Your drivers"} will be notified and the rental moves to your bookings.${bookedCount < units.length ? " Vehicles no driver took are dropped." : ""}`}
+        confirmLabel="Mark as completed"
+        cancelLabel="Not yet"
+        icon={<CircleCheck color="#ffffff" size={22} strokeWidth={2.2} />}
+        onCancel={() => setConfirmingDone(false)}
+        onConfirm={() => {
+          setConfirmingDone(false);
+          onComplete();
+        }}
+      />
 
       <ConfirmModal
         visible={confirming}
@@ -337,6 +429,20 @@ const styles = StyleSheet.create({
   driverLabel: { color: palette.cyan, fontFamily: "SoraBold", fontSize: 10 },
   driverName: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 14 },
   driverMeta: { color: panelText, fontFamily: "Sora", fontSize: 11 },
+  driverPhone: {
+    marginTop: 1,
+    color: palette.cyan,
+    fontFamily: "SoraBold",
+    fontSize: 12,
+  },
+  remove: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 20,
+    backgroundColor: palette.danger,
+  },
   call: {
     width: 40,
     height: 40,
@@ -344,6 +450,19 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: 20,
     backgroundColor: palette.cyan,
+  },
+  complete: {
+    height: 50,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 14,
+    backgroundColor: palette.brand,
+  },
+  completeText: {
+    color: "#ffffff",
+    fontFamily: "SoraBold",
+    fontSize: 13,
+    letterSpacing: 1,
   },
   cancel: {
     height: 50,

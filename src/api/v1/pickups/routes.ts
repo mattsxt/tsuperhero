@@ -116,6 +116,9 @@ export const pickupRoutes = {
       p_longitude: longitude,
     }),
 
+  findRideParty: (requestId: string) =>
+    getSupabaseClient().rpc("get_ride_party", { p_request_id: requestId }),
+
   findMySharedRide: () => getSupabaseClient().rpc("get_my_shared_ride"),
 
   leaveSharedRide: (requestId: string) =>

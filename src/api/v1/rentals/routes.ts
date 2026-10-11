@@ -10,6 +10,9 @@ export type RentalUnitRow = {
   driver_name: string | null;
   plate_number: string | null;
   driver_contact: string | null;
+  driver_id?: string | null;
+  /** The commuter's rating for this driver, once rated. */
+  my_score?: number | null;
 };
 
 export type RentalRow = {
@@ -74,6 +77,27 @@ export const rentalRoutes = {
 
   acceptJob: (unitId: string) =>
     rpc().rpc("accept_rental_job", { p_unit_id: unitId }),
+
+  getMine: (requestId: string) =>
+    rpc().rpc("get_my_rental", { p_request_id: requestId }),
+
+  removeDriver: (unitId: string) =>
+    rpc().rpc("remove_rental_driver", { p_unit_id: unitId }),
+
+  rateDriver: (
+    requestId: string,
+    driverId: string,
+    score: number,
+    feedback: string | null,
+    tags: string[],
+  ) =>
+    rpc().rpc("rate_rental_driver", {
+      p_request_id: requestId,
+      p_driver_id: driverId,
+      p_score: score,
+      p_feedback: feedback,
+      p_tags: tags,
+    }),
 
   dismissJob: (requestId: string) =>
     rpc().rpc("dismiss_rental_job", { p_request_id: requestId }),

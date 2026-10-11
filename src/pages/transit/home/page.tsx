@@ -10,7 +10,13 @@ import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { loadHome, peekHomeName } from "@/api/v1/profile/controllers";
-import { loadJobBoard } from "@/api/v1/rentals/controllers";
+import {
+  loadJobBoard,
+  loadRentalRequests,
+  rentalWindow,
+  type Rental,
+} from "@/api/v1/rentals/controllers";
+import { useNow } from "@/hooks/use-now";
 import { BottomNav, bottomNavHeight } from "@/components/bottom-nav";
 import {
   ActionCard,
@@ -35,12 +41,24 @@ export default function TransitHomeScreen() {
     peekHomeName("transit_personnel"),
   );
   const [openJobs, setOpenJobs] = useState(0);
+  const [myJobs, setMyJobs] = useState<Rental[]>([]);
+  const now = useNow(60_000);
+  // ACTIVE only from an hour before to an hour after a booked rental's pickup time.
+  const rentalActive = !!rentalWindow(myJobs, now);
 
   useFocusEffect(
     useCallback(() => {
       let active = true;
       loadJobBoard().then((result) => {
-        if (active && result.ok) setOpenJobs(result.data.length);
+        if (active && result.ok) {
+          // Only jobs this driver can take (not clashing with one they booked).
+          setOpenJobs(
+            result.data.filter((job) => !job.scheduleConflict).length,
+          );
+        }
+      });
+      loadRentalRequests().then((result) => {
+        if (active && result.ok) setMyJobs(result.data);
       });
       return () => {
         active = false;
@@ -102,11 +120,9 @@ export default function TransitHomeScreen() {
                   />
                 }
                 onPress={() => router.push(Routes.transitRentalRequests)}
-                badge={
-                  openJobs > 0
-                    ? `${openJobs > 9 ? "9+" : openJobs} NEW`
-                    : undefined
-                }
+                badge={rentalActive ? "ACTIVE" : undefined}
+                // Open jobs waiting; hidden while a booked rental is under way.
+                count={rentalActive ? 0 : openJobs}
               />
               <ActionCard
                 title="Trip History"

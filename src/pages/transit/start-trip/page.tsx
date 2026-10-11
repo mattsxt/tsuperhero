@@ -69,6 +69,17 @@ import { Routes } from "@/constants/routes";
 import { getDistanceMeters, getPairDistanceMeters } from "@/utils/geo";
 import { goBackOr } from "@/utils/navigation";
 import { palette } from "@/constants/colors";
+import {
+  loadRentalRequests,
+  rentalCooldownMs,
+  rentalWindow,
+  type Rental,
+} from "@/api/v1/rentals/controllers";
+import { useNow } from "@/hooks/use-now";
+import { usePolling } from "@/hooks/use-polling";
+
+const clock = (date: Date) =>
+  date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 
 const panelNavy = palette.navy;
 const routeCyan = palette.cyan;
@@ -192,6 +203,14 @@ function Trip({ details }: { details: AssignmentDetails }) {
   const [alternativePaths, setAlternativePaths] = useState<LatLng[][]>([]);
   const [status, setStatus] = useState<TripStatus>("idle");
   const [starting, setStarting] = useState(false);
+  // Booked rentals: no regular trip from an hour before to an hour after their pickups.
+  const [rentalJobs, setRentalJobs] = useState<Rental[]>([]);
+  usePolling(async () => {
+    const result = await loadRentalRequests();
+    if (result.ok) setRentalJobs(result.data);
+  }, 60_000);
+  const now = useNow(30_000);
+  const cooldown = rentalWindow(rentalJobs, now);
   const [backgroundSharing, setBackgroundSharing] = useState(false);
   const [fix, setFix] = useState<LocationObject | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
@@ -481,6 +500,15 @@ function Trip({ details }: { details: AssignmentDetails }) {
 
   const start = async () => {
     if (starting) return;
+    if (cooldown) {
+      setToast(
+        nextError(
+          "Rental pickup",
+          `You have a rental pickup at ${clock(cooldown.at)}. Trips can't start from ${clock(new Date(cooldown.at.getTime() - rentalCooldownMs))} to ${clock(new Date(cooldown.at.getTime() + rentalCooldownMs))}.`,
+        ),
+      );
+      return;
+    }
     if (locationError) {
       setToast(nextError("Location", "Allow location access to start a trip."));
       return;
@@ -498,7 +526,7 @@ function Trip({ details }: { details: AssignmentDetails }) {
     }
     clearOutbox();
     savedState.current = "in-transit:0:false";
-    lastMovedAt.current = Date.now();
+    lastMovedAt.current = new Date().getTime();
     shareFailing.current = false;
     tripActive.current = true;
     distanceDone.current = 0;
@@ -841,6 +869,18 @@ function Trip({ details }: { details: AssignmentDetails }) {
           </View>
         </View>
 
+        {!onTrip && cooldown && (
+          <View style={styles.cooldown}>
+            <CircleAlert color="#92400e" size={16} strokeWidth={2.4} />
+            <Text style={styles.cooldownText}>
+              Rental pickup at {clock(cooldown.at)} to{" "}
+              {cooldown.rental.destination}. Regular trips are paused from{" "}
+              {clock(new Date(cooldown.at.getTime() - rentalCooldownMs))} to{" "}
+              {clock(new Date(cooldown.at.getTime() + rentalCooldownMs))}.
+            </Text>
+          </View>
+        )}
+
         <View style={styles.controls}>
           <View style={styles.counter}>
             <CounterButton
@@ -878,7 +918,7 @@ function Trip({ details }: { details: AssignmentDetails }) {
               <TripButton
                 label="START"
                 tone="start"
-                disabled={starting}
+                disabled={starting || !!cooldown}
                 onPress={start}
               />
             )}
@@ -1122,6 +1162,22 @@ const toastTones = {
 };
 
 const styles = StyleSheet.create({
+  cooldown: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 10,
+    padding: 10,
+    borderRadius: 10,
+    backgroundColor: "#fef3c7",
+  },
+  cooldownText: {
+    flex: 1,
+    color: "#78350f",
+    fontFamily: "Sora",
+    fontSize: 11,
+    lineHeight: 16,
+  },
   loadingScreen: {
     flex: 1,
     alignItems: "center",

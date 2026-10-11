@@ -91,6 +91,7 @@ const guides: Record<Role, Topic[]> = {
       steps: [
         "Drivers only see your request once you are at the pickup point, so follow the route on the map.",
         "When you arrive, the badge changes to Visible to drivers and nearby drivers are notified.",
+        "Sharing a ride? Drivers see your request only once you and every companion who accepted are at the pickup point.",
         "Stay close. If you walk more than 150 m away for over 2 minutes, drivers stop seeing your request until you come back.",
         "If no driver accepts after 10 minutes, the app suggests cancelling and trying another vehicle type.",
       ],
@@ -135,7 +136,7 @@ const guides: Record<Role, Topic[]> = {
         "Open Rental and enter the pickup location, destination, date, time, occasion and number of passengers.",
         "Choose how many of each vehicle you need: jeepneys, vans, buses or tricycles, in any mix up to 10. Check the summary, then tap Post Request.",
         "Your request goes on the job board for drivers of those vehicles. Each vehicle is booked by its own driver, and you'll be notified as each one accepts, with their name and plate number.",
-        "Rental shows your request while it waits and once it's booked. You can call your driver or cancel from there.",
+        "Rental shows your request while it waits and once it's booked. You can call your drivers or cancel from there, and tap Mark as Completed after the trip.",
         "You can have one request at a time: while a rental is active you can't request a pickup, and the other way around.",
       ],
     },
@@ -163,6 +164,7 @@ const guides: Record<Role, Topic[]> = {
         "From Home, open Start Trip. The map shows your route and your vehicle.",
         "Allow location access, including all the time, so commuters can see your vehicle even when the app is in the background.",
         "Tap START to begin. Your location is shared while the trip is active.",
+        "If you have a booked rental, regular trips are paused from 1 hour before to 1 hour after its pickup time (and its return pickup on round trips).",
       ],
     },
     {
@@ -193,7 +195,7 @@ const guides: Record<Role, Topic[]> = {
         "Open Rental Jobs to see the job board: charter trips commuters posted for your type of vehicle.",
         "Tap a job to see the details, then Accept Job to take it, or Not Interested to remove it from your board. The first driver to accept gets the trip.",
         "Accepted jobs are saved in My jobs, and the commuter is notified. Jobs that clash with one you already have are marked.",
-        "After the trip, mark it as completed so it appears in the commuter's bookings.",
+        "Tap a job in My jobs to see the trip, the other vehicles and the commuter's contact. The commuter marks the rental as completed after the trip.",
       ],
     },
     {

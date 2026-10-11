@@ -3,24 +3,21 @@ import BriefcaseBusiness from "lucide-react-native/icons/briefcase-business";
 import CircleCheck from "lucide-react-native/icons/circle-check";
 import Inbox from "lucide-react-native/icons/inbox";
 import { useCallback, useMemo, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
   acceptRentalJob,
-  completeRental,
   dismissRentalJob,
   loadJobBoard,
   loadRentalRequests,
-  respondToRental,
   type Rental,
 } from "@/api/v1/rentals/controllers";
-import { ConfirmModal } from "@/components/confirm-modal";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorAlert } from "@/components/error-alert";
 import { Chip, ModuleHeader, moduleColors } from "@/components/module-ui";
-import { RentalCard, type RentalAction } from "@/components/rental-card";
+import { RentalCard } from "@/components/rental-card";
 import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { SkeletonCards } from "@/components/skeleton";
 import { palette } from "@/constants/colors";
@@ -29,6 +26,7 @@ import { usePolling } from "@/hooks/use-polling";
 import { goBackOr } from "@/utils/navigation";
 
 import { JobCard } from "./job-card";
+import { JobDetailsModal } from "./job-details-modal";
 import { JobModal } from "./job-modal";
 
 const { brandBlue } = moduleColors;
@@ -67,15 +65,8 @@ export default function RentalJobsScreen() {
   const [jobProblem, setJobProblem] = useState("");
   const [booked, setBooked] = useState(false);
 
-  const [busy, setBusy] = useState<{ id: string; action: string } | null>(null);
-  const [actionError, setActionError] = useState<{
-    id: string;
-    message: string;
-  } | null>(null);
-  const [confirm, setConfirm] = useState<{
-    rental: Rental;
-    action: "complete" | "decline";
-  } | null>(null);
+  /** A job from My jobs or History, shown in the details pop-up. */
+  const [details, setDetails] = useState<Rental | null>(null);
 
   const refresh = useCallback(async () => {
     const [open, mine] = await Promise.all([
@@ -142,54 +133,6 @@ export default function RentalJobsScreen() {
       (current ?? []).filter((job) => job.id !== selected.id),
     );
     closeJob();
-  };
-
-  const run = async (
-    rental: Rental,
-    action: string,
-    task: () => Promise<{ ok: boolean; error?: string }>,
-  ) => {
-    setBusy({ id: rental.id, action });
-    setActionError(null);
-    const result = await task();
-    setBusy(null);
-    if (!result.ok) {
-      setActionError({ id: rental.id, message: result.error ?? "" });
-    }
-    refresh();
-  };
-
-  const actionsFor = (rental: Rental): RentalAction[] => {
-    const isBusy = (action: string) =>
-      busy?.id === rental.id && busy.action === action;
-    if (rental.status === "pending" && !rental.expired) {
-      return [
-        {
-          label: "DECLINE",
-          tone: "danger",
-          busy: isBusy("decline"),
-          onPress: () => setConfirm({ rental, action: "decline" }),
-        },
-        {
-          label: "ACCEPT",
-          tone: "primary",
-          busy: isBusy("accept"),
-          onPress: () =>
-            run(rental, "accept", () => respondToRental(rental.id, true)),
-        },
-      ];
-    }
-    if (rental.status === "accepted") {
-      return [
-        {
-          label: "MARK AS COMPLETED",
-          tone: "primary",
-          busy: isBusy("complete"),
-          onPress: () => setConfirm({ rental, action: "complete" }),
-        },
-      ];
-    }
-    return [];
   };
 
   const goBack = () => goBackOr(Routes.transitHome);
@@ -282,18 +225,15 @@ export default function RentalJobsScreen() {
           ) : (
             <View style={styles.list}>
               {visible.map((rental) => (
-                <RentalCard
+                <Pressable
                   key={rental.id}
-                  rental={rental}
-                  viewer="driver"
-                  disabled={!!busy}
-                  actions={actionsFor(rental)}
-                  error={
-                    actionError?.id === rental.id
-                      ? actionError.message
-                      : undefined
-                  }
-                />
+                  accessibilityRole="button"
+                  accessibilityLabel={`Rental to ${rental.destination}. Show details`}
+                  onPress={() => setDetails(rental)}
+                  style={({ pressed }) => pressed && styles.pressed}
+                >
+                  <RentalCard rental={rental} viewer="driver" />
+                </Pressable>
               ))}
             </View>
           )}
@@ -325,35 +265,7 @@ export default function RentalJobsScreen() {
         }}
       />
 
-      <ConfirmModal
-        visible={!!confirm}
-        title={
-          confirm?.action === "complete"
-            ? "Mark as completed?"
-            : "Decline this request?"
-        }
-        message={
-          confirm?.action === "complete"
-            ? "Only do this once the trip is finished. It will be added to the commuter's bookings."
-            : `The commuter will be told you can't take their trip to ${confirm?.rental.destination ?? "their destination"}.`
-        }
-        confirmLabel={confirm?.action === "complete" ? "Complete" : "Decline"}
-        cancelLabel="Not yet"
-        destructive={confirm?.action === "decline"}
-        onCancel={() => setConfirm(null)}
-        onConfirm={() => {
-          if (!confirm) return;
-          const { rental, action } = confirm;
-          setConfirm(null);
-          if (action === "complete") {
-            void run(rental, "complete", () => completeRental(rental.id));
-          } else {
-            void run(rental, "decline", () =>
-              respondToRental(rental.id, false),
-            );
-          }
-        }}
-      />
+      <JobDetailsModal job={details} onClose={() => setDetails(null)} />
     </View>
   );
 }
@@ -390,4 +302,5 @@ const styles = StyleSheet.create({
   loading: { marginTop: 24 },
   list: { gap: 12, marginTop: 16 },
   problem: { marginTop: 12 },
+  pressed: { opacity: 0.85 },
 });

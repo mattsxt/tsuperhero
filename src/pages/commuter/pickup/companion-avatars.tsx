@@ -32,7 +32,11 @@ export function CompanionAvatars({ companions }: { companions: Rider[] }) {
             style={[styles.slot, index > 0 && styles.overlapped]}
           >
             <Popover
-              heading={rider.name}
+              heading={
+                rider.isOwner
+                  ? `${rider.name} · requested the ride`
+                  : rider.name
+              }
               variant="tooltip"
               body={statusLabel(rider)}
               accessibilityLabel={`${rider.name}, ${statusLabel(rider).toLowerCase()}`}

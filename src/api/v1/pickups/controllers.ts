@@ -287,11 +287,13 @@ export async function requestPickup(
 export function markPickupArrived(
   requestId: string,
   location: { lat: number; lng: number },
-): Promise<Result<void>> {
+): Promise<Result<boolean>> {
   return attempt(async () => {
-    await unwrap(
+    // Null while companions are still on the way: drivers see it once everyone's there.
+    const visibleSince: string | null = await unwrap(
       pickupRoutes.markPickupArrived(requestId, location.lat, location.lng),
     );
+    if (!visibleSince) return false;
     if (knownActivePickup?.id === requestId) {
       knownActivePickup = {
         ...knownActivePickup,
@@ -299,6 +301,7 @@ export function markPickupArrived(
         arrivedAt: knownActivePickup.arrivedAt ?? new Date(),
       };
     }
+    return true;
   });
 }
 
@@ -427,6 +430,13 @@ export function formatEta(seconds: number) {
 
 export type BookingKind = "pickup" | "rental";
 
+export type BookingDriver = Rider & {
+  vehicleType: string | null;
+  plateNumber: string | null;
+  /** The commuter's rating for this driver, if any. */
+  score: number | null;
+};
+
 export type Booking = {
   id: string;
   kind: BookingKind;
@@ -439,6 +449,13 @@ export type Booking = {
   vehicleType: string | null;
   driverName: string | null;
   rating: { score: number; feedback: string | null } | null;
+  /** Rentals: hired drivers still waiting for the commuter's rating. */
+  driversToRate: number;
+  driversTotal: number;
+  /** Every hired driver (rentals can have several). */
+  drivers: BookingDriver[];
+  /** Pickups: everyone who rode together, including you. */
+  riders: (Rider & { isOwner: boolean; isMe: boolean })[];
   sharedBy: string | null;
 };
 
@@ -461,6 +478,22 @@ export function loadBookings(): Promise<Result<Booking[]>> {
         row.rating_score === null
           ? null
           : { score: row.rating_score, feedback: row.rating_feedback },
+      driversTotal: row.drivers_total ?? 0,
+      riders: (row.riders ?? []).map((rider) => ({
+        ...toRider(rider),
+        isOwner: rider.is_owner,
+        isMe: rider.is_me,
+      })),
+      drivers: (row.drivers ?? []).map((driver) => ({
+        ...toRider({ ...driver, user_id: driver.driver_id }),
+        vehicleType: driver.vehicle_type,
+        plateNumber: driver.plate_number,
+        score: driver.score,
+      })),
+      driversToRate: Math.max(
+        0,
+        (row.drivers_total ?? 0) - (row.drivers_rated ?? 0),
+      ),
       sharedBy: row.shared_by ?? null,
     }));
   });
@@ -522,6 +555,8 @@ export type Rider = {
   picture: string | null;
   inviteStatus?: CompanionStatus;
   arrived?: boolean;
+  /** In a ride party: the commuter who requested the pickup. */
+  isOwner?: boolean;
 };
 
 const toRider = (row: RiderRow): Rider => {
@@ -733,5 +768,18 @@ export function updateCompanionPresence(
       ),
     );
     return arrived;
+  });
+}
+
+/** Everyone else in the ride, and whether each is at the pickup point. */
+export function loadRideParty(requestId: string): Promise<Result<Rider[]>> {
+  return attempt(async () => {
+    const rows: (RiderRow & { is_owner: boolean; arrived: boolean })[] =
+      (await unwrap(pickupRoutes.findRideParty(requestId))) ?? [];
+    return rows.map((row) => ({
+      ...toRider(row),
+      arrived: row.arrived,
+      isOwner: row.is_owner,
+    }));
   });
 }

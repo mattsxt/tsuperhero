@@ -47,6 +47,9 @@ export type RentalUnit = {
   driverName: string | null;
   plateNumber: string | null;
   driverContact: string | null;
+  driverId: string | null;
+  /** The commuter's rating for this driver, once rated. */
+  myScore: number | null;
 };
 
 export type Rental = {
@@ -105,6 +108,8 @@ const toRental = (row: RentalRow): Rental => {
       driverName: unit.driver_name,
       plateNumber: unit.plate_number,
       driverContact: unit.driver_contact,
+      driverId: unit.driver_id ?? null,
+      myScore: unit.my_score ?? null,
     })),
     unitId: row.unit_id ?? null,
     unitVehicleType: row.unit_vehicle_type ?? null,
@@ -236,6 +241,54 @@ export function activeRentalOf(rentals: Rental[]): Rental | null {
   );
 }
 
+/** One of the commuter's own rentals, e.g. to rate its drivers from Bookings. */
+export function loadMyRental(id: string): Promise<Result<Rental | null>> {
+  return attempt(async () => {
+    const row: RentalRow | null = await unwrap(rentalRoutes.getMine(id));
+    return row ? toRental(row) : null;
+  });
+}
+
+/** The commuter drops a hired driver; their vehicle goes back on the job board. */
+export async function removeRentalDriver(
+  unitId: string,
+): Promise<Result<unknown>> {
+  if (!(await checkOnline())) {
+    return failure("Reconnect to the internet to change your drivers.");
+  }
+  return attempt(() => unwrap(rentalRoutes.removeDriver(unitId)));
+}
+
+export async function rateRentalDriver(
+  requestId: string,
+  driverId: string,
+  score: number,
+  feedback: string,
+  tags: string[],
+): Promise<Result<unknown>> {
+  if (!(await checkOnline())) {
+    return failure("Reconnect to the internet to send your rating.");
+  }
+  return attempt(() =>
+    unwrap(
+      rentalRoutes.rateDriver(
+        requestId,
+        driverId,
+        score,
+        feedback.trim() || null,
+        tags,
+      ),
+    ),
+  );
+}
+
+/** Hired drivers of a rental the commuter hasn't rated yet. */
+export const unratedDrivers = (rental: Rental) =>
+  rental.units.filter(
+    (unit) =>
+      !!unit.driverId && unit.status !== "open" && unit.myScore === null,
+  );
+
 export function completeRental(id: string): Promise<Result<unknown>> {
   return attempt(() => unwrap(rentalRoutes.complete(id)));
 }
@@ -259,3 +312,47 @@ export const rentalStatusLabels: Record<RentalStatus, string> = {
   rejected: "Declined",
   completed: "Completed",
 };
+
+/** A driver can't start a regular trip this long before or after a rental pickup. */
+export const rentalCooldownMs = 60 * 60_000;
+
+/**
+ * The driver's booked rental whose pickup (or return pickup) is within an hour of now, and
+ * that moment. Same rule as the database's trip check.
+ */
+export function rentalWindow(
+  jobs: Rental[],
+  now: number,
+): { rental: Rental; at: Date } | null {
+  for (const rental of jobs) {
+    const booked =
+      rental.status === "accepted" ||
+      rental.units.some((unit) => unit.isMine && unit.status === "booked");
+    if (!booked || rental.status === "completed") continue;
+    for (const at of [rental.pickupTime, rental.returnTime]) {
+      if (at && Math.abs(at.getTime() - now) <= rentalCooldownMs) {
+        return { rental, at };
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * The commuter's rental pickup (or return pickup) within an hour of now: pickups are paused
+ * then. Same rule as the database.
+ */
+export function commuterRentalWindow(
+  rentals: Rental[],
+  now: number,
+): { rental: Rental; at: Date } | null {
+  for (const rental of rentals) {
+    if (rental.status !== "pending" && rental.status !== "accepted") continue;
+    for (const at of [rental.pickupTime, rental.returnTime]) {
+      if (at && Math.abs(at.getTime() - now) <= rentalCooldownMs) {
+        return { rental, at };
+      }
+    }
+  }
+  return null;
+}

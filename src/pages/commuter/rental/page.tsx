@@ -24,6 +24,8 @@ import {
   activeRentalOf,
   cancelRental,
   combineDateTime,
+  completeRental,
+  removeRentalDriver,
   formatRentalTime,
   loadMyRentals,
   postRental,
@@ -47,13 +49,14 @@ import {
 import { ConnectionRequired } from "@/components/connection-required";
 import { ErrorAlert, ErrorOutline } from "@/components/error-alert";
 import { PlaceSearchField } from "@/components/place-search-field";
-import { RentalCard } from "@/components/rental-card";
 import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
 import { checkOnline, useOnline } from "@/hooks/use-online";
 import { usePolling } from "@/hooks/use-polling";
 import { SkeletonCards } from "@/components/skeleton";
 import { palette } from "@/constants/colors";
+
+import { RateDriversModal } from "@/components/rate-drivers-modal";
 
 import { ActiveRental } from "./active-rental";
 import { FleetPicker, fleetLabel, fleetSeats, maxFleet } from "./fleet-picker";
@@ -151,6 +154,10 @@ export default function RentalScreen() {
   const [rentals, setRentals] = useState<Rental[]>([]);
   const [rentalsLoaded, setRentalsLoaded] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [completing, setCompleting] = useState(false);
+  const [removingId, setRemovingId] = useState<string | null>(null);
+  /** The rental just completed: its drivers are rated next. */
+  const [rateTarget, setRateTarget] = useState<Rental | null>(null);
   const [cancelError, setCancelError] = useState("");
   const [pickupInProgress, setPickupInProgress] = useState(false);
   const online = useOnline();
@@ -171,9 +178,6 @@ export default function RentalScreen() {
   usePolling(refreshRentals, rentalPollMs);
 
   const activeRental = activeRentalOf(rentals);
-  const pastRequests = rentals.filter(
-    (rental) => rental.expired || rental.status === "rejected",
-  );
   const showForm = rentalsLoaded && !activeRental && !pickupInProgress;
 
   const buildTrip = (): RentalTrip | null => {
@@ -225,6 +229,32 @@ export default function RentalScreen() {
     if (!result.ok) return setProblem(result.error);
     resetForm();
     goToStep(1);
+    refreshRentals();
+  };
+
+  const completeActive = async () => {
+    if (!activeRental || completing) return;
+    setCompleting(true);
+    setCancelError("");
+    const finished = activeRental;
+    const result = await completeRental(finished.id);
+    setCompleting(false);
+    if (!result.ok) return setCancelError(result.error);
+    // Straight to rating the drivers, while the trip is fresh.
+    setRateTarget({ ...finished, status: "completed" });
+    setRentals((current) =>
+      current.filter((item) => item.id !== activeRental.id),
+    );
+    refreshRentals();
+  };
+
+  const removeDriver = async (unitId: string) => {
+    if (removingId) return;
+    setRemovingId(unitId);
+    setCancelError("");
+    const result = await removeRentalDriver(unitId);
+    setRemovingId(null);
+    if (!result.ok) return setCancelError(result.error);
     refreshRentals();
   };
 
@@ -364,8 +394,12 @@ export default function RentalScreen() {
             <ActiveRental
               rental={activeRental}
               busy={cancelling}
+              completing={completing}
               problem={cancelError}
               onCancel={cancelActive}
+              onComplete={completeActive}
+              removingId={removingId}
+              onRemoveDriver={removeDriver}
             />
           )}
           {rentalsLoaded && !activeRental && pickupInProgress && (
@@ -565,26 +599,6 @@ export default function RentalScreen() {
 
               <Problem message={problem} field={problemField} />
               <ModuleButton label="CHOOSE VEHICLE" onPress={advance} />
-
-              {pastRequests.length > 0 && (
-                <>
-                  <SectionTitle
-                    icon={
-                      <BusFront color="#ffffff" size={18} strokeWidth={2} />
-                    }
-                    title="Recent requests"
-                  />
-                  <View style={styles.rentalList}>
-                    {pastRequests.map((rental) => (
-                      <RentalCard
-                        key={rental.id}
-                        rental={rental}
-                        viewer="commuter"
-                      />
-                    ))}
-                  </View>
-                </>
-              )}
             </>
           )}
 
@@ -657,6 +671,14 @@ export default function RentalScreen() {
           )}
         </View>
       </Animated.ScrollView>
+
+      {rateTarget && (
+        <RateDriversModal
+          key={rateTarget.id}
+          rental={rateTarget}
+          onClose={() => setRateTarget(null)}
+        />
+      )}
 
       <StickyHeader chrome={chrome}>
         <ModuleHeader
@@ -841,7 +863,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 16,
   },
-  rentalList: { gap: 10 },
   loading: { marginTop: 48 },
   pressed: { opacity: 0.8 },
   problem: { marginTop: 16 },

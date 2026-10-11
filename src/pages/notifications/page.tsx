@@ -74,6 +74,8 @@ const typeIcons: Record<string, typeof Bell> = {
   rating_received: Star,
   rental_request: Bus,
   rental_job_booked: CircleCheck,
+  rental_job_completed: CircleCheck,
+  rental_driver_removed: CircleX,
   rental_cancelled: CircleX,
 };
 

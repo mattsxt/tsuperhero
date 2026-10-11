@@ -105,6 +105,7 @@ export function ActivePickup({
   const lastAwayReport = useRef(0);
   const mounted = useRef(true);
   const [awaySince, setAwaySince] = useState<number | null>(null);
+  const [waitingForParty, setWaitingForParty] = useState(false);
   const [recenters, setRecenters] = useState(0);
   const [companions, setCompanions] = useState<Rider[]>([]);
 
@@ -176,7 +177,10 @@ export function ActivePickup({
       if (!mounted.current) return;
       if (result.ok) {
         setArrivalProblem("");
-        onArrived();
+        // False: you're here, but a companion is still on the way. This retries
+        // every few seconds while you stay, and goes live once everyone arrives.
+        if (result.data) onArrived();
+        else setWaitingForParty(true);
       } else {
         setArrivalProblem(result.error);
       }
@@ -386,6 +390,13 @@ export function ActivePickup({
               withinRange={withinRange}
               awayMs={awayMs}
               waitingMs={waitingMs}
+              waitingFor={
+                waitingForParty && withinRange
+                  ? companions
+                      .filter((companion) => !companion.arrived)
+                      .map((companion) => companion.name.split(" ")[0])
+                  : []
+              }
             />
             <CompanionAvatars companions={companions} />
             {noDriverYet && (
@@ -456,7 +467,10 @@ function ArrivalGuide({
   withinRange,
   awayMs,
   waitingMs,
+  waitingFor,
 }: {
+  /** Companions still on the way while the commuter is already here. */
+  waitingFor: string[];
   arrived: boolean;
   located: boolean;
   locationError: string | null;
@@ -490,15 +504,20 @@ function ArrivalGuide({
             "Finding your location…",
             "Drivers will see your request once you’re at the pickup point.",
           ]
-        : withinRange
+        : withinRange && waitingFor.length > 0
           ? [
-              "Confirming you’ve arrived…",
-              "Hold on. We’re letting nearby drivers know you’re here.",
+              "You’re at the pickup point",
+              `Waiting for ${waitingFor.join(" and ")} to arrive. Drivers will see your request once everyone is here.`,
             ]
-          : [
-              "Head to the pickup point",
-              `You’re ${formatDistance(distance ?? 0)} away. Follow the route on the map. Drivers will see your request once you get there.`,
-            ];
+          : withinRange
+            ? [
+                "Confirming you’ve arrived…",
+                "Hold on. We’re letting nearby drivers know you’re here.",
+              ]
+            : [
+                "Head to the pickup point",
+                `You’re ${formatDistance(distance ?? 0)} away. Follow the route on the map. Drivers will see your request once you get there.`,
+              ];
 
   return (
     <View style={styles.guide}>

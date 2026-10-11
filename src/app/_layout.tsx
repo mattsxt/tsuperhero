@@ -10,6 +10,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { AnimatedSplashOverlay } from "@/components/animated-icon";
 import { NotificationSync } from "@/components/notification-sync";
 import { OfflineBanner } from "@/components/offline-banner";
+import { RideUpdateModal } from "@/components/ride-update-modal";
 import { ShareInviteModal } from "@/components/share-invite-modal";
 import { AppFonts } from "@/constants/fonts";
 
@@ -79,6 +80,7 @@ export default function RootLayout() {
           </Stack>
           <OfflineBanner />
           <ShareInviteModal />
+          <RideUpdateModal />
         </ThemeProvider>
       </HeroUINativeProvider>
     </GestureHandlerRootView>

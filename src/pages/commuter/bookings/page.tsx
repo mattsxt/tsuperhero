@@ -7,7 +7,7 @@ import IdCard from "lucide-react-native/icons/id-card";
 import UserRound from "lucide-react-native/icons/user-round";
 import Users from "lucide-react-native/icons/users";
 import UsersRound from "lucide-react-native/icons/users-round";
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -25,7 +25,11 @@ import {
   RatingFeedback,
   StatusPill,
 } from "@/components/card-badges";
-import { RateTripModal } from "@/components/star-rating";
+import { BookingRatingSheet } from "@/components/booking-rating-sheet";
+import {
+  BookingDetailsModal,
+  DriverAvatars,
+} from "@/pages/commuter/bookings/booking-details";
 import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
 import { TripHistory } from "@/pages/commuter/bookings/trip-history";
@@ -50,7 +54,7 @@ const emptyMessages: Record<BookingKind, string> = {
   pickup: "Pickups you complete will be recorded here.",
 };
 
-function formatBookingDate(date: Date) {
+export function formatBookingDate(date: Date) {
   const day = date.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
@@ -70,6 +74,7 @@ export default function BookingsScreen() {
   const [bookings, setBookings] = useState<Booking[] | null>(null);
   const [problem, setProblem] = useState("");
   const [rating, setRating] = useState<Booking | null>(null);
+  const [details, setDetails] = useState<Booking | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -89,21 +94,29 @@ export default function BookingsScreen() {
   const goBack = () => goBackOr(Routes.commuterHome);
   const visible = (bookings ?? []).filter((booking) => booking.kind === tab);
   const unrated = (bookings ?? []).filter(
-    (booking) => booking.kind === "rental" && !booking.rating,
+    (booking) => booking.kind === "rental" && booking.driversToRate > 0,
   );
 
-  const saveRating = (score: number, feedback: string) => {
-    if (!rating) return;
-    const id = rating.id;
-    setBookings((current) =>
-      (current ?? []).map((booking) =>
-        booking.id === id
-          ? { ...booking, rating: { score, feedback: feedback || null } }
-          : booking,
-      ),
-    );
-    setRating(null);
-  };
+  const closeRating = useCallback(
+    (rated: number) => {
+      // Fewer drivers left to rate on this booking.
+      if (rating && rated > 0) {
+        const id = rating.id;
+        setBookings((list) =>
+          (list ?? []).map((booking) =>
+            booking.id === id
+              ? {
+                  ...booking,
+                  driversToRate: Math.max(0, booking.driversToRate - rated),
+                }
+              : booking,
+          ),
+        );
+      }
+      setRating(null);
+    },
+    [rating],
+  );
 
   return (
     <View style={styles.screen}>
@@ -178,6 +191,7 @@ export default function BookingsScreen() {
                   key={booking.id}
                   booking={booking}
                   onRate={() => setRating(booking)}
+                  onOpen={() => setDetails(booking)}
                 />
               ))}
             </View>
@@ -195,19 +209,17 @@ export default function BookingsScreen() {
         />
       </StickyHeader>
 
-      <RateTripModal
-        target={
-          rating
-            ? {
-                id: rating.id,
-                title: rating.destination,
-                subtitle: rating.driverName ?? "",
-              }
-            : null
-        }
-        onClose={() => setRating(null)}
-        onRated={saveRating}
+      <BookingDetailsModal
+        booking={details}
+        formatDate={formatBookingDate}
+        onClose={() => setDetails(null)}
+        onRate={() => {
+          setRating(details);
+          setDetails(null);
+        }}
       />
+
+      {rating && <BookingRatingSheet booking={rating} onClose={closeRating} />}
     </View>
   );
 }
@@ -215,15 +227,24 @@ export default function BookingsScreen() {
 export function BookingCard({
   booking,
   onRate,
+  onOpen,
 }: {
   booking: Booking;
   onRate: () => void;
+  /** Opens the booking's details (all drivers, ratings). */
+  onOpen?: () => void;
 }) {
   const vehicle = [booking.plateNumber, booking.vehicleType]
     .filter(Boolean)
     .join(" · ");
   return (
-    <View style={styles.card}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${booking.kind === "rental" ? "Rental" : "Pickup"} to ${booking.destination}. Show details`}
+      disabled={!onOpen}
+      onPress={onOpen}
+      style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+    >
       <View style={styles.cardTop}>
         <View style={styles.titleBlock}>
           <Text style={styles.kind}>
@@ -253,12 +274,25 @@ export function BookingCard({
             {vehicle}
           </Detail>
         )}
-        {!!booking.driverName && (
-          <Detail
-            icon={<UserRound color={brandBlue} size={13} strokeWidth={2} />}
-          >
-            {booking.driverName}
-          </Detail>
+        {booking.kind === "pickup" && booking.riders.length > 1 && (
+          <DriverAvatars
+            drivers={booking.riders}
+            label={`Riding with ${booking.riders
+              .filter((rider) => !rider.isMe)
+              .map((rider) => rider.name.split(" ")[0])
+              .join(", ")}`}
+          />
+        )}
+        {booking.drivers.length > 0 ? (
+          <DriverAvatars drivers={booking.drivers} />
+        ) : (
+          !!booking.driverName && (
+            <Detail
+              icon={<UserRound color={brandBlue} size={13} strokeWidth={2} />}
+            >
+              {booking.driverName}
+            </Detail>
+          )
         )}
         {!!booking.sharedBy && (
           <Detail
@@ -275,6 +309,14 @@ export function BookingCard({
         {booking.kind === "rental" && (
           <RatingCell score={booking.rating?.score ?? null} />
         )}
+        {booking.kind === "rental" &&
+          booking.driversTotal > 1 &&
+          booking.driversToRate > 0 && (
+            <Text style={styles.ratedCount}>
+              {booking.driversTotal - booking.driversToRate} of{" "}
+              {booking.driversTotal} drivers rated
+            </Text>
+          )}
       </View>
 
       {booking.kind === "rental" && (
@@ -282,10 +324,10 @@ export function BookingCard({
           {!!booking.rating?.feedback && (
             <RatingFeedback feedback={booking.rating.feedback} />
           )}
-          {!booking.rating && (
+          {booking.driversToRate > 0 && (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`Rate your rental to ${booking.destination}`}
+              accessibilityLabel={`Rate your drivers for the rental to ${booking.destination}`}
               onPress={onRate}
               style={({ pressed }) => [
                 styles.rateButton,
@@ -293,12 +335,16 @@ export function BookingCard({
               ]}
             >
               <Star color="#ffffff" size={14} strokeWidth={2.2} />
-              <Text style={styles.rateButtonText}>RATE THIS RENTAL</Text>
+              <Text style={styles.rateButtonText}>
+                {booking.driversToRate === 1
+                  ? "RATE YOUR DRIVER"
+                  : `RATE YOUR DRIVERS (${booking.driversToRate} LEFT)`}
+              </Text>
             </Pressable>
           )}
         </>
       )}
-    </View>
+    </Pressable>
   );
 }
 
@@ -314,6 +360,8 @@ function Detail({ icon, children }: { icon: ReactNode; children: ReactNode }) {
 }
 
 const styles = StyleSheet.create({
+  cardPressed: { opacity: 0.85, transform: [{ scale: 0.99 }] },
+  ratedCount: { color: "#6b6b6b", fontFamily: "Sora", fontSize: 10 },
   screen: { flex: 1, backgroundColor: "#ffffff" },
   body: { paddingHorizontal: 12, paddingTop: 18 },
   tabRow: { flexDirection: "row", gap: 8, paddingTop: 6 },

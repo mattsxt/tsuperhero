@@ -62,7 +62,7 @@ import {
   type WaitingAreaType,
 } from "@/api/v1/waiting-areas/controllers";
 import {
-  activeRentalOf,
+  commuterRentalWindow,
   loadMyRentals,
   type Rental,
 } from "@/api/v1/rentals/controllers";
@@ -81,6 +81,7 @@ import { PlaceSearchField } from "@/components/place-search-field";
 import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
 import { checkOnline, useOnline } from "@/hooks/use-online";
+import { useNow } from "@/hooks/use-now";
 import { usePolling } from "@/hooks/use-polling";
 import { getDistanceMeters } from "@/utils/geo";
 import { goBackOr } from "@/utils/navigation";
@@ -138,7 +139,10 @@ export default function PickupScreen() {
     getKnownSharedRide,
   );
   const [sharedRideLoaded, setSharedRideLoaded] = useState(false);
-  const [activeRental, setActiveRental] = useState<Rental | null>(null);
+  const [rentals, setRentals] = useState<Rental[]>([]);
+  const rentalClock = useNow(30_000);
+  // Pickups pause only from an hour before to an hour after a rental pickup.
+  const rentalWindow = commuterRentalWindow(rentals, rentalClock);
   const savedLocationKey = useRef<string | null>(null);
   const online = useOnline();
   const [passengers, setPassengers] = useState(1);
@@ -193,7 +197,7 @@ export default function PickupScreen() {
       ([shared, rentals]) => {
         if (!mounted) return;
         if (shared.ok) setSharedRide(shared.data);
-        if (rentals.ok) setActiveRental(activeRentalOf(rentals.data));
+        if (rentals.ok) setRentals(rentals.data);
         setSharedRideLoaded(true);
       },
     );
@@ -648,10 +652,11 @@ export default function PickupScreen() {
     );
   }
 
-  if (activeRental && !active) {
+  if (rentalWindow && !active) {
     return (
       <RentalInProgress
-        rental={activeRental}
+        rental={rentalWindow.rental}
+        at={rentalWindow.at}
         onOpenRental={() => router.replace(Routes.commuterRental)}
         onBack={goBack}
       />

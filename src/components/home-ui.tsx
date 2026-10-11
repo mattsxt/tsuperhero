@@ -43,17 +43,20 @@ export function ActionCard({
   icon,
   onPress,
   badge,
+  count = 0,
 }: {
   title: string;
   description: string;
   icon: ReactNode;
   onPress?: () => void;
   badge?: string;
+  /** Notification-style number bubble, e.g. open jobs waiting. Hidden at 0. */
+  count?: number;
 }) {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={title}
+      accessibilityLabel={count > 0 ? `${title}, ${count} new` : title}
       onPress={onPress}
       style={({ pressed }) => [
         styles.card,
@@ -65,6 +68,11 @@ export function ActionCard({
         <View style={styles.actionBadge}>
           <View style={styles.actionBadgeDot} />
           <Text style={styles.actionBadgeText}>{badge}</Text>
+        </View>
+      )}
+      {count > 0 && !badge && (
+        <View style={styles.countBubble} pointerEvents="none">
+          <Text style={styles.countText}>{count > 9 ? "9+" : count}</Text>
         </View>
       )}
       {icon}
@@ -196,6 +204,21 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     backgroundColor: palette.success,
   },
+  countBubble: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    minWidth: 22,
+    height: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 6,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: "#ffffff",
+    backgroundColor: palette.danger,
+  },
+  countText: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 11 },
   actionBadgeText: {
     color: palette.success,
     fontFamily: "SoraBold",

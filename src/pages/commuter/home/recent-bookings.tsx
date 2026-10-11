@@ -1,21 +1,23 @@
 import ClipboardList from "lucide-react-native/icons/clipboard-list";
 import { router } from "expo-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { loadBookings, type Booking } from "@/api/v1/pickups/controllers";
 import { LoadingLogo } from "@/components/LoadingLogo";
 import { EmptyState } from "@/components/empty-state";
 import { homeColors, SectionHeader } from "@/components/home-ui";
-import { RateTripModal } from "@/components/star-rating";
+import { BookingRatingSheet } from "@/components/booking-rating-sheet";
 import { Routes } from "@/constants/routes";
-import { BookingCard } from "@/pages/commuter/bookings/page";
+import { BookingCard, formatBookingDate } from "@/pages/commuter/bookings/page";
+import { BookingDetailsModal } from "@/pages/commuter/bookings/booking-details";
 
 const { brandBlue } = homeColors;
 
 export function RecentBookings({ limit }: { limit: number }) {
   const [bookings, setBookings] = useState<Booking[] | null>(null);
   const [rating, setRating] = useState<Booking | null>(null);
+  const [details, setDetails] = useState<Booking | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -27,21 +29,29 @@ export function RecentBookings({ limit }: { limit: number }) {
     };
   }, []);
 
-  const saveRating = (score: number, feedback: string) => {
-    if (!rating) return;
-    const id = rating.id;
-    setBookings((current) =>
-      (current ?? []).map((booking) =>
-        booking.id === id
-          ? { ...booking, rating: { score, feedback: feedback || null } }
-          : booking,
-      ),
-    );
-    setRating(null);
-  };
+  const closeRating = useCallback(
+    (rated: number) => {
+      // Fewer drivers left to rate on this booking.
+      if (rating && rated > 0) {
+        const id = rating.id;
+        setBookings((list) =>
+          (list ?? []).map((booking) =>
+            booking.id === id
+              ? {
+                  ...booking,
+                  driversToRate: Math.max(0, booking.driversToRate - rated),
+                }
+              : booking,
+          ),
+        );
+      }
+      setRating(null);
+    },
+    [rating],
+  );
 
   const unrated = (bookings ?? []).filter(
-    (booking) => booking.kind === "rental" && !booking.rating,
+    (booking) => booking.kind === "rental" && booking.driversToRate > 0,
   ).length;
 
   return (
@@ -69,23 +79,21 @@ export function RecentBookings({ limit }: { limit: number }) {
               key={booking.id}
               booking={booking}
               onRate={() => setRating(booking)}
+              onOpen={() => setDetails(booking)}
             />
           ))}
         </View>
       )}
-      <RateTripModal
-        target={
-          rating
-            ? {
-                id: rating.id,
-                title: rating.destination,
-                subtitle: rating.driverName ?? "",
-              }
-            : null
-        }
-        onClose={() => setRating(null)}
-        onRated={saveRating}
+      <BookingDetailsModal
+        booking={details}
+        formatDate={formatBookingDate}
+        onClose={() => setDetails(null)}
+        onRate={() => {
+          setRating(details);
+          setDetails(null);
+        }}
       />
+      {rating && <BookingRatingSheet booking={rating} onClose={closeRating} />}
     </View>
   );
 }
