@@ -1,5 +1,13 @@
-
-import { sendTripState } from "@/api/v1/operator/outbox";
+import {
+  sendTripEnd,
+  sendTripState,
+  type SendOutcome,
+} from "@/api/v1/operator/outbox";
+import {
+  clearTripPassengers,
+  stopTripDistance,
+  tripDistanceMeters,
+} from "@/api/v1/operator/trip-distance";
 import {
   operatorRoutes,
   type AssignmentRow,
@@ -28,6 +36,8 @@ type OperatorVehicle = {
   plate_number: string;
   max_capacity: number;
   verified: boolean;
+  current_capacity: number;
+  is_full: boolean;
 };
 
 export type OperatorAssignment = {
@@ -122,6 +132,8 @@ export async function loadOperatorAssignment(): Promise<OperatorAssignment | nul
         plate_number: row.vehicle.plate_number,
         max_capacity: row.vehicle.max_capacity,
         verified: row.vehicle.verified_at !== null,
+        current_capacity: row.vehicle.current_capacity ?? 0,
+        is_full: row.vehicle.is_full ?? false,
       },
       routeId: row.route_id,
     };
@@ -198,10 +210,17 @@ export function startTrip(
   );
 }
 
-export function endTrip(distanceDoneMeters: number): Promise<Result<unknown>> {
-  return attempt(() =>
-    unwrap(operatorRoutes.endMyTrip(distanceDoneMeters / metersPerKm)),
-  );
+export function endTrip(distanceDoneMeters: number): Promise<SendOutcome> {
+  return sendTripEnd(distanceDoneMeters / metersPerKm);
+}
+
+export async function endUnfinishedTrip(): Promise<SendOutcome> {
+  const outcome = await endTrip(tripDistanceMeters());
+  if (outcome.status !== "failed") {
+    stopTripDistance();
+    clearTripPassengers();
+  }
+  return outcome;
 }
 
 export type NearbyPickup = {

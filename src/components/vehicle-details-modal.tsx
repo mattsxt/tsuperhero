@@ -40,6 +40,7 @@ export function VehicleCard({
       style={({ pressed }) => [
         cardStyles.card,
         { width },
+        vehicle.stale && cardStyles.stale,
         pressed && cardStyles.pressed,
       ]}
     >
@@ -55,7 +56,9 @@ export function VehicleCard({
         </View>
         <View style={cardStyles.status}>
           <Text style={cardStyles.statusText} numberOfLines={1}>
-            {vehicle.status}
+            {vehicle.stale
+              ? `Last seen ${vehicle.minutesSinceSeen} min ago`
+              : vehicle.status}
           </Text>
         </View>
       </View>
@@ -288,6 +291,7 @@ const styles = StyleSheet.create({
 });
 
 const cardStyles = StyleSheet.create({
+  stale: { opacity: 0.6 },
   card: {
     gap: 9,
     padding: 12,

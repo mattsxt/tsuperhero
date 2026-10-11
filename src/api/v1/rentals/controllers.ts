@@ -48,7 +48,6 @@ export type RentalUnit = {
   plateNumber: string | null;
   driverContact: string | null;
   driverId: string | null;
-  /** The commuter's rating for this driver, once rated. */
   myScore: number | null;
 };
 
@@ -98,6 +97,9 @@ export function combineDateTime(date: Date, time: Date) {
 
 const toRental = (row: RentalRow): Rental => {
   const pickupTime = new Date(row.pickup_time);
+  const anyBooked =
+    (row.units ?? []).some((unit) => unit.status !== "open") ||
+    (!row.units?.length && !!row.driver_assigned);
   return {
     id: row.request_id,
     units: (row.units ?? []).map((unit) => ({
@@ -114,7 +116,10 @@ const toRental = (row: RentalRow): Rental => {
     unitId: row.unit_id ?? null,
     unitVehicleType: row.unit_vehicle_type ?? null,
     status: row.status,
-    expired: row.status === "pending" && pickupTime.getTime() <= Date.now(),
+    expired:
+      row.status === "pending" &&
+      !anyBooked &&
+      pickupTime.getTime() <= Date.now(),
     driverAssigned: row.driver_assigned ?? row.status !== "pending",
     requestedAt: new Date(row.requested_at),
     scheduleConflict: !!row.schedule_conflict,
@@ -225,6 +230,10 @@ export async function acceptRentalJob(job: Rental): Promise<Result<unknown>> {
   return attempt(() => unwrap(rentalRoutes.acceptJob(unitId)));
 }
 
+export function dropRentalJob(id: string): Promise<Result<unknown>> {
+  return attempt(() => unwrap(rentalRoutes.dropJob(id)));
+}
+
 export function dismissRentalJob(id: string): Promise<Result<unknown>> {
   return attempt(() => unwrap(rentalRoutes.dismissJob(id)));
 }
@@ -241,7 +250,6 @@ export function activeRentalOf(rentals: Rental[]): Rental | null {
   );
 }
 
-/** One of the commuter's own rentals, e.g. to rate its drivers from Bookings. */
 export function loadMyRental(id: string): Promise<Result<Rental | null>> {
   return attempt(async () => {
     const row: RentalRow | null = await unwrap(rentalRoutes.getMine(id));
@@ -249,7 +257,6 @@ export function loadMyRental(id: string): Promise<Result<Rental | null>> {
   });
 }
 
-/** The commuter drops a hired driver; their vehicle goes back on the job board. */
 export async function removeRentalDriver(
   unitId: string,
 ): Promise<Result<unknown>> {
@@ -282,7 +289,6 @@ export async function rateRentalDriver(
   );
 }
 
-/** Hired drivers of a rental the commuter hasn't rated yet. */
 export const unratedDrivers = (rental: Rental) =>
   rental.units.filter(
     (unit) =>
@@ -313,13 +319,8 @@ export const rentalStatusLabels: Record<RentalStatus, string> = {
   completed: "Completed",
 };
 
-/** A driver can't start a regular trip this long before or after a rental pickup. */
 export const rentalCooldownMs = 60 * 60_000;
 
-/**
- * The driver's booked rental whose pickup (or return pickup) is within an hour of now, and
- * that moment. Same rule as the database's trip check.
- */
 export function rentalWindow(
   jobs: Rental[],
   now: number,
@@ -338,16 +339,13 @@ export function rentalWindow(
   return null;
 }
 
-/**
- * The commuter's rental pickup (or return pickup) within an hour of now: pickups are paused
- * then. Same rule as the database.
- */
 export function commuterRentalWindow(
   rentals: Rental[],
   now: number,
 ): { rental: Rental; at: Date } | null {
   for (const rental of rentals) {
     if (rental.status !== "pending" && rental.status !== "accepted") continue;
+    if (rental.expired) continue;
     for (const at of [rental.pickupTime, rental.returnTime]) {
       if (at && Math.abs(at.getTime() - now) <= rentalCooldownMs) {
         return { rental, at };

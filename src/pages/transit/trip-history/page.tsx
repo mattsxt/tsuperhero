@@ -7,7 +7,7 @@ import Route from "lucide-react-native/icons/route";
 import Timer from "lucide-react-native/icons/timer";
 import Users from "lucide-react-native/icons/users";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { RefreshControl, StyleSheet, Text, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -74,6 +74,17 @@ export default function TripHistoryScreen() {
   const [trips, setTrips] = useState<TripRecord[] | null>(null);
   const [problem, setProblem] = useState("");
 
+  const [refreshing, setRefreshing] = useState(false);
+  const applyTrips = (result: Awaited<ReturnType<typeof loadMyTrips>>) => {
+    if (result.ok) {
+      setTrips(result.data);
+      setProblem("");
+    } else {
+      setTrips((current) => current ?? []);
+      setProblem(result.error);
+    }
+  };
+
   useEffect(() => {
     let active = true;
     loadMyTrips().then((result) => {
@@ -88,6 +99,12 @@ export default function TripHistoryScreen() {
       active = false;
     };
   }, []);
+
+  const pullRefresh = async () => {
+    setRefreshing(true);
+    applyTrips(await loadMyTrips());
+    setRefreshing(false);
+  };
 
   const visible = useMemo(() => {
     const start = periodStart(period);
@@ -122,6 +139,15 @@ export default function TripHistoryScreen() {
           paddingTop: chrome.headerHeight,
           paddingBottom: insets.bottom + 24,
         }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={pullRefresh}
+            tintColor={brandBlue}
+            colors={[brandBlue]}
+            progressViewOffset={chrome.headerHeight}
+          />
+        }
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.body}>

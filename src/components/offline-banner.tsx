@@ -1,16 +1,16 @@
 import CloudOff from "lucide-react-native/icons/cloud-off";
 import { StyleSheet, Text, View } from "react-native";
 import Animated, { FadeInUp, FadeOutUp } from "react-native-reanimated";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useStatusBarTop } from "@/hooks/use-status-bar-top";
 
 import { useOnline } from "@/hooks/use-online";
 
 export function OfflineBanner() {
-  const insets = useSafeAreaInsets();
+  const statusBarTop = useStatusBarTop();
   const online = useOnline();
 
   return (
-    <View pointerEvents="none" style={[styles.wrap, { top: insets.top + 6 }]}>
+    <View pointerEvents="none" style={[styles.wrap, { top: statusBarTop + 6 }]}>
       {!online && (
         <Animated.View
           entering={FadeInUp.duration(220)}

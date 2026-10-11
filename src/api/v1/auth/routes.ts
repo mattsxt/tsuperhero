@@ -16,7 +16,7 @@ export const authRoutes = {
 
   updateEmail: (email: string) => auth().updateUser({ email }),
 
-  signOut: () => auth().signOut(),
+  signOut: () => auth().signOut({ scope: "local" }),
 
   getSession: () => auth().getSession(),
 };

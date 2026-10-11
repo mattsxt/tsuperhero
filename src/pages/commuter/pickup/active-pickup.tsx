@@ -177,8 +177,6 @@ export function ActivePickup({
       if (!mounted.current) return;
       if (result.ok) {
         setArrivalProblem("");
-        // False: you're here, but a companion is still on the way. This retries
-        // every few seconds while you stay, and goes live once everyone arrives.
         if (result.data) onArrived();
         else setWaitingForParty(true);
       } else {
@@ -469,7 +467,6 @@ function ArrivalGuide({
   waitingMs,
   waitingFor,
 }: {
-  /** Companions still on the way while the commuter is already here. */
   waitingFor: string[];
   arrived: boolean;
   located: boolean;

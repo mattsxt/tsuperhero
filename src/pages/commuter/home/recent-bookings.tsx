@@ -14,7 +14,13 @@ import { BookingDetailsModal } from "@/pages/commuter/bookings/booking-details";
 
 const { brandBlue } = homeColors;
 
-export function RecentBookings({ limit }: { limit: number }) {
+export function RecentBookings({
+  limit,
+  refreshKey = 0,
+}: {
+  limit: number;
+  refreshKey?: number;
+}) {
   const [bookings, setBookings] = useState<Booking[] | null>(null);
   const [rating, setRating] = useState<Booking | null>(null);
   const [details, setDetails] = useState<Booking | null>(null);
@@ -27,11 +33,10 @@ export function RecentBookings({ limit }: { limit: number }) {
     return () => {
       active = false;
     };
-  }, []);
+  }, [refreshKey]);
 
   const closeRating = useCallback(
     (rated: number) => {
-      // Fewer drivers left to rate on this booking.
       if (rating && rated > 0) {
         const id = rating.id;
         setBookings((list) =>

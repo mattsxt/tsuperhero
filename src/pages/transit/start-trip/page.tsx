@@ -1,5 +1,7 @@
+import { useLocalSearchParams } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import CircleAlert from "lucide-react-native/icons/circle-alert";
+import RouteIcon from "lucide-react-native/icons/route";
 import BusFront from "lucide-react-native/icons/bus-front";
 import Check from "lucide-react-native/icons/check";
 import LocateFixed from "lucide-react-native/icons/locate-fixed";
@@ -9,7 +11,14 @@ import Plus from "lucide-react-native/icons/plus";
 import Users from "lucide-react-native/icons/users";
 import X from "lucide-react-native/icons/x";
 import type { LocationObject, LocationObjectCoords } from "expo-location";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   BackHandler,
   Modal,
@@ -37,6 +46,8 @@ import {
   boardPickup,
   describeAssignment,
   endTrip,
+  loadMyTrips,
+  type TripRecord,
   loadNearbyPickups,
   loadOperatorAssignment,
   saveTripState,
@@ -57,7 +68,23 @@ import {
   startLocationSharing,
   stopLocationSharing,
 } from "@/api/v1/operator/location-sharing";
-import { clearOutbox, sendLocation } from "@/api/v1/operator/outbox";
+import {
+  clearOutbox,
+  hasPendingTripEnd,
+  usePendingSync,
+  sendLocation,
+} from "@/api/v1/operator/outbox";
+import {
+  addTripPoint,
+  clearTripPassengers,
+  saveTripPassengers,
+  savedTripPassengers,
+  resumeTripDistance,
+  startTripDistance,
+  stopTripDistance,
+  tripDistanceMeters,
+} from "@/api/v1/operator/trip-distance";
+import { ConfirmModal } from "@/components/confirm-modal";
 import { watchLocation } from "@/api/v1/places/controllers";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorAlert } from "@/components/error-alert";
@@ -69,6 +96,7 @@ import { Routes } from "@/constants/routes";
 import { getDistanceMeters, getPairDistanceMeters } from "@/utils/geo";
 import { goBackOr } from "@/utils/navigation";
 import { palette } from "@/constants/colors";
+import { useOnline } from "@/hooks/use-online";
 import {
   loadRentalRequests,
   rentalCooldownMs,
@@ -77,6 +105,14 @@ import {
 } from "@/api/v1/rentals/controllers";
 import { useNow } from "@/hooks/use-now";
 import { usePolling } from "@/hooks/use-polling";
+
+const endedToast = (status: "sent" | "queued") =>
+  nextToast(
+    status === "queued"
+      ? "Trip ended. It will save when you're back online."
+      : "Trip Ended!",
+    "info",
+  );
 
 const clock = (date: Date) =>
   date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
@@ -144,6 +180,7 @@ function nextToast(text: string, tone: ToastTone, dismissible = true) {
 }
 
 export default function TripScreen() {
+  const params = useLocalSearchParams<{ resume?: string }>();
   const [details, setDetails] = useState<AssignmentDetails | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -186,10 +223,16 @@ export default function TripScreen() {
     );
   }
 
-  return <Trip details={details} />;
+  return <Trip details={details} resumeRequested={params.resume === "1"} />;
 }
 
-function Trip({ details }: { details: AssignmentDetails }) {
+function Trip({
+  details,
+  resumeRequested,
+}: {
+  details: AssignmentDetails;
+  resumeRequested: boolean;
+}) {
   const insets = useSafeAreaInsets();
   const { assignment, route, vehicleLabel, coverageTitle } = details;
   const { vehicle } = assignment;
@@ -199,11 +242,12 @@ function Trip({ details }: { details: AssignmentDetails }) {
 
   const [headerHeight, setHeaderHeight] = useState(140);
   const [panelHeight, setPanelHeight] = useState(240);
+  const [screenHeight, setScreenHeight] = useState(0);
+  const [panelTop, setPanelTop] = useState(0);
   const [routePath, setRoutePath] = useState<LatLng[] | null>(null);
   const [alternativePaths, setAlternativePaths] = useState<LatLng[][]>([]);
   const [status, setStatus] = useState<TripStatus>("idle");
   const [starting, setStarting] = useState(false);
-  // Booked rentals: no regular trip from an hour before to an hour after their pickups.
   const [rentalJobs, setRentalJobs] = useState<Rental[]>([]);
   usePolling(async () => {
     const result = await loadRentalRequests();
@@ -230,14 +274,17 @@ function Trip({ details }: { details: AssignmentDetails }) {
   const latestCoords = useRef<LocationObjectCoords | null>(null);
   const anchor = useRef<LocationObjectCoords | null>(null);
   const lastMovedAt = useRef(0);
-  const savedState = useRef<string | null>(null);
+  const savedState = useRef<string | null>("idle:0:false");
   const shareFailing = useRef(false);
   const tripActive = useRef(false);
-  const distanceDone = useRef(0);
   const seenPickups = useRef(new Set<string>());
+  const [unfinished, setUnfinished] = useState<TripRecord | null>(null);
   const passedPickups = useRef(new Set<string>());
 
   const onTrip = status !== "idle";
+  const online = useOnline();
+  const pendingSync = usePendingSync();
+  const syncWaiting = !online || pendingSync > 0;
   const full = markedFull || count >= capacity;
   const occupancy = markedFull ? "Full" : getOccupancyLevel(count, capacity);
 
@@ -294,13 +341,9 @@ function Trip({ details }: { details: AssignmentDetails }) {
           { lat: next.latitude, lng: next.longitude },
         ) >= movedMeters;
       if (moved) {
-        if (anchor.current && tripActive.current) {
-          distanceDone.current += getDistanceMeters(
-            { lat: anchor.current.latitude, lng: anchor.current.longitude },
-            { lat: next.latitude, lng: next.longitude },
-          );
-        }
         anchor.current = next;
+        if (tripActive.current)
+          addTripPoint(next.latitude, next.longitude, next.accuracy);
         lastMovedAt.current = Date.now();
       }
       setFix(location);
@@ -320,6 +363,58 @@ function Trip({ details }: { details: AssignmentDetails }) {
       subscription?.remove();
     };
   }, [watchAttempt]);
+
+  const resumeTrip = useCallback(async () => {
+    setUnfinished(null);
+    tripActive.current = true;
+    resumeTripDistance();
+    const saved = savedTripPassengers();
+    const server = saved ? null : await loadOperatorAssignment();
+    const restoredCount = Math.min(
+      capacity,
+      Math.max(0, saved?.count ?? server?.vehicle.current_capacity ?? 0),
+    );
+    const restoredFull = saved?.full ?? server?.vehicle.is_full ?? false;
+    savedState.current = null;
+    saveTripPassengers({ count: restoredCount, full: restoredFull });
+    setCount(restoredCount);
+    setMarkedFull(restoredFull);
+    lastMovedAt.current = Date.now();
+    setStatus("in-transit");
+    const sharing = await startLocationSharing();
+    if (!tripActive.current) return;
+    setBackgroundSharing(sharing.mode === "background");
+    setToast(nextToast("Trip resumed.", "info"));
+  }, [capacity]);
+
+  useEffect(() => {
+    let active = true;
+    loadMyTrips().then((result) => {
+      if (!active || !result.ok || tripActive.current) return;
+      const running = result.data.find((trip) => trip.inProgress) ?? null;
+      if (running && resumeRequested) void resumeTrip();
+      else setUnfinished(running);
+    });
+    return () => {
+      active = false;
+    };
+  }, [resumeRequested, resumeTrip]);
+
+  const endUnfinishedTrip = async () => {
+    if (finalizing) return;
+    setFinalizing(true);
+    const result = await endTrip(tripDistanceMeters());
+    setFinalizing(false);
+    if (result.status === "failed") {
+      setToast(nextError("End trip", result.error));
+      return;
+    }
+    setUnfinished(null);
+    stopTripDistance();
+    clearTripPassengers();
+    stopLocationSharing();
+    setToast(endedToast(result.status));
+  };
 
   useEffect(() => {
     if (!onTrip || finalizing) return;
@@ -434,6 +529,11 @@ function Trip({ details }: { details: AssignmentDetails }) {
   }, [fix, accepted, capacity]);
 
   useEffect(() => {
+    if (status === "idle" || !tripActive.current) return;
+    saveTripPassengers({ count, full: markedFull });
+  }, [status, count, markedFull]);
+
+  useEffect(() => {
     if (starting || finalizing) return;
     const key = `${status}:${count}:${markedFull}`;
     if (key === savedState.current) return;
@@ -451,10 +551,9 @@ function Trip({ details }: { details: AssignmentDetails }) {
 
   useEffect(
     () => () => {
+      if (tripActive.current) return;
       stopLocationSharing();
-      if (tripActive.current) endTrip(distanceDone.current);
-      else if (!savedState.current?.startsWith("idle:"))
-        saveTripState("idle", 0);
+      if (!savedState.current?.startsWith("idle:")) saveTripState("idle", 0);
     },
     [],
   );
@@ -500,6 +599,15 @@ function Trip({ details }: { details: AssignmentDetails }) {
 
   const start = async () => {
     if (starting) return;
+    if (hasPendingTripEnd()) {
+      setToast(
+        nextError(
+          "Start trip",
+          "Your last trip is still saving. Connect to the internet to finish it, then start again.",
+        ),
+      );
+      return;
+    }
     if (cooldown) {
       setToast(
         nextError(
@@ -529,7 +637,8 @@ function Trip({ details }: { details: AssignmentDetails }) {
     lastMovedAt.current = new Date().getTime();
     shareFailing.current = false;
     tripActive.current = true;
-    distanceDone.current = 0;
+    startTripDistance();
+    clearTripPassengers();
     boardingAttempts.current.clear();
     seenPickups.current = new Set();
     passedPickups.current = new Set();
@@ -552,16 +661,17 @@ function Trip({ details }: { details: AssignmentDetails }) {
   const finalizeTrip = async () => {
     if (finalizing) return;
     setFinalizing(true);
-    const result = await endTrip(distanceDone.current);
+    const result = await endTrip(tripDistanceMeters());
     setFinalizing(false);
     setConfirmingStop(false);
-    if (!result.ok) {
-      setToast(nextError("End trip", "Couldn't finalize the trip. Try again."));
+    if (result.status === "failed") {
+      setToast(nextError("End trip", result.error));
       return;
     }
     tripActive.current = false;
+    stopTripDistance();
+    clearTripPassengers();
     boardingAttempts.current.clear();
-    clearOutbox();
     stopLocationSharing();
     setBackgroundSharing(false);
     setPickups([]);
@@ -569,7 +679,7 @@ function Trip({ details }: { details: AssignmentDetails }) {
     setStatus("idle");
     setCount(0);
     setMarkedFull(false);
-    setToast(nextToast("Trip Ended!", "info"));
+    setToast(endedToast(result.status));
   };
 
   const reserved = accepted.reduce(
@@ -703,10 +813,17 @@ function Trip({ details }: { details: AssignmentDetails }) {
     ],
   );
 
-  const overlayBottom = panelHeight + 10;
+  const overlayBottom =
+    Math.max(
+      panelHeight,
+      screenHeight && panelTop ? screenHeight - panelTop : 0,
+    ) + 10;
 
   return (
-    <View style={styles.screen}>
+    <View
+      style={styles.screen}
+      onLayout={(event) => setScreenHeight(event.nativeEvent.layout.height)}
+    >
       <StatusBar style="light" />
       <TransitMap state={mapState} onDrag={() => setFollowing(false)} />
 
@@ -823,13 +940,22 @@ function Trip({ details }: { details: AssignmentDetails }) {
 
       <View
         style={[styles.panel, { paddingBottom: insets.bottom + 16 }]}
-        onLayout={(event) => setPanelHeight(event.nativeEvent.layout.height)}
+        onLayout={(event) => {
+          setPanelHeight(event.nativeEvent.layout.height);
+          setPanelTop(event.nativeEvent.layout.y);
+        }}
       >
         <View style={styles.coverageRow}>
           <Text style={styles.coverage} numberOfLines={1}>
             {coverageTitle.toUpperCase().replace(" – ", " - ")}
           </Text>
-          <View style={[styles.sharing, onTrip && styles.sharingOn]}>
+          <View
+            style={[
+              styles.sharing,
+              onTrip && styles.sharingOn,
+              onTrip && syncWaiting && styles.sharingOffline,
+            ]}
+          >
             <Animated.View
               style={[
                 styles.sharingDot,
@@ -838,7 +964,11 @@ function Trip({ details }: { details: AssignmentDetails }) {
               ]}
             />
             <Text style={styles.sharingText}>
-              {onTrip ? "Location Shared" : "Location Not Shared"}
+              {!onTrip
+                ? "Location Not Shared"
+                : syncWaiting
+                  ? "Offline · will sync"
+                  : "Location Shared"}
             </Text>
           </View>
         </View>
@@ -926,6 +1056,20 @@ function Trip({ details }: { details: AssignmentDetails }) {
         </View>
       </View>
 
+      <ConfirmModal
+        visible={!!unfinished}
+        title="Unfinished trip"
+        message={
+          unfinished
+            ? `Your trip${unfinished.routeName ? ` on ${unfinished.routeName}` : ""}${unfinished.departedAt ? ` from ${clock(unfinished.departedAt)}` : ""} is still running because the app closed. Resume it to keep sharing your location, or end it to save it to your trip history.`
+            : ""
+        }
+        confirmLabel="Resume trip"
+        cancelLabel={finalizing ? "Ending..." : "End trip"}
+        icon={<RouteIcon color="#ffffff" size={22} strokeWidth={2.2} />}
+        onConfirm={resumeTrip}
+        onCancel={endUnfinishedTrip}
+      />
       <FinalizeTripModal
         visible={confirmingStop}
         busy={finalizing}
@@ -1191,6 +1335,8 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.7 },
   overlayStack: {
     position: "absolute",
+    zIndex: 2,
+    elevation: 6,
     left: 12,
     right: 12,
     alignItems: "flex-end",
@@ -1311,6 +1457,7 @@ const styles = StyleSheet.create({
   },
   sharingDotOn: { backgroundColor: "#4ade80" },
   sharingText: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 10 },
+  sharingOffline: { backgroundColor: palette.warning },
   infoRow: {
     flexDirection: "row",
     alignItems: "center",

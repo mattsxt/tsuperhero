@@ -71,11 +71,14 @@ export type LiveVehicleRow = {
   longitude: number;
   route_id: string | null;
   route_name: string | null;
+  recorded_at?: string;
 };
 
 export const routeTableRoutes = {
   listRoutes: () => routeTable().select("*").order("route_name"),
   listLiveVehicles: () =>
+    getSupabaseClient().rpc("get_live_vehicles_with_last_seen"),
+  listLiveVehiclesLegacy: () =>
     getSupabaseClient().rpc("get_live_vehicles_with_full"),
 };
 
@@ -83,7 +86,11 @@ export const transitRouteApi = {
   drivingRoute: async (points: LatLng[]): Promise<DirectionsResponse> => {
     if (points.length < 2) throw new Error("A route needs two points.");
     const legs: NonNullable<DirectionsResponse["routes"]>[number]["legs"] = [];
-    for (let start = 0; start < points.length - 1; start += maxCoordinates - 1) {
+    for (
+      let start = 0;
+      start < points.length - 1;
+      start += maxCoordinates - 1
+    ) {
       const chunk = points.slice(start, start + maxCoordinates);
       const data = await requestDirections(
         "driving",
@@ -129,7 +136,10 @@ export const transitRouteApi = {
     };
   },
 
-  walkingRoute: async (from: LatLng, to: LatLng): Promise<DirectionsResponse> => {
+  walkingRoute: async (
+    from: LatLng,
+    to: LatLng,
+  ): Promise<DirectionsResponse> => {
     const data = await requestDirections(
       "walking",
       [from, to],

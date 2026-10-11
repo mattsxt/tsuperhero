@@ -8,16 +8,8 @@ import Mail from "lucide-react-native/icons/mail";
 import Phone from "lucide-react-native/icons/phone";
 import UserRoundPen from "lucide-react-native/icons/user-round-pen";
 import { useEffect, useState, type ReactNode } from "react";
-import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
-import Animated from "react-native-reanimated";
+import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
@@ -32,7 +24,6 @@ import {
   type ProfileEditErrors,
   type ProfileEditField,
 } from "@/api/v1/profile/controllers";
-import { useKeyboardVisible } from "@/components/auth-screen";
 import { DateTimeField } from "@/components/date-time-field";
 import { LoadingLogo } from "@/components/LoadingLogo";
 import { MiniToast, type MiniToastMessage } from "@/components/mini-toast";
@@ -67,7 +58,6 @@ export default function EditProfileScreen() {
   const insets = useSafeAreaInsets();
   const online = useOnline();
   const chrome = useScrollChrome();
-  const keyboardVisible = useKeyboardVisible();
   const [profile, setProfile] = useState<EditableProfile | null>(null);
   const [email, setEmail] = useState("");
   const [contact, setContact] = useState("");
@@ -176,155 +166,150 @@ export default function EditProfileScreen() {
   return (
     <View style={styles.screen}>
       <StatusBar style="light" />
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      <KeyboardAwareScrollView
+        bottomOffset={24}
+        onScroll={chrome.scrollHandler}
+        scrollEventThrottle={16}
+        contentContainerStyle={{
+          paddingTop: chrome.headerHeight,
+          paddingBottom: insets.bottom + 24,
+        }}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        bounces={false}
+        overScrollMode="never"
       >
-        <Animated.ScrollView
-          onScroll={chrome.scrollHandler}
-          scrollEventThrottle={16}
-          contentContainerStyle={{
-            paddingTop: chrome.headerHeight,
-            paddingBottom: insets.bottom + 24,
-          }}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-          scrollEnabled={keyboardVisible}
-          bounces={false}
-          overScrollMode="never"
-        >
-          <View style={styles.body}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Change profile picture"
-              onPress={pickPicture}
-              style={({ pressed }) => [
-                styles.avatarButton,
-                pressed && styles.pressed,
-              ]}
-            >
-              <View style={styles.avatar}>
-                {pictureUri ? (
-                  <Image
-                    source={{ uri: pictureUri }}
-                    style={styles.avatarImage}
-                    contentFit="cover"
-                  />
-                ) : (
-                  <Text style={styles.avatarText}>{profile.initials}</Text>
-                )}
-              </View>
-              <View style={styles.cameraBadge}>
-                <Camera color="#ffffff" size={16} strokeWidth={2} />
-              </View>
-            </Pressable>
-            <Text style={styles.avatarHint}>Tap to change your picture</Text>
-
-            <View style={styles.row}>
-              <Field label="First Name">
-                <LockedField value={profile.firstName} />
-              </Field>
-              <Field label="Last Name">
-                <LockedField value={profile.lastName} />
-              </Field>
-            </View>
-            <Text style={styles.lockedHint}>
-              Your name can&apos;t be changed.
-            </Text>
-
-            <Field label="Email Address" error={errors.email}>
-              <SoftField
-                value={email}
-                onChangeText={(value) => {
-                  setEmail(value);
-                  clearError("email");
-                }}
-                placeholder="Email address"
-                autoCapitalize="none"
-                autoComplete="email"
-                keyboardType="email-address"
-                icon={<Mail color={brandBlue} size={18} strokeWidth={2} />}
-              />
-              {!!profile.pendingEmail && (
-                <Text style={styles.pendingHint}>
-                  Waiting for you to confirm {profile.pendingEmail}.
-                </Text>
+        <View style={styles.body}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Change profile picture"
+            onPress={pickPicture}
+            style={({ pressed }) => [
+              styles.avatarButton,
+              pressed && styles.pressed,
+            ]}
+          >
+            <View style={styles.avatar}>
+              {pictureUri ? (
+                <Image
+                  source={{ uri: pictureUri }}
+                  style={styles.avatarImage}
+                  contentFit="cover"
+                />
+              ) : (
+                <Text style={styles.avatarText}>{profile.initials}</Text>
               )}
-            </Field>
+            </View>
+            <View style={styles.cameraBadge}>
+              <Camera color="#ffffff" size={16} strokeWidth={2} />
+            </View>
+          </Pressable>
+          <Text style={styles.avatarHint}>Tap to change your picture</Text>
 
-            <Field label="Contact Number" error={errors.contact}>
-              <SoftField
-                value={contact}
-                onChangeText={(value) => {
-                  const problem = getContactProblem(value);
-                  if (problem) return showToast(problem);
-                  setContact(value);
-                  clearError("contact");
-                }}
-                onKeyPress={({ nativeEvent }) => {
-                  if (
-                    contact.length === contactLength &&
-                    /^\d$/.test(nativeEvent.key)
-                  ) {
-                    showToast(contactLengthMessage);
-                  }
-                }}
-                placeholder="9123456789"
-                keyboardType="number-pad"
-                autoComplete="tel"
-                maxLength={contactLength}
-                icon={
-                  <View style={styles.contactIcon}>
-                    <Phone color={brandBlue} size={18} strokeWidth={2} />
-                    <Text style={styles.contactPrefix}>+63</Text>
-                  </View>
-                }
-              />
+          <View style={styles.row}>
+            <Field label="First Name">
+              <LockedField value={profile.firstName} />
             </Field>
-
-            <Field label="Birth Date" error={errors.birthDate}>
-              <DateTimeField
-                mode="date"
-                value={birthDate}
-                onChange={(date) => {
-                  setBirthDate(date);
-                  clearError("birthDate");
-                }}
-                placeholder="Birth date"
-                minimumDate={minimumBirthDate}
-                maximumDate={new Date()}
-              />
+            <Field label="Last Name">
+              <LockedField value={profile.lastName} />
             </Field>
+          </View>
+          <Text style={styles.lockedHint}>
+            Your name can&apos;t be changed.
+          </Text>
 
-            {!online && (
-              <Text style={styles.offlineHint}>
-                Connect to the internet before changing your profile.
+          <Field label="Email Address" error={errors.email}>
+            <SoftField
+              value={email}
+              onChangeText={(value) => {
+                setEmail(value);
+                clearError("email");
+              }}
+              placeholder="Email address"
+              autoCapitalize="none"
+              autoComplete="email"
+              keyboardType="email-address"
+              icon={<Mail color={brandBlue} size={18} strokeWidth={2} />}
+            />
+            {!!profile.pendingEmail && (
+              <Text style={styles.pendingHint}>
+                Waiting for you to confirm {profile.pendingEmail}.
               </Text>
             )}
+          </Field>
 
-            {!!alertMessage && (
-              <ErrorAlert
-                title={alertTitle}
-                message={alertMessage}
-                style={styles.saveError}
-              />
-            )}
-            <ModuleButton
-              label={saving ? "SAVING..." : "SAVE CHANGES"}
-              disabled={saving || !hasChanges || !online}
-              disabledHint={
-                online && !saving && !hasChanges
-                  ? "Change something above to save."
-                  : undefined
-              }
-              onPress={save}
-              style={
-                alertMessage ? styles.saveButtonAfterError : styles.saveButton
+          <Field label="Contact Number" error={errors.contact}>
+            <SoftField
+              value={contact}
+              onChangeText={(value) => {
+                const problem = getContactProblem(value);
+                if (problem) return showToast(problem);
+                setContact(value);
+                clearError("contact");
+              }}
+              onKeyPress={({ nativeEvent }) => {
+                if (
+                  contact.length === contactLength &&
+                  /^\d$/.test(nativeEvent.key)
+                ) {
+                  showToast(contactLengthMessage);
+                }
+              }}
+              placeholder="9123456789"
+              keyboardType="number-pad"
+              autoComplete="tel"
+              maxLength={contactLength}
+              icon={
+                <View style={styles.contactIcon}>
+                  <Phone color={brandBlue} size={18} strokeWidth={2} />
+                  <Text style={styles.contactPrefix}>+63</Text>
+                </View>
               }
             />
-          </View>
-        </Animated.ScrollView>
-      </KeyboardAvoidingView>
+          </Field>
+
+          <Field label="Birth Date" error={errors.birthDate}>
+            <DateTimeField
+              mode="date"
+              value={birthDate}
+              onChange={(date) => {
+                setBirthDate(date);
+                clearError("birthDate");
+              }}
+              placeholder="Birth date"
+              minimumDate={minimumBirthDate}
+              maximumDate={new Date()}
+            />
+          </Field>
+
+          {!online && (
+            <Text style={styles.offlineHint}>
+              Connect to the internet before changing your profile.
+            </Text>
+          )}
+
+          {!!alertMessage && (
+            <ErrorAlert
+              title={alertTitle}
+              message={alertMessage}
+              style={styles.saveError}
+            />
+          )}
+          <ModuleButton
+            label={saving ? "SAVING..." : "SAVE CHANGES"}
+            disabled={saving || !hasChanges || !online}
+            disabledHint={
+              online && !saving && !hasChanges
+                ? "Change something above to save."
+                : undefined
+            }
+            onPress={save}
+            style={
+              alertMessage ? styles.saveButtonAfterError : styles.saveButton
+            }
+          />
+        </View>
+      </KeyboardAwareScrollView>
       <StickyHeader chrome={chrome}>
         <ModuleHeader
           title="Edit Profile"

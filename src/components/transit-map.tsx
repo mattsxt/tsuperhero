@@ -190,12 +190,13 @@ const mapHtml = `<!DOCTYPE html>
 
     if (state.fit && state.fit.key !== lastFitKey && state.fit.points.length) {
       if (state.fit.points.length === 1) {
-        map.jumpTo({ center: lngLat(state.fit.points[0]), zoom: 17 });
+        map.jumpTo({ center: lngLat(state.fit.points[0]), zoom: 16 });
       } else {
         var fitBounds = new mapboxgl.LngLatBounds();
         state.fit.points.forEach(function (point) { fitBounds.extend(lngLat(point)); });
         map.fitBounds(fitBounds, {
           padding: { top: state.padTop, bottom: state.padBottom, left: 40, right: 40 },
+          maxZoom: 16,
           animate: false
         });
       }
@@ -361,6 +362,7 @@ const mapHtml = `<!DOCTYPE html>
       } else if (entry.position.lat !== vehicle.lat || entry.position.lng !== vehicle.lng) {
         animateTo(entry, vehicle.lat, vehicle.lng);
       }
+      entry.pin.style.opacity = vehicle.stale ? "0.35" : "1";
       entry.pin.style.backgroundColor = vehicle.isFull
         ? OCCUPANCY_COLORS.Full
         : OCCUPANCY_COLORS[vehicle.occupancy] || "#ffffff";

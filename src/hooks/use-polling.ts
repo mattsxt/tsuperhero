@@ -1,4 +1,5 @@
-import { useEffect, useRef } from "react";
+import { useFocusEffect } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
 
 import { useOnline } from "@/hooks/use-online";
@@ -10,7 +11,14 @@ export function usePolling(
 ) {
   const taskRef = useRef(task);
   const online = useOnline();
-  const active = enabled && online;
+  const [focused, setFocused] = useState(true);
+  useFocusEffect(
+    useCallback(() => {
+      setFocused(true);
+      return () => setFocused(false);
+    }, []),
+  );
+  const active = enabled && online && focused;
 
   useEffect(() => {
     taskRef.current = task;

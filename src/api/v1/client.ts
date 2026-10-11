@@ -4,6 +4,7 @@ import Constants from "expo-constants";
 import { AppState, Platform } from "react-native";
 
 import { toUserMessage } from "@/api/v1/errors";
+import { isOnline, subscribeToOnline } from "@/hooks/use-online";
 
 let client: SupabaseClient | undefined;
 
@@ -38,8 +39,27 @@ export function getSupabaseClient() {
     });
   }
 
+  subscribeToOnline(() => {
+    if (!isOnline()) return;
+    supabase.auth.startAutoRefresh();
+    void supabase.auth.getSession().catch(() => null);
+  });
+
   client = supabase;
   return client;
+}
+
+let refreshing: Promise<boolean> | null = null;
+
+export function refreshExpiredSession(): Promise<boolean> {
+  refreshing ??= getSupabaseClient()
+    .auth.refreshSession()
+    .then(({ data, error }) => !error && !!data.session)
+    .catch(() => false)
+    .finally(() => {
+      refreshing = null;
+    });
+  return refreshing;
 }
 
 export function getErrorMessage(error: unknown) {

@@ -10,6 +10,8 @@ export type AssignmentRow = {
     vehicle_type: "Bus" | "Jeepney" | "Tricycle" | "Van";
     vehicle_status: VehicleStatus;
     max_capacity: number;
+    current_capacity?: number;
+    is_full?: boolean;
     is_modern: boolean;
     documents_checked: string[] | null;
     verified_at: string | null;
@@ -30,6 +32,14 @@ export type LocationParams = {
   p_longitude: number;
   p_speed_kmh: number;
   p_heading: number;
+};
+
+export type TrailPoint = {
+  latitude: number;
+  longitude: number;
+  speed_kmh: number;
+  heading: number;
+  recorded_at: string;
 };
 
 export type NearbyPickupRow = {
@@ -54,6 +64,8 @@ export const operatorRoutes = {
     getSupabaseClient().rpc("end_my_trip", {
       p_distance_done_km: distanceDoneKm,
     }),
+  recordTrail: (points: TrailPoint[]) =>
+    getSupabaseClient().rpc("record_vehicle_trail", { p_points: points }),
   findNearbyPickups: () => getSupabaseClient().rpc("get_my_nearby_pickups"),
   acceptPickup: (requestId: string) =>
     getSupabaseClient().rpc("accept_pickup_request", {

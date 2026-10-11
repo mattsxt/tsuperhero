@@ -8,6 +8,7 @@ import {
   showLocationSharingNotice,
 } from "@/api/v1/notifications/device";
 import { sendLocation } from "@/api/v1/operator/outbox";
+import { addTripPoint } from "@/api/v1/operator/trip-distance";
 import { palette } from "@/constants/colors";
 
 type TaskManagerModule = typeof import("expo-task-manager");
@@ -22,8 +23,11 @@ async function loadTaskManager(): Promise<TaskManagerModule | null> {
     TaskManager.defineTask<{ locations: Location.LocationObject[] }>(
       taskName,
       async ({ data, error }) => {
-        const latest = data?.locations?.[data.locations.length - 1];
+        const locations = data?.locations ?? [];
+        const latest = locations[locations.length - 1];
         if (error || !latest) return;
+        for (const { coords } of locations)
+          addTripPoint(coords.latitude, coords.longitude, coords.accuracy);
         await sendLocation(latest.coords);
       },
     );

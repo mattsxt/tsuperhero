@@ -4,7 +4,6 @@ import type { Booking } from "@/api/v1/pickups/controllers";
 import { loadMyRental, type Rental } from "@/api/v1/rentals/controllers";
 import { RateDriversModal } from "@/components/rate-drivers-modal";
 
-/** Rates the hired drivers of a completed rental from Bookings. */
 export function BookingRatingSheet({
   booking,
   onClose,

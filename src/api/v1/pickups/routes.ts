@@ -72,7 +72,6 @@ export const pickupRoutes = {
 
   findMyBookings: () => getSupabaseClient().rpc("get_my_bookings"),
 
-  findMyTripHistory: () => getSupabaseClient().rpc("get_my_trip_history"),
 
   searchCommuters: (query: string) =>
     getSupabaseClient().rpc("search_available_commuters", { p_query: query }),

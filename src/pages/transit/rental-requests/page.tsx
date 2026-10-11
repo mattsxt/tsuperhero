@@ -3,13 +3,23 @@ import BriefcaseBusiness from "lucide-react-native/icons/briefcase-business";
 import CircleCheck from "lucide-react-native/icons/circle-check";
 import Inbox from "lucide-react-native/icons/inbox";
 import { useCallback, useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+import { MiniToast, type MiniToastMessage } from "@/components/mini-toast";
+import { useStatusBarTop } from "@/hooks/use-status-bar-top";
 
 import {
   acceptRentalJob,
   dismissRentalJob,
+  dropRentalJob,
   loadJobBoard,
   loadRentalRequests,
   type Rental,
@@ -54,6 +64,9 @@ const isMine = (rental: Rental) =>
 
 export default function RentalJobsScreen() {
   const insets = useSafeAreaInsets();
+  const statusBarTop = useStatusBarTop();
+  const [toast, setToast] = useState<MiniToastMessage | null>(null);
+  const showToast = (text: string) => setToast({ id: Date.now(), text });
   const chrome = useScrollChrome();
   const [tab, setTab] = useState<Tab>("board");
   const [board, setBoard] = useState<Rental[] | null>(null);
@@ -65,7 +78,6 @@ export default function RentalJobsScreen() {
   const [jobProblem, setJobProblem] = useState("");
   const [booked, setBooked] = useState(false);
 
-  /** A job from My jobs or History, shown in the details pop-up. */
   const [details, setDetails] = useState<Rental | null>(null);
 
   const refresh = useCallback(async () => {
@@ -81,6 +93,13 @@ export default function RentalJobsScreen() {
   }, []);
 
   usePolling(refresh, pollMs);
+
+  const [refreshing, setRefreshing] = useState(false);
+  const pullRefresh = async () => {
+    setRefreshing(true);
+    await refresh();
+    setRefreshing(false);
+  };
 
   const lists = useMemo(() => {
     const all = jobs ?? [];
@@ -148,6 +167,15 @@ export default function RentalJobsScreen() {
           paddingTop: chrome.headerHeight,
           paddingBottom: insets.bottom + 24,
         }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={pullRefresh}
+            tintColor={brandBlue}
+            colors={[brandBlue]}
+            progressViewOffset={chrome.headerHeight}
+          />
+        }
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.body}>
@@ -265,7 +293,19 @@ export default function RentalJobsScreen() {
         }}
       />
 
-      <JobDetailsModal job={details} onClose={() => setDetails(null)} />
+      <JobDetailsModal
+        job={details}
+        onClose={() => setDetails(null)}
+        onDrop={async (job) => {
+          const result = await dropRentalJob(job.id);
+          if (!result.ok) return result.error;
+          setDetails(null);
+          showToast("Job dropped. The commuter has been notified.");
+          await refresh();
+          return null;
+        }}
+      />
+      <MiniToast message={toast} top={statusBarTop + 12} />
     </View>
   );
 }

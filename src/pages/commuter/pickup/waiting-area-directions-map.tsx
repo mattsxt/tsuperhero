@@ -39,7 +39,7 @@ export function WaitingAreaDirectionsMap({
 }) {
   const [location, setLocation] = useState<Coordinates | null>(null);
   const [fitOrigin, setFitOrigin] = useState<Coordinates | null>(null);
-  const [walkingPath, setWalkingPath] = useState<LatLng[]>([]);
+  const [routedPath, setRoutedPath] = useState<LatLng[] | null>(null);
   const lastRouted = useRef<{ at: number; from: Coordinates } | null>(null);
   const [recenter, setRecenter] = useState<{
     key: number;
@@ -68,11 +68,19 @@ export function WaitingAreaDirectionsMap({
     };
   }, [onLocationChange, onLocationError]);
 
+  const walkingPath = useMemo<LatLng[]>(
+    () =>
+      showRouting && location
+        ? (routedPath ?? [
+            [location.lat, location.lng],
+            [area.lat, area.lng],
+          ])
+        : [],
+    [showRouting, location, routedPath, area.lat, area.lng],
+  );
+
   useEffect(() => {
-    if (!showRouting || !location) {
-      setWalkingPath([]);
-      return;
-    }
+    if (!showRouting || !location) return;
     const last = lastRouted.current;
     const due =
       !last ||
@@ -83,10 +91,9 @@ export function WaitingAreaDirectionsMap({
     lastRouted.current = { at: Date.now(), from: location };
     const from: LatLng = [location.lat, location.lng];
     const to: LatLng = [area.lat, area.lng];
-    setWalkingPath([from, to]);
     let active = true;
     loadWalkingRoute(from, to).then((result) => {
-      if (active && result.ok) setWalkingPath(result.data.path);
+      if (active) setRoutedPath(result.ok ? result.data.path : null);
     });
     return () => {
       active = false;

@@ -10,10 +10,16 @@ import PersonStanding from "lucide-react-native/icons/person-standing";
 import MapPin from "lucide-react-native/icons/map-pin";
 import NotebookPen from "lucide-react-native/icons/notebook-pen";
 import Users from "lucide-react-native/icons/users";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { BackHandler, Pressable, StyleSheet, Text, View } from "react-native";
-import Animated, { useAnimatedRef } from "react-native-reanimated";
+import {
+  KeyboardAwareScrollView,
+  type KeyboardAwareScrollViewRef,
+} from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+import { MiniToast, type MiniToastMessage } from "@/components/mini-toast";
+import { useStatusBarTop } from "@/hooks/use-status-bar-top";
 
 import type { Place } from "@/api/v1/places/controllers";
 import {
@@ -53,6 +59,10 @@ import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
 import { checkOnline, useOnline } from "@/hooks/use-online";
 import { usePolling } from "@/hooks/use-polling";
+import {
+  getNotifications,
+  subscribeToNotifications,
+} from "@/api/v1/notifications/controllers";
 import { SkeletonCards } from "@/components/skeleton";
 import { palette } from "@/constants/colors";
 
@@ -68,7 +78,7 @@ type Step = 1 | 2;
 const stepTitles = ["Trip details", "Vehicle & post"];
 
 const emptyFleet: Fleet = { van: 0, jeep: 0, bus: 0, tricy: 0 };
-const startingFleet: Fleet = { ...emptyFleet, jeep: 1 };
+const startingFleet: Fleet = { ...emptyFleet };
 
 const occasions = [
   "Family Trip",
@@ -80,7 +90,7 @@ const occasions = [
 ];
 
 const maxPassengers = 50;
-const rentalPollMs = 10_000;
+const rentalPollMs = 5_000;
 
 function startOfToday() {
   const today = new Date();
@@ -128,8 +138,11 @@ function minutesOfDay(date: Date) {
 
 export default function RentalScreen() {
   const insets = useSafeAreaInsets();
+  const statusBarTop = useStatusBarTop();
+  const [toast, setToast] = useState<MiniToastMessage | null>(null);
+  const showToast = (text: string) => setToast({ id: Date.now(), text });
   const chrome = useScrollChrome();
-  const scrollRef = useAnimatedRef<Animated.ScrollView>();
+  const scrollRef = useRef<KeyboardAwareScrollViewRef>(null);
   const [step, setStep] = useState<Step>(1);
   const [problem, setProblemMessage] = useState("");
   const [problemField, setProblemField] = useState<RentalField | null>(null);
@@ -156,7 +169,6 @@ export default function RentalScreen() {
   const [cancelling, setCancelling] = useState(false);
   const [completing, setCompleting] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
-  /** The rental just completed: its drivers are rated next. */
   const [rateTarget, setRateTarget] = useState<Rental | null>(null);
   const [cancelError, setCancelError] = useState("");
   const [pickupInProgress, setPickupInProgress] = useState(false);
@@ -176,6 +188,16 @@ export default function RentalScreen() {
   }, []);
 
   usePolling(refreshRentals, rentalPollMs);
+
+  useEffect(() => {
+    let newestId = getNotifications()[0]?.id;
+    return subscribeToNotifications(() => {
+      const newest = getNotifications()[0];
+      if (!newest || newest.id === newestId) return;
+      newestId = newest.id;
+      if (newest.type.startsWith("rental_")) void refreshRentals();
+    });
+  }, [refreshRentals]);
 
   const activeRental = activeRentalOf(rentals);
   const showForm = rentalsLoaded && !activeRental && !pickupInProgress;
@@ -240,7 +262,6 @@ export default function RentalScreen() {
     const result = await completeRental(finished.id);
     setCompleting(false);
     if (!result.ok) return setCancelError(result.error);
-    // Straight to rating the drivers, while the trip is fresh.
     setRateTarget({ ...finished, status: "completed" });
     setRentals((current) =>
       current.filter((item) => item.id !== activeRental.id),
@@ -255,6 +276,7 @@ export default function RentalScreen() {
     const result = await removeRentalDriver(unitId);
     setRemovingId(null);
     if (!result.ok) return setCancelError(result.error);
+    showToast("Driver removed. The vehicle is back on the job board.");
     refreshRentals();
   };
 
@@ -375,8 +397,9 @@ export default function RentalScreen() {
   return (
     <View style={styles.screen}>
       <StatusBar style="light" />
-      <Animated.ScrollView
+      <KeyboardAwareScrollView
         ref={scrollRef}
+        bottomOffset={24}
         onScroll={chrome.scrollHandler}
         scrollEventThrottle={16}
         contentContainerStyle={{
@@ -417,6 +440,7 @@ export default function RentalScreen() {
               <ModuleButton
                 label="GO TO PICKUP"
                 onPress={() => router.push(Routes.commuterPickup)}
+                style={styles.blockedButton}
               />
             </View>
           )}
@@ -670,7 +694,7 @@ export default function RentalScreen() {
             </>
           )}
         </View>
-      </Animated.ScrollView>
+      </KeyboardAwareScrollView>
 
       {rateTarget && (
         <RateDriversModal
@@ -699,6 +723,7 @@ export default function RentalScreen() {
           )}
         </ModuleHeader>
       </StickyHeader>
+      <MiniToast message={toast} top={statusBarTop + 12} />
     </View>
   );
 }
@@ -901,6 +926,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     backgroundColor: softBlue,
   },
+  blockedButton: { alignSelf: "stretch", marginTop: 8 },
   blockedIcon: {
     width: 56,
     height: 56,

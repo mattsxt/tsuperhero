@@ -7,8 +7,21 @@ import IdCard from "lucide-react-native/icons/id-card";
 import UserRound from "lucide-react-native/icons/user-round";
 import Users from "lucide-react-native/icons/users";
 import UsersRound from "lucide-react-native/icons/users-round";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useLocalSearchParams } from "expo-router";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import {
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -32,7 +45,6 @@ import {
 } from "@/pages/commuter/bookings/booking-details";
 import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
-import { TripHistory } from "@/pages/commuter/bookings/trip-history";
 import { goBackOr } from "@/utils/navigation";
 import { ErrorAlert } from "@/components/error-alert";
 import { SkeletonCards } from "@/components/skeleton";
@@ -41,12 +53,11 @@ import { palette } from "@/constants/colors";
 const { brandBlue, softBlue, text } = moduleColors;
 const cardEdgeBlue = "#1a2f8f";
 
-type BookingTab = BookingKind | "trips";
+type BookingTab = BookingKind;
 
 const tabs: { value: BookingTab; label: string }[] = [
   { value: "rental", label: "Rental" },
   { value: "pickup", label: "Pickup" },
-  { value: "trips", label: "Trips" },
 ];
 
 const emptyMessages: Record<BookingKind, string> = {
@@ -70,26 +81,55 @@ export function formatBookingDate(date: Date) {
 export default function BookingsScreen() {
   const insets = useSafeAreaInsets();
   const chrome = useScrollChrome();
-  const [tab, setTab] = useState<BookingTab>("rental");
+  const params = useLocalSearchParams<{ tab?: string; open?: string }>();
+  const [tab, setTab] = useState<BookingTab>(() =>
+    tabs.some((option) => option.value === params.tab)
+      ? (params.tab as BookingTab)
+      : "rental",
+  );
+  const openedFromParams = useRef(false);
   const [bookings, setBookings] = useState<Booking[] | null>(null);
   const [problem, setProblem] = useState("");
   const [rating, setRating] = useState<Booking | null>(null);
   const [details, setDetails] = useState<Booking | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const applyBookings = useCallback(
+    (result: Awaited<ReturnType<typeof loadBookings>>) => {
+      if (result.ok) {
+        setBookings(result.data);
+        setProblem("");
+        const match =
+          !openedFromParams.current && params.open
+            ? result.data.find((booking) => booking.id === params.open)
+            : undefined;
+        if (match) {
+          openedFromParams.current = true;
+          setDetails(match);
+        }
+      } else {
+        setBookings((current) => current ?? []);
+        setProblem(result.error);
+      }
+    },
+    [params.open],
+  );
 
   useEffect(() => {
     let active = true;
     loadBookings().then((result) => {
-      if (!active) return;
-      if (result.ok) setBookings(result.data);
-      else {
-        setBookings([]);
-        setProblem(result.error);
-      }
+      if (active) applyBookings(result);
     });
     return () => {
       active = false;
     };
-  }, []);
+  }, [applyBookings]);
+
+  const refresh = async () => {
+    setRefreshing(true);
+    applyBookings(await loadBookings());
+    setRefreshing(false);
+  };
 
   const goBack = () => goBackOr(Routes.commuterHome);
   const visible = (bookings ?? []).filter((booking) => booking.kind === tab);
@@ -99,7 +139,6 @@ export default function BookingsScreen() {
 
   const closeRating = useCallback(
     (rated: number) => {
-      // Fewer drivers left to rate on this booking.
       if (rating && rated > 0) {
         const id = rating.id;
         setBookings((list) =>
@@ -128,6 +167,15 @@ export default function BookingsScreen() {
           paddingTop: chrome.headerHeight,
           paddingBottom: insets.bottom + 24,
         }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={refresh}
+            tintColor={palette.brand}
+            colors={[palette.brand]}
+            progressViewOffset={chrome.headerHeight}
+          />
+        }
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.body}>
@@ -158,11 +206,7 @@ export default function BookingsScreen() {
             })}
           </View>
 
-          {tab === "trips" ? (
-            <View style={styles.list}>
-              <TripHistory />
-            </View>
-          ) : bookings === null ? (
+          {bookings === null ? (
             <SkeletonCards style={styles.loading} />
           ) : visible.length === 0 ? (
             <>
@@ -202,7 +246,7 @@ export default function BookingsScreen() {
       <StickyHeader chrome={chrome}>
         <ModuleHeader
           title="My Bookings"
-          subtitle="Your completed rentals, pickups and trips."
+          subtitle="Your completed rentals and pickups."
           icon={<ClipboardList color="#ffffff" size={44} strokeWidth={1.8} />}
           onBack={goBack}
           collapsed={chrome.collapsed}
@@ -231,7 +275,6 @@ export function BookingCard({
 }: {
   booking: Booking;
   onRate: () => void;
-  /** Opens the booking's details (all drivers, ratings). */
   onOpen?: () => void;
 }) {
   const vehicle = [booking.plateNumber, booking.vehicleType]

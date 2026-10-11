@@ -1,9 +1,11 @@
 import Mapbox, {
   Camera,
+  CircleLayer,
   LineLayer,
   MapView,
   MarkerView,
   ShapeSource,
+  SymbolLayer,
 } from "@rnmapbox/maps";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -40,10 +42,6 @@ const TERMINAL_SVG =
   '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6v6M15 6v6M2 12h19.6M18 18h3s.5-1.7.8-2.8c.1-.4.2-.8.2-1.2 0-.4-.1-.8-.2-1.2l-1.4-5C20.1 6.8 19.1 6 18 6H4a2 2 0 0 0-2 2v10h3"/><circle cx="7" cy="18" r="2"/><path d="M9 18h5"/><circle cx="16" cy="18" r="2"/></svg>';
 const WAITING_SVG =
   '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2"/><path d="M12 8v7M9 22l3-7 3 7M8 12h8"/></svg>';
-const MAP_PIN_SVG =
-  '<svg width="32" height="32" viewBox="0 0 24 24" fill="#c81e1e" stroke="#c81e1e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3" fill="#ffffff" stroke="none"/></svg>';
-const COUNTED_PIN_SVG =
-  '<svg width="38" height="38" viewBox="0 0 24 24" fill="#c81e1e" stroke="#c81e1e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="5.2" fill="#ffffff" stroke="none"/></svg>';
 
 const vehicleIconXml: Record<string, string> = Object.fromEntries(
   Object.entries(vehicleIconUris).map(([type, uri]) => [
@@ -65,12 +63,21 @@ function lineCollection(paths: Position[][]): GeoJSON.FeatureCollection {
   };
 }
 
-function boundsOf(points: Position[]) {
+const minFitSpanDegrees = 0.004;
+const pointZoom = 16;
+
+function boundsOf(points: Position[], minSpan = 0) {
   const lngs = points.map(([lng]) => lng);
   const lats = points.map(([, lat]) => lat);
+  const grow = (min: number, max: number) => {
+    const extra = Math.max(0, minSpan - (max - min)) / 2;
+    return [min - extra, max + extra];
+  };
+  const [west, east] = grow(Math.min(...lngs), Math.max(...lngs));
+  const [south, north] = grow(Math.min(...lats), Math.max(...lats));
   return {
-    ne: [Math.max(...lngs), Math.max(...lats)] as Position,
-    sw: [Math.min(...lngs), Math.min(...lats)] as Position,
+    ne: [east, north] as Position,
+    sw: [west, south] as Position,
   };
 }
 
@@ -120,7 +127,7 @@ function VehicleMarker({
       allowOverlap
     >
       <View
-        style={[styles.vehicleBox, dimmed && styles.dimmed]}
+        style={[styles.vehicleBox, (dimmed || vehicle.stale) && styles.dimmed]}
         pointerEvents="box-none"
       >
         <Pressable
@@ -214,44 +221,6 @@ function WaitingAreaMarker({
   );
 }
 
-function PickupMarker({
-  pickup,
-}: {
-  pickup: NonNullable<TransitMapProps["state"]["pickups"]>[number];
-}) {
-  const counted = typeof pickup.passengers === "number";
-  const size = counted ? 38 : 32;
-  const label = pickup.label?.trim();
-  return (
-    <MarkerView
-      coordinate={[pickup.lng, pickup.lat]}
-      anchor={{ x: 0.5, y: 1 }}
-      allowOverlap
-    >
-      <View
-        style={{ width: label ? 150 : size, height: size }}
-        pointerEvents="none"
-      >
-        <View style={{ width: size, height: size, alignSelf: "center" }}>
-          <SvgXml
-            xml={counted ? COUNTED_PIN_SVG : MAP_PIN_SVG}
-            width={size}
-            height={size}
-          />
-          {counted ? (
-            <Text style={styles.pickupCount}>{pickup.passengers}</Text>
-          ) : null}
-        </View>
-        {label ? (
-          <Text numberOfLines={1} style={styles.pickupLabel}>
-            {label}
-          </Text>
-        ) : null}
-      </View>
-    </MarkerView>
-  );
-}
-
 export function TransitMap({
   state,
   onDrag,
@@ -285,6 +254,27 @@ export function TransitMap({
     () => lineCollection(route.length ? alternatives : []),
     [route, alternatives],
   );
+  const pickupShape = useMemo(
+    () => ({
+      type: "FeatureCollection" as const,
+      features: (state.pickups ?? []).map((pickup) => ({
+        type: "Feature" as const,
+        id: pickup.id,
+        properties: {
+          count:
+            typeof pickup.passengers === "number"
+              ? String(pickup.passengers)
+              : "",
+          label: pickup.label?.trim() ?? "",
+        },
+        geometry: {
+          type: "Point" as const,
+          coordinates: [pickup.lng, pickup.lat],
+        },
+      })),
+    }),
+    [state.pickups],
+  );
   const pickupLineShape = useMemo(
     () =>
       lineCollection(
@@ -313,11 +303,14 @@ export function TransitMap({
       if (fit.points.length === 1) {
         view.setCamera({
           centerCoordinate: toPosition(fit.points[0]),
-          zoomLevel: 17,
+          zoomLevel: pointZoom,
           animationDuration: 0,
         });
       } else {
-        const { ne, sw } = boundsOf(fit.points.map(toPosition));
+        const { ne, sw } = boundsOf(
+          fit.points.map(toPosition),
+          minFitSpanDegrees,
+        );
         view.fitBounds(ne, sw, [state.padTop, 40, state.padBottom, 40], 0);
       }
     }
@@ -432,6 +425,47 @@ export function TransitMap({
           />
         </ShapeSource>
 
+        <ShapeSource id="pickups" shape={pickupShape}>
+          <CircleLayer
+            id="pickup-pins"
+            style={{
+              circleRadius: 13,
+              circleColor: pinRed,
+              circleStrokeColor: "#ffffff",
+              circleStrokeWidth: 2.5,
+            }}
+          />
+          <CircleLayer
+            id="pickup-pin-centers"
+            style={{ circleRadius: 8, circleColor: "#ffffff" }}
+          />
+          <SymbolLayer
+            id="pickup-counts"
+            style={{
+              textField: ["get", "count"],
+              textSize: 11,
+              textColor: pinRed,
+              textFont: ["Open Sans Bold", "Arial Unicode MS Bold"],
+              textAllowOverlap: true,
+              textIgnorePlacement: true,
+            }}
+          />
+          <SymbolLayer
+            id="pickup-labels"
+            style={{
+              textField: ["get", "label"],
+              textSize: 11,
+              textColor: "#193caf",
+              textHaloColor: "#ffffff",
+              textHaloWidth: 2,
+              textOffset: [0, 1.9],
+              textAnchor: "top",
+              textMaxWidth: 12,
+              textFont: ["Open Sans Bold", "Arial Unicode MS Bold"],
+            }}
+          />
+        </ShapeSource>
+
         {state.vehicles.map((vehicle) => (
           <VehicleMarker
             key={vehicle.id}
@@ -458,9 +492,6 @@ export function TransitMap({
               onToggle={() => setOpenWaitingId(area.id)}
             />
           ))}
-        {(state.pickups ?? []).map((pickup) => (
-          <PickupMarker key={pickup.id} pickup={pickup} />
-        ))}
         {state.userLocation ? (
           <MarkerView
             coordinate={[state.userLocation.lng, state.userLocation.lat]}
@@ -579,32 +610,6 @@ const styles = StyleSheet.create({
     color: brandBlue,
     fontSize: 10,
     fontWeight: "bold",
-  },
-  pickupCount: {
-    position: "absolute",
-    top: 9,
-    left: 0,
-    width: "100%",
-    fontSize: 13,
-    lineHeight: 14,
-    fontWeight: "bold",
-    color: pinRed,
-    textAlign: "center",
-  },
-  pickupLabel: {
-    position: "absolute",
-    top: 36,
-    alignSelf: "center",
-    maxWidth: 150,
-    overflow: "hidden",
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 6,
-    backgroundColor: "#ffffff",
-    color: "#193caf",
-    fontFamily: "SoraBold",
-    fontSize: 10,
-    textAlign: "center",
   },
   meHalo: {
     width: 32,

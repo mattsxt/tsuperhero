@@ -20,6 +20,7 @@ import {
 import Animated, {
   type CSSTransitionProperties,
 } from "react-native-reanimated";
+import { KeyboardStickyView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
@@ -52,7 +53,11 @@ import { LoadingLogo } from "@/components/LoadingLogo";
 const { brandBlue, headerBlue, mutedText, softBlue, text } = moduleColors;
 const cardNavy = "#0f2a5c";
 const lightBlue = "#a8dcf7";
-const livePollMs = 5_000;
+const livePollMs = 3_000;
+let lastRouteId: string | null = null;
+const rememberRoute = (id: string | null) => {
+  lastRouteId = id;
+};
 const onRouteMeters = 60;
 const panelPadding = 20;
 const vehicleCardGap = 10;
@@ -91,7 +96,8 @@ export default function RoutesScreen() {
     destName?: string;
   }>();
   const transitRoutes = useTransitRoutes();
-  const initialRoute = findRoute(params.routeId);
+  const startRouteId = params.routeId ?? lastRouteId;
+  const initialRoute = findRoute(startRouteId);
   const destination = useMemo(() => {
     const lat = Number.parseFloat(params.destLat ?? "");
     const lng = Number.parseFloat(params.destLng ?? "");
@@ -102,11 +108,11 @@ export default function RoutesScreen() {
 
   const [headerHeight, setHeaderHeight] = useState(140);
   const [panelHeight, setPanelHeight] = useState(insets.bottom + 84);
-  const [routeId, setRouteId] = useState<string | null>(params.routeId ?? null);
+  const [routeId, setRouteId] = useState<string | null>(startRouteId);
   const [path, setPath] = useState<LatLng[] | null>(null);
   const [alternativePaths, setAlternativePaths] = useState<LatLng[][]>([]);
   const [waitingAreas, setWaitingAreas] = useState<WaitingArea[]>([]);
-  const [loadingRoute, setLoadingRoute] = useState(!!params.routeId);
+  const [loadingRoute, setLoadingRoute] = useState(!!startRouteId);
   const [query, setQuery] = useState(initialRoute?.name ?? "");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [panelExpanded, setPanelExpanded] = useState(false);
@@ -194,16 +200,14 @@ export default function RoutesScreen() {
       route: path,
       alternativeRoutes: alternativePaths,
       waitingAreas: showWaitingAreas
-        ? routeWaitingAreas.map(
-            ({ id, name, lat, lng, vicinity, type }) => ({
-              id,
-              name,
-              lat,
-              lng,
-              tag: findVicinity(route?.vicinity ?? [], vicinity),
-              kind: type,
-            }),
-          )
+        ? routeWaitingAreas.map(({ id, name, lat, lng, vicinity, type }) => ({
+            id,
+            name,
+            lat,
+            lng,
+            tag: findVicinity(route?.vicinity ?? [], vicinity),
+            kind: type,
+          }))
         : [],
       showStops: showWaitingAreas,
       vehicles: vehiclesOnRoute.map((vehicle) => ({
@@ -214,6 +218,7 @@ export default function RoutesScreen() {
         label: vehicle.routeName,
         occupancy: vehicle.occupancy,
         isFull: vehicle.isFull,
+        stale: vehicle.stale,
       })),
       pickups: destination
         ? [{ id: "destination", ...destination, label: destinationName }]
@@ -242,6 +247,7 @@ export default function RoutesScreen() {
   );
 
   const selectRoute = (id: string) => {
+    rememberRoute(id);
     setRouteId(id);
     setPath(null);
     setLoadingRoute(true);
@@ -251,6 +257,7 @@ export default function RoutesScreen() {
   };
 
   const clearRoute = () => {
+    rememberRoute(null);
     setRouteId(null);
     setPath(null);
     setLoadingRoute(false);
@@ -295,7 +302,10 @@ export default function RoutesScreen() {
       )}
 
       {pickerOpen && (
-        <View style={[styles.picker, { bottom: panelHeight - 8 }]}>
+        <KeyboardStickyView
+          offset={{ opened: insets.bottom }}
+          style={[styles.picker, { bottom: panelHeight - 8 }]}
+        >
           <ScrollView keyboardShouldPersistTaps="handled">
             {matchingRoutes.length === 0 ? (
               <Text style={styles.pickerEmpty}>
@@ -321,10 +331,14 @@ export default function RoutesScreen() {
               ))
             )}
           </ScrollView>
-        </View>
+        </KeyboardStickyView>
       )}
 
-      <View style={styles.bottomDock} pointerEvents="box-none">
+      <KeyboardStickyView
+        offset={{ opened: insets.bottom }}
+        style={styles.bottomDock}
+        pointerEvents="box-none"
+      >
         {route && (
           <View style={styles.chipRow}>
             <View style={styles.chipGroup}>
@@ -436,7 +450,7 @@ export default function RoutesScreen() {
             )}
           </View>
         </View>
-      </View>
+      </KeyboardStickyView>
 
       <VehicleDetailsModal
         vehicle={selectedVehicle}

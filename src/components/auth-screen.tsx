@@ -1,9 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import {
   Keyboard,
-  KeyboardAvoidingView,
   Platform,
-  ScrollView,
   StyleSheet,
   View,
   type TextStyle,
@@ -12,7 +10,10 @@ import Animated, {
   LinearTransition,
   type CSSTransitionProperties,
 } from "react-native-reanimated";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+import { useStatusBarTop } from "@/hooks/use-status-bar-top";
 
 import { brandCompactDuration } from "@/components/brand-header";
 import { AnimatedErrorAlert } from "@/components/error-alert";
@@ -49,33 +50,33 @@ export function AuthScreen({
   error?: { title: string; message: string };
   children: ReactNode;
 }) {
+  const statusBarTop = useStatusBarTop();
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View pointerEvents="none" style={styles.errorLayer}>
+      <View
+        pointerEvents="none"
+        style={[styles.errorLayer, { top: statusBarTop + 12 }]}
+      >
         <AnimatedErrorAlert
           title={error?.title ?? ""}
           message={error?.message ?? ""}
           style={styles.errorBanner}
         />
       </View>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      <KeyboardAwareScrollView
+        bottomOffset={24}
+        contentContainerStyle={[styles.content, compact && styles.compact]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        bounces={false}
       >
-        <ScrollView
-          contentContainerStyle={[styles.content, compact && styles.compact]}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-          bounces={false}
+        <Animated.View
+          layout={LinearTransition.duration(brandCompactDuration)}
+          style={styles.column}
         >
-          <Animated.View
-            layout={LinearTransition.duration(brandCompactDuration)}
-            style={styles.column}
-          >
-            {children}
-          </Animated.View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+          {children}
+        </Animated.View>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 }
@@ -93,7 +94,6 @@ const styles = StyleSheet.create({
   column: { alignItems: "center" },
   errorLayer: {
     position: "absolute",
-    top: 12,
     left: 16,
     right: 16,
     zIndex: 10,

@@ -101,7 +101,6 @@ export function SharedRideScreen({
     });
   }, [me, ride]);
 
-  // Everyone else in the ride (the inviter and other companions), and who has arrived.
   const [party, setParty] = useState<Rider[]>([]);
   usePolling(async () => {
     const result = await loadRideParty(ride.requestId);

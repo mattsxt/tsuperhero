@@ -315,13 +315,30 @@ export type LiveVehicle = {
   lng: number;
   routeId: string | null;
   routeName: string | null;
+  stale: boolean;
+  minutesSinceSeen: number;
 };
+
+const staleAfterMs = 60_000;
+
+async function fetchLiveVehicles(): Promise<LiveVehicleRow[]> {
+  const latest = await routeTableRoutes.listLiveVehicles();
+  if (!latest.error) return latest.data ?? [];
+  if (latest.error.code !== "PGRST202") throw latest.error;
+  return (await unwrap(routeTableRoutes.listLiveVehiclesLegacy())) ?? [];
+}
 
 export function loadLiveVehicles(): Promise<Result<LiveVehicle[]>> {
   return attempt(async () => {
-    const rows: LiveVehicleRow[] =
-      (await unwrap(routeTableRoutes.listLiveVehicles())) ?? [];
+    const rows = await fetchLiveVehicles();
+    const now = Date.now();
     return rows.map((row) => ({
+      stale: row.recorded_at
+        ? now - Date.parse(row.recorded_at) > staleAfterMs
+        : false,
+      minutesSinceSeen: row.recorded_at
+        ? Math.max(1, Math.round((now - Date.parse(row.recorded_at)) / 60_000))
+        : 0,
       id: row.vehicle_id,
       type: toVehicleType(row.vehicle_type),
       typeLabel: row.vehicle_type,

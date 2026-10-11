@@ -6,6 +6,7 @@ import { toUserMessage } from "@/api/v1/errors";
 import {
   operatorRoutes,
   type LocationParams,
+  type TrailPoint,
   type TripStateParams,
 } from "@/api/v1/operator/routes";
 import { isOnline, subscribeToOnline } from "@/hooks/use-online";
@@ -13,6 +14,8 @@ import { isOnline, subscribeToOnline } from "@/hooks/use-online";
 type Outbox = {
   tripState: TripStateParams | null;
   location: LocationParams | null;
+  trail: TrailPoint[];
+  tripEnd: { p_distance_done_km: number } | null;
 };
 
 export type SendOutcome =
@@ -22,18 +25,27 @@ export type SendOutcome =
 
 const storageKey = "driver-outbox";
 const retryMs = 15_000;
-
-let outbox: Outbox = readCache<Outbox>(storageKey) ?? {
+const requestTimeoutMs = 15_000;
+const trailEveryMs = 30_000;
+const maxTrailPoints = 200;
+const emptyOutbox: Outbox = {
   tripState: null,
   location: null,
+  trail: [],
+  tripEnd: null,
 };
+
+let outbox: Outbox = { ...emptyOutbox, ...readCache<Outbox>(storageKey) };
 let flushing: Promise<void> | null = null;
-let watching = false;
+let stopWatching: (() => void) | null = null;
 let retryTimer: ReturnType<typeof setInterval> | null = null;
 const listeners = new Set<() => void>();
 
 const pendingCount = () =>
-  (outbox.tripState ? 1 : 0) + (outbox.location ? 1 : 0);
+  (outbox.tripState ? 1 : 0) +
+  (outbox.location ? 1 : 0) +
+  (outbox.trail.length ? 1 : 0) +
+  (outbox.tripEnd ? 1 : 0);
 
 function save(next: Outbox) {
   outbox = next;
@@ -44,76 +56,120 @@ function save(next: Outbox) {
 }
 
 function startRetrying() {
-  if (!watching) {
-    watching = true;
-    subscribeToOnline(() => {
-      if (isOnline()) flushOutbox();
-    });
-  }
-  if (!retryTimer) retryTimer = setInterval(() => flushOutbox(), retryMs);
+  stopWatching ??= subscribeToOnline(() => {
+    if (isOnline()) flushOutbox();
+  });
+  retryTimer ??= setInterval(() => flushOutbox(), retryMs);
 }
 
 function stopRetrying() {
+  stopWatching?.();
+  stopWatching = null;
   if (retryTimer) clearInterval(retryTimer);
   retryTimer = null;
 }
 
-async function send(
-  slot: keyof Outbox,
-  params: TripStateParams | LocationParams,
-): Promise<SendOutcome> {
-  const request =
-    slot === "tripState"
-      ? operatorRoutes.setMyTripState({
-          ...(params as TripStateParams),
-          p_is_full: (params as TripStateParams).p_is_full ?? false,
-        })
-      : operatorRoutes.shareMyLocation(params as LocationParams);
-  let error: unknown = null;
+function addTrailPoint(params: LocationParams) {
+  const last = outbox.trail[outbox.trail.length - 1];
+  const now = Date.now();
+  if (last && now - Date.parse(last.recorded_at) < trailEveryMs) return;
+  const point: TrailPoint = {
+    latitude: params.p_latitude,
+    longitude: params.p_longitude,
+    speed_kmh: params.p_speed_kmh,
+    heading: params.p_heading,
+    recorded_at: new Date(now).toISOString(),
+  };
+  save({
+    ...outbox,
+    trail: [...outbox.trail, point].slice(-maxTrailPoints),
+  });
+}
+
+function call(slot: "tripState" | "location" | "trail" | "tripEnd") {
+  if (slot === "tripState" && outbox.tripState)
+    return operatorRoutes.setMyTripState(outbox.tripState);
+  if (slot === "location" && outbox.location)
+    return operatorRoutes.shareMyLocation(outbox.location);
+  if (slot === "trail") return operatorRoutes.recordTrail(outbox.trail);
+  if (outbox.tripEnd)
+    return operatorRoutes.endMyTrip(outbox.tripEnd.p_distance_done_km);
+  return Promise.resolve({ error: null });
+}
+
+async function request(
+  slot: "tripState" | "location" | "trail" | "tripEnd",
+): Promise<unknown> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const timeout = new Promise<{ error: unknown }>((resolve) => {
+    timer = setTimeout(
+      () => resolve({ error: { message: "Request timed out" } }),
+      requestTimeoutMs,
+    );
+  });
   try {
-    error = (await request).error;
+    const result = await Promise.race([call(slot), timeout]);
+    return result.error;
   } catch (caught) {
-    error = caught;
+    return caught;
+  } finally {
+    if (timer) clearTimeout(timer);
   }
+}
+
+async function send(
+  slot: "tripState" | "location" | "trail" | "tripEnd",
+): Promise<SendOutcome> {
+  const sending = outbox[slot];
+  const error = await request(slot);
+  const unchanged = outbox[slot] === sending;
   if (!error) {
-    if (outbox[slot] === params) save({ ...outbox, [slot]: null });
+    if (unchanged) save({ ...outbox, [slot]: slot === "trail" ? [] : null });
     return { status: "sent" };
   }
   if (isConnectionError(error)) {
-    if (!outbox[slot] || outbox[slot] === params)
-      save({ ...outbox, [slot]: params });
+    if (slot === "location" && outbox.location) addTrailPoint(outbox.location);
     return { status: "queued" };
   }
-  if (outbox[slot] === params) save({ ...outbox, [slot]: null });
+  if (unchanged) save({ ...outbox, [slot]: slot === "trail" ? [] : null });
   return { status: "failed", error: toUserMessage(error) };
-}
-
-async function deliver(
-  slot: keyof Outbox,
-  params: TripStateParams | LocationParams,
-): Promise<SendOutcome> {
-  save({ ...outbox, [slot]: params });
-  if (!isOnline()) return { status: "queued" };
-  if (slot === "location" && outbox.tripState) {
-    await flushOutbox();
-    return outbox.location ? { status: "queued" } : { status: "sent" };
-  }
-  return send(slot, params);
 }
 
 export function flushOutbox(): Promise<void> {
   if (flushing) return flushing;
   if (!isOnline() || pendingCount() === 0) return Promise.resolve();
   flushing = (async () => {
-    if (outbox.tripState) {
-      const result = await send("tripState", outbox.tripState);
-      if (result.status === "queued") return;
+    if (outbox.tripState && !outbox.tripEnd) {
+      if ((await send("tripState")).status === "queued") return;
     }
-    if (outbox.location) await send("location", outbox.location);
+    if (outbox.trail.length) {
+      if ((await send("trail")).status === "queued") return;
+    }
+    if (outbox.location && !outbox.tripEnd) {
+      if ((await send("location")).status === "queued") return;
+    }
+    if (outbox.tripEnd) await send("tripEnd");
   })().finally(() => {
     flushing = null;
   });
   return flushing;
+}
+
+async function deliver(
+  slot: "tripState" | "location",
+  params: TripStateParams | LocationParams,
+): Promise<SendOutcome> {
+  if (outbox.tripEnd) return { status: "queued" };
+  save({ ...outbox, [slot]: params });
+  if (!isOnline()) {
+    if (slot === "location") addTrailPoint(params as LocationParams);
+    return { status: "queued" };
+  }
+  if (slot === "location" && (outbox.tripState || outbox.trail.length)) {
+    await flushOutbox();
+    return outbox.location ? { status: "queued" } : { status: "sent" };
+  }
+  return send(slot);
 }
 
 export function sendTripState(
@@ -142,8 +198,26 @@ export function sendLocation({
   });
 }
 
+export async function sendTripEnd(
+  distanceDoneKm: number,
+): Promise<SendOutcome> {
+  save({
+    ...outbox,
+    tripState: null,
+    location: null,
+    tripEnd: { p_distance_done_km: distanceDoneKm },
+  });
+  if (!isOnline()) return { status: "queued" };
+  await flushOutbox();
+  if (!outbox.tripEnd) return { status: "sent" };
+  const outcome = await send("tripEnd");
+  return outcome;
+}
+
+export const hasPendingTripEnd = () => !!outbox.tripEnd;
+
 export function clearOutbox() {
-  save({ tripState: null, location: null });
+  save(emptyOutbox);
 }
 
 function subscribe(listener: () => void) {

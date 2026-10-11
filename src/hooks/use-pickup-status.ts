@@ -35,7 +35,10 @@ function current(
   return null;
 }
 
-export function usePickupStatus(): PickupStatus {
+export function usePickupStatus(): {
+  status: PickupStatus;
+  refresh: () => Promise<void>;
+} {
   const [status, setStatus] = useState<PickupStatus>(() =>
     current(getKnownActivePickup(), getKnownSharedRide()),
   );
@@ -73,5 +76,5 @@ export function usePickupStatus(): PickupStatus {
   );
   usePolling(refresh, refreshMs);
 
-  return status;
+  return { status, refresh };
 }

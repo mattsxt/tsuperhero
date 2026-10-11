@@ -50,7 +50,6 @@ export function ActionCard({
   icon: ReactNode;
   onPress?: () => void;
   badge?: string;
-  /** Notification-style number bubble, e.g. open jobs waiting. Hidden at 0. */
   count?: number;
 }) {
   return (

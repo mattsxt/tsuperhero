@@ -4,6 +4,7 @@ import Footprints from "lucide-react-native/icons/footprints";
 import Users from "lucide-react-native/icons/users";
 import BusFront from "lucide-react-native/icons/bus-front";
 import UsersRound from "lucide-react-native/icons/users-round";
+import type { ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 
@@ -17,7 +18,8 @@ import { palette } from "@/constants/colors";
 const panelNavy = palette.navy;
 const routeCyan = palette.cyan;
 
-type Tone = "walk" | "waiting" | "matched";
+export type ActiveTone = "walk" | "waiting" | "matched";
+type Tone = ActiveTone;
 
 const toneColors: Record<Tone, { background: string; color: string }> = {
   walk: { background: "#fef3c7", color: "#92400e" },
@@ -96,8 +98,53 @@ function describe(status: NonNullable<PickupStatus>) {
 
 export function ActivePickupBanner({ status }: { status: PickupStatus }) {
   if (!status) return null;
-  const info = describe(status);
-  const colors = toneColors[info.tone];
+  return (
+    <ActiveStatusCard
+      {...describe(status)}
+      openLabel="Open pickup"
+      onPress={() =>
+        router.push(
+          status.kind === "rental"
+            ? Routes.commuterRental
+            : Routes.commuterPickup,
+        )
+      }
+      icon={
+        status.kind === "rental" ? (
+          <BusFront color={panelNavy} size={22} strokeWidth={2.2} />
+        ) : status.kind === "shared" ? (
+          <UsersRound color={panelNavy} size={22} strokeWidth={2.2} />
+        ) : (
+          <PickupIcon color={panelNavy} size={24} />
+        )
+      }
+    />
+  );
+}
+
+export function ActiveStatusCard({
+  eyebrow,
+  place,
+  label,
+  tone,
+  hint,
+  passengers,
+  icon,
+  openLabel,
+  onPress,
+}: {
+  eyebrow: string;
+  place: string;
+  label: string;
+  tone: ActiveTone;
+  hint: string;
+  passengers?: number;
+  icon: ReactNode;
+  openLabel: string;
+  onPress: () => void;
+}) {
+  const info = { eyebrow, place, label, tone, hint, passengers };
+  const colors = toneColors[tone];
 
   return (
     <Animated.View
@@ -106,25 +153,11 @@ export function ActivePickupBanner({ status }: { status: PickupStatus }) {
     >
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`${info.label}. ${info.place}. Open pickup`}
-        onPress={() =>
-          router.push(
-            status.kind === "rental"
-              ? Routes.commuterRental
-              : Routes.commuterPickup,
-          )
-        }
+        accessibilityLabel={`${info.label}. ${info.place}. ${openLabel}`}
+        onPress={onPress}
         style={({ pressed }) => [styles.card, pressed && styles.pressed]}
       >
-        <View style={styles.icon}>
-          {status.kind === "rental" ? (
-            <BusFront color={panelNavy} size={22} strokeWidth={2.2} />
-          ) : status.kind === "shared" ? (
-            <UsersRound color={panelNavy} size={22} strokeWidth={2.2} />
-          ) : (
-            <PickupIcon color={panelNavy} size={24} />
-          )}
-        </View>
+        <View style={styles.icon}>{icon}</View>
         <View style={styles.content}>
           <Text style={styles.eyebrow} numberOfLines={1}>
             {info.eyebrow}
@@ -143,10 +176,12 @@ export function ActivePickupBanner({ status }: { status: PickupStatus }) {
                 {info.label.toUpperCase()}
               </Text>
             </View>
-            <View style={styles.passengers}>
-              <Users color={routeCyan} size={12} strokeWidth={2.4} />
-              <Text style={styles.passengerText}>{info.passengers}</Text>
-            </View>
+            {info.passengers !== undefined && (
+              <View style={styles.passengers}>
+                <Users color={routeCyan} size={12} strokeWidth={2.4} />
+                <Text style={styles.passengerText}>{info.passengers}</Text>
+              </View>
+            )}
           </View>
           <Text style={styles.hint} numberOfLines={2}>
             {info.hint}

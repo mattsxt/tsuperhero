@@ -1,62 +1,81 @@
 import { router } from "expo-router";
+import CarFront from "lucide-react-native/icons/car-front";
 import UserRoundX from "lucide-react-native/icons/user-round-x";
 import XCircle from "lucide-react-native/icons/circle-x";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
-import { markNotificationsRead } from "@/api/v1/notifications/controllers";
+import {
+  markNotificationsRead,
+  type AppNotification,
+} from "@/api/v1/notifications/controllers";
 import { ConfirmModal } from "@/components/confirm-modal";
-import { Routes } from "@/constants/routes";
+import { Routes, type AppRoute } from "@/constants/routes";
 import { useNotifications } from "@/hooks/use-notifications";
 import { useNow } from "@/hooks/use-now";
 
-/** Ride changes the other person should see right away, wherever they are in the app. */
-const rideUpdateTypes = new Set(["pickup_shared_cancelled", "share_ride_left"]);
-/** Older ones are left in Notifications rather than popping up late. */
+type RideUpdate = {
+  icon: ReactNode;
+  note?: string;
+  openLabel: string;
+  openRoute: AppRoute;
+};
+
+const iconProps = { color: "#ffffff", size: 22, strokeWidth: 2.2 } as const;
+
+const rideUpdates: Record<string, RideUpdate> = {
+  pickup_shared_cancelled: {
+    icon: <XCircle {...iconProps} />,
+    openLabel: "Go to pickup",
+    openRoute: Routes.commuterPickup,
+  },
+  share_ride_left: {
+    icon: <UserRoundX {...iconProps} />,
+    note: "Your pickup continues with everyone else.",
+    openLabel: "Go to pickup",
+    openRoute: Routes.commuterPickup,
+  },
+  rental_driver_removed: {
+    icon: <UserRoundX {...iconProps} />,
+    openLabel: "Open job board",
+    openRoute: Routes.transitRentalRequests,
+  },
+  rental_driver_left: {
+    icon: <CarFront {...iconProps} />,
+    openLabel: "View rental",
+    openRoute: Routes.commuterRental,
+  },
+};
 const recentMs = 30 * 60_000;
 
-/**
- * Tells a commuter, with a pop-up, when their shared pickup was cancelled by the commuter
- * who requested it, or when a companion left their ride.
- */
 export function RideUpdateModal() {
   const { notifications } = useNotifications();
   const [dismissed, setDismissed] = useState<string[]>([]);
   const now = useNow(60_000);
 
-  const update = notifications.find(
+  const update: AppNotification | undefined = notifications.find(
     (item) =>
-      rideUpdateTypes.has(item.type) &&
+      item.type in rideUpdates &&
       !item.read &&
       !dismissed.includes(item.id) &&
       now - item.createdAt.getTime() < recentMs,
   );
   if (!update) return null;
+  const config = rideUpdates[update.type];
 
-  const close = (openPickup: boolean) => {
+  const close = (open: boolean) => {
     setDismissed((current) => [...current, update.id]);
     void markNotificationsRead([update.id]);
-    if (openPickup) router.push(Routes.commuterPickup);
+    if (open) router.push(config.openRoute);
   };
 
-  const left = update.type === "share_ride_left";
   return (
     <ConfirmModal
       visible
       title={update.title}
-      message={
-        left
-          ? `${update.body} Your pickup continues with everyone else.`
-          : update.body
-      }
+      message={config.note ? `${update.body} ${config.note}` : update.body}
       confirmLabel="Got it"
-      cancelLabel="Go to pickup"
-      icon={
-        left ? (
-          <UserRoundX color="#ffffff" size={22} strokeWidth={2.2} />
-        ) : (
-          <XCircle color="#ffffff" size={22} strokeWidth={2.2} />
-        )
-      }
+      cancelLabel={config.openLabel}
+      icon={config.icon}
       onConfirm={() => close(false)}
       onCancel={() => close(true)}
     />

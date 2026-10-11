@@ -53,13 +53,11 @@ function Avatar({ driver, size }: { driver: Person; size: number }) {
   );
 }
 
-/** Overlapping avatars of a booking's drivers, for the card. */
 export function DriverAvatars({
   drivers,
   label,
 }: {
   drivers: Person[];
-  /** Overrides the default "Name" / "N drivers" label. */
   label?: string;
 }) {
   if (drivers.length === 0) return null;
@@ -110,7 +108,6 @@ function Stars({ score }: { score: number }) {
   );
 }
 
-/** A booking's full details, including every hired driver and how you rated them. */
 export function BookingDetailsModal({
   booking,
   formatDate,
@@ -124,7 +121,6 @@ export function BookingDetailsModal({
 }) {
   if (!booking) return null;
   const rental = booking.kind === "rental";
-  // Older bookings (or before the driver list is available) only carry one driver name.
   const drivers: BookingDriver[] =
     booking.drivers.length > 0
       ? booking.drivers

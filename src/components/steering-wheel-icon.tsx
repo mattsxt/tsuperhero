@@ -1,6 +1,5 @@
 import Svg, { Circle, Path } from "react-native-svg";
 
-/** Steering wheel in lucide's line style (this lucide version has no steering-wheel icon). */
 export function SteeringWheelIcon({
   color = "#000000",
   size = 24,

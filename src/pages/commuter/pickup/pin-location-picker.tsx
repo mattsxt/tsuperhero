@@ -9,11 +9,11 @@ import {
   getLastKnownPoint,
   type Place,
 } from "@/api/v1/places/controllers";
-import type { WaitingArea } from "@/api/v1/waiting-areas/controllers";
 import {
   findFirstWaitingAreaAlongPath,
   findNearestWaitingArea,
   findWaitingAreasOnRoute,
+  type WaitingArea,
   type WaitingAreaRecommendation,
 } from "@/api/v1/waiting-areas/controllers";
 import {
@@ -54,8 +54,11 @@ export function PinLocationPicker({
   const [start, setStart] = useState<MapCenter | null>(initial);
   const [center, setCenter] = useState<MapCenter | null>(initial);
   const [saving, setSaving] = useState(false);
-  const [checkingRoute, setCheckingRoute] = useState(false);
-  const [walkingPath, setWalkingPath] = useState<[number, number][]>([]);
+  const [routing, setRouting] = useState<{
+    key: string;
+    checking: boolean;
+    path: [number, number][] | null;
+  } | null>(null);
   const [routedRecommendation, setRoutedRecommendation] = useState<{
     key: string;
     area: WaitingAreaRecommendation;
@@ -124,32 +127,47 @@ export function PinLocationPicker({
   const redirectedToRouteArea =
     !!recommendedArea && recommendedArea.id !== baseRecommendation?.id;
 
+  const routingNeeded =
+    !!pickupCenter &&
+    !!baseRecommendation &&
+    getDistanceMeters(pickupCenter, baseRecommendation) < 200;
+  const currentRouting =
+    routingNeeded && routing?.key === recommendationKey ? routing : null;
+  const checkingRoute = routingNeeded && (currentRouting?.checking ?? true);
+  const routedPath = currentRouting?.path ?? null;
+  const walkingPath = useMemo<[number, number][]>(
+    () =>
+      routingNeeded && pickupCenter && baseRecommendation
+        ? (routedPath ?? [
+            [pickupCenter.lat, pickupCenter.lng],
+            [baseRecommendation.lat, baseRecommendation.lng],
+          ])
+        : [],
+    [routingNeeded, pickupCenter, baseRecommendation, routedPath],
+  );
+
   useEffect(() => {
     if (
       !pickupCenter ||
       !baseRecommendation ||
       getDistanceMeters(pickupCenter, baseRecommendation) >= 200
-    ) {
-      setCheckingRoute(false);
-      setRoutedRecommendation(null);
-      setWalkingPath([]);
+    )
       return;
-    }
     let active = true;
-    setCheckingRoute(true);
     const origin: [number, number] = [pickupCenter.lat, pickupCenter.lng];
     const directDestination: [number, number] = [
       baseRecommendation.lat,
       baseRecommendation.lng,
     ];
     const key = `${baseRecommendation.id}:${pickupCenter.lat}:${pickupCenter.lng}`;
-    setWalkingPath([origin, directDestination]);
+    const finish = (path: [number, number][] | null) =>
+      setRouting({ key, checking: false, path });
     const timer = setTimeout(() => {
       void loadWalkingRoute(origin, directDestination).then((result) => {
         if (!active) return;
         if (!result.ok) {
           setRoutedRecommendation(null);
-          setCheckingRoute(false);
+          finish(null);
           return;
         }
 
@@ -166,8 +184,7 @@ export function PinLocationPicker({
         setRoutedRecommendation({ key, area: recommendation });
 
         if (destinationArea.id === baseRecommendation.id) {
-          setWalkingPath(result.data.path);
-          setCheckingRoute(false);
+          finish(result.data.path);
           return;
         }
 
@@ -178,10 +195,9 @@ export function PinLocationPicker({
         void loadWalkingRoute(origin, priorityDestination).then(
           (priorityResult) => {
             if (!active) return;
-            setWalkingPath(
+            finish(
               priorityResult.ok ? priorityResult.data.path : result.data.path,
             );
-            setCheckingRoute(false);
           },
         );
       });
@@ -244,7 +260,7 @@ export function PinLocationPicker({
       padTop: 0,
       padBottom: 0,
     }),
-    [waitingAreas, walkingPath, mapFocus],
+    [waitingAreas, walkingPath, mapFocus, recommendedArea],
   );
 
   const confirm = async () => {

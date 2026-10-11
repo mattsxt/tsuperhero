@@ -5,15 +5,8 @@ import KeyRound from "lucide-react-native/icons/key-round";
 import Lock from "lucide-react-native/icons/lock";
 import ShieldCog from "lucide-react-native/icons/shield-cog";
 import { useState } from "react";
-import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  StyleSheet,
-  View,
-} from "react-native";
-import Animated from "react-native-reanimated";
+import { Alert, Pressable, StyleSheet, View } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
@@ -90,84 +83,80 @@ export default function SecurityScreen() {
   return (
     <View style={styles.screen}>
       <StatusBar style="light" />
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      <KeyboardAwareScrollView
+        bottomOffset={24}
+        onScroll={chrome.scrollHandler}
+        scrollEventThrottle={16}
+        contentContainerStyle={{
+          paddingTop: chrome.headerHeight,
+          paddingBottom: insets.bottom + 24,
+        }}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
-        <Animated.ScrollView
-          onScroll={chrome.scrollHandler}
-          scrollEventThrottle={16}
-          contentContainerStyle={{
-            paddingTop: chrome.headerHeight,
-            paddingBottom: insets.bottom + 24,
-          }}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.body}>
-            <Field label="Current Password" error={errors.current}>
-              <PasswordField
-                value={current}
-                onChangeText={(value) => {
-                  setCurrent(value);
-                  clearError("current");
-                }}
-                placeholder="Current password"
-                autoComplete="current-password"
-                icon={<Lock color={brandBlue} size={18} strokeWidth={2} />}
-              />
-            </Field>
-
-            <Field label="New Password" error={errors.next}>
-              <PasswordField
-                value={next}
-                onChangeText={(value) => {
-                  setNext(value);
-                  clearError("next");
-                }}
-                placeholder="New password"
-                autoComplete="new-password"
-                icon={<KeyRound color={brandBlue} size={18} strokeWidth={2} />}
-              />
-              <PasswordStrength password={next} />
-            </Field>
-
-            <Field label="Confirm New Password" error={errors.confirm}>
-              <PasswordField
-                value={confirm}
-                onChangeText={(value) => {
-                  setConfirm(value);
-                  clearError("confirm");
-                }}
-                placeholder="Re-enter new password"
-                autoComplete="new-password"
-                icon={<KeyRound color={brandBlue} size={18} strokeWidth={2} />}
-              />
-            </Field>
-
-            {!!alertMessage && (
-              <ErrorAlert
-                title={alertTitle}
-                message={alertMessage}
-                style={styles.saveError}
-              />
-            )}
-            <ModuleButton
-              label={saving ? "UPDATING..." : "UPDATE PASSWORD"}
-              disabled={saving || !current || !next || !confirm}
-              disabledHint={
-                !saving
-                  ? "Fill in your current password, a new password and the confirmation."
-                  : undefined
-              }
-              onPress={save}
-              style={
-                alertMessage ? styles.saveButtonAfterError : styles.saveButton
-              }
+        <View style={styles.body}>
+          <Field label="Current Password" error={errors.current}>
+            <PasswordField
+              value={current}
+              onChangeText={(value) => {
+                setCurrent(value);
+                clearError("current");
+              }}
+              placeholder="Current password"
+              autoComplete="current-password"
+              icon={<Lock color={brandBlue} size={18} strokeWidth={2} />}
             />
-          </View>
-        </Animated.ScrollView>
-      </KeyboardAvoidingView>
+          </Field>
+
+          <Field label="New Password" error={errors.next}>
+            <PasswordField
+              value={next}
+              onChangeText={(value) => {
+                setNext(value);
+                clearError("next");
+              }}
+              placeholder="New password"
+              autoComplete="new-password"
+              icon={<KeyRound color={brandBlue} size={18} strokeWidth={2} />}
+            />
+            <PasswordStrength password={next} />
+          </Field>
+
+          <Field label="Confirm New Password" error={errors.confirm}>
+            <PasswordField
+              value={confirm}
+              onChangeText={(value) => {
+                setConfirm(value);
+                clearError("confirm");
+              }}
+              placeholder="Re-enter new password"
+              autoComplete="new-password"
+              icon={<KeyRound color={brandBlue} size={18} strokeWidth={2} />}
+            />
+          </Field>
+
+          {!!alertMessage && (
+            <ErrorAlert
+              title={alertTitle}
+              message={alertMessage}
+              style={styles.saveError}
+            />
+          )}
+          <ModuleButton
+            label={saving ? "UPDATING..." : "UPDATE PASSWORD"}
+            disabled={saving || !current || !next || !confirm}
+            disabledHint={
+              !saving
+                ? "Fill in your current password, a new password and the confirmation."
+                : undefined
+            }
+            onPress={save}
+            style={
+              alertMessage ? styles.saveButtonAfterError : styles.saveButton
+            }
+          />
+        </View>
+      </KeyboardAwareScrollView>
       <StickyHeader chrome={chrome}>
         <ModuleHeader
           title="Security"

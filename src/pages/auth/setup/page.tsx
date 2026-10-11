@@ -7,17 +7,16 @@ import ChevronLeft from "lucide-react-native/icons/chevron-left";
 import { createElement, useEffect, useState } from "react";
 import {
   BackHandler,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
 import Reanimated, { FadeIn } from "react-native-reanimated";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
@@ -43,6 +42,7 @@ import { LoadingScreen } from "@/components/LoadingScreen";
 import { MiniToast, type MiniToastMessage } from "@/components/mini-toast";
 import { Routes } from "@/constants/routes";
 import { palette } from "@/constants/colors";
+import { useStatusBarTop } from "@/hooks/use-status-bar-top";
 
 const backgroundBlue = palette.header;
 const accentBlue = "#29A9E1";
@@ -156,161 +156,157 @@ export default function SetupScreen() {
   const alertTitle = errorField ? profileFieldTitles[errorField] : "Profile";
   const alertMessage = errorField ? errors[errorField] : saveError;
 
+  const statusBarTop = useStatusBarTop();
   if (checking) return <LoadingScreen messages={setupLoadingMessages} />;
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      <KeyboardAwareScrollView
+        bottomOffset={24}
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
       >
-        <ScrollView
-          contentContainerStyle={styles.container}
-          keyboardShouldPersistTaps="handled"
+        {canGoBack && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Go to previous step"
+            hitSlop={12}
+            onPress={goBack}
+            style={styles.backButton}
+          >
+            <ChevronLeft color="#ffffff" size={28} strokeWidth={2.5} />
+          </Pressable>
+        )}
+
+        <BrandHeader variant="hero" />
+
+        <Reanimated.View
+          key={step}
+          entering={FadeIn.duration(stepFadeMs)}
+          style={styles.stepArea}
         >
-          {canGoBack && (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Go to previous step"
-              hitSlop={12}
-              onPress={goBack}
-              style={styles.backButton}
-            >
-              <ChevronLeft color="#ffffff" size={28} strokeWidth={2.5} />
-            </Pressable>
+          {step === 1 && (
+            <>
+              <Text style={styles.message}>
+                It seems that this is your first time accessing the app!
+              </Text>
+              <PrimaryButton label="YES" onPress={() => setStep(2)} />
+            </>
           )}
 
-          <BrandHeader variant="hero" />
+          {step === 2 && (
+            <>
+              <Text style={styles.message}>
+                Perfect, now is the time to set up your profile!
+              </Text>
+              <PrimaryButton label="CONTINUE" onPress={() => setStep(3)} />
+            </>
+          )}
 
-          <Reanimated.View
-            key={step}
-            entering={FadeIn.duration(stepFadeMs)}
-            style={styles.stepArea}
-          >
-            {step === 1 && (
-              <>
-                <Text style={styles.message}>
-                  It seems that this is your first time accessing the app!
-                </Text>
-                <PrimaryButton label="YES" onPress={() => setStep(2)} />
-              </>
-            )}
+          {step === 3 && (
+            <View style={styles.form}>
+              <Text style={styles.formHeading}>Set up your profile</Text>
 
-            {step === 2 && (
-              <>
-                <Text style={styles.message}>
-                  Perfect, now is the time to set up your profile!
-                </Text>
-                <PrimaryButton label="CONTINUE" onPress={() => setStep(3)} />
-              </>
-            )}
-
-            {step === 3 && (
-              <View style={styles.form}>
-                <Text style={styles.formHeading}>Set up your profile</Text>
-
-                <View style={styles.row}>
-                  <FormField label="FIRST NAME" error={errors.firstName}>
-                    <TextInput
-                      value={firstName}
-                      onChangeText={(value) => {
-                        const problem = getNameProblem(value);
-                        if (problem) return showToast(problem);
-                        setFirstName(value);
-                        clearError("firstName");
-                      }}
-                      placeholder="Juan"
-                      placeholderTextColor="#9a9a9a"
-                      autoComplete="given-name"
-                      style={styles.input}
-                    />
-                  </FormField>
-                  <FormField label="LAST NAME" error={errors.lastName}>
-                    <TextInput
-                      value={lastName}
-                      onChangeText={(value) => {
-                        const problem = getNameProblem(value);
-                        if (problem) return showToast(problem);
-                        setLastName(value);
-                        clearError("lastName");
-                      }}
-                      placeholder="dela Cruz"
-                      placeholderTextColor="#9a9a9a"
-                      autoComplete="family-name"
-                      style={styles.input}
-                    />
-                  </FormField>
-                </View>
-
-                <View style={styles.row}>
-                  <FormField label="BIRTHDATE" error={errors.birthdate}>
-                    <BirthdateField
-                      value={birthdate}
-                      onChange={(date) => {
-                        setBirthdate(date);
-                        clearError("birthdate");
-                      }}
-                    />
-                  </FormField>
-                </View>
-
-                <FormField label="CONTACT NUMBER" error={errors.contact}>
-                  <View style={styles.inputWithIcon}>
-                    <Text style={styles.contactPrefix}>+63</Text>
-                    <TextInput
-                      value={contact}
-                      onChangeText={(value) => {
-                        const problem = getContactProblem(value);
-                        if (problem) return showToast(problem);
-                        setContact(value);
-                        clearError("contact");
-                      }}
-                      onKeyPress={({ nativeEvent }) => {
-                        if (
-                          contact.length === contactLength &&
-                          /^\d$/.test(nativeEvent.key)
-                        ) {
-                          showToast(contactLengthMessage);
-                        }
-                      }}
-                      placeholder="9123456789"
-                      placeholderTextColor="#9a9a9a"
-                      keyboardType="number-pad"
-                      autoComplete="tel"
-                      maxLength={contactLength}
-                      style={styles.flexInput}
-                    />
-                  </View>
+              <View style={styles.row}>
+                <FormField label="FIRST NAME" error={errors.firstName}>
+                  <TextInput
+                    value={firstName}
+                    onChangeText={(value) => {
+                      const problem = getNameProblem(value);
+                      if (problem) return showToast(problem);
+                      setFirstName(value);
+                      clearError("firstName");
+                    }}
+                    placeholder="Juan"
+                    placeholderTextColor="#9a9a9a"
+                    autoComplete="given-name"
+                    style={styles.input}
+                  />
                 </FormField>
-
-                {!!alertMessage && (
-                  <ErrorAlert title={alertTitle} message={alertMessage} />
-                )}
-
-                <PrimaryButton
-                  label="CONTINUE"
-                  busy={saving}
-                  onPress={saveProfile}
-                />
+                <FormField label="LAST NAME" error={errors.lastName}>
+                  <TextInput
+                    value={lastName}
+                    onChangeText={(value) => {
+                      const problem = getNameProblem(value);
+                      if (problem) return showToast(problem);
+                      setLastName(value);
+                      clearError("lastName");
+                    }}
+                    placeholder="dela Cruz"
+                    placeholderTextColor="#9a9a9a"
+                    autoComplete="family-name"
+                    style={styles.input}
+                  />
+                </FormField>
               </View>
-            )}
 
-            {step === 4 && (
-              <>
-                <Text style={styles.message}>
-                  Alright!{"\n"}Everything is now set up.{"\n"}Let’s get
-                  started!
-                </Text>
-                <PrimaryButton
-                  label="LET'S GO!"
-                  onPress={() => router.replace(Routes.commuterHome)}
-                />
-              </>
-            )}
-          </Reanimated.View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-      <MiniToast message={toast} top={12} />
+              <View style={styles.row}>
+                <FormField label="BIRTHDATE" error={errors.birthdate}>
+                  <BirthdateField
+                    value={birthdate}
+                    onChange={(date) => {
+                      setBirthdate(date);
+                      clearError("birthdate");
+                    }}
+                  />
+                </FormField>
+              </View>
+
+              <FormField label="CONTACT NUMBER" error={errors.contact}>
+                <View style={styles.inputWithIcon}>
+                  <Text style={styles.contactPrefix}>+63</Text>
+                  <TextInput
+                    value={contact}
+                    onChangeText={(value) => {
+                      const problem = getContactProblem(value);
+                      if (problem) return showToast(problem);
+                      setContact(value);
+                      clearError("contact");
+                    }}
+                    onKeyPress={({ nativeEvent }) => {
+                      if (
+                        contact.length === contactLength &&
+                        /^\d$/.test(nativeEvent.key)
+                      ) {
+                        showToast(contactLengthMessage);
+                      }
+                    }}
+                    placeholder="9123456789"
+                    placeholderTextColor="#9a9a9a"
+                    keyboardType="number-pad"
+                    autoComplete="tel"
+                    maxLength={contactLength}
+                    style={styles.flexInput}
+                  />
+                </View>
+              </FormField>
+
+              {!!alertMessage && (
+                <ErrorAlert title={alertTitle} message={alertMessage} />
+              )}
+
+              <PrimaryButton
+                label="CONTINUE"
+                busy={saving}
+                onPress={saveProfile}
+              />
+            </View>
+          )}
+
+          {step === 4 && (
+            <>
+              <Text style={styles.message}>
+                Alright!{"\n"}Everything is now set up.{"\n"}Let’s get started!
+              </Text>
+              <PrimaryButton
+                label="LET'S GO!"
+                onPress={() => router.replace(Routes.commuterHome)}
+              />
+            </>
+          )}
+        </Reanimated.View>
+      </KeyboardAwareScrollView>
+      <MiniToast message={toast} top={statusBarTop + 12} />
     </SafeAreaView>
   );
 }

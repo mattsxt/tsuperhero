@@ -35,10 +35,8 @@ export type BookingRow = {
   driver_name: string | null;
   rating_score: number | null;
   rating_feedback: string | null;
-  /** Rentals: hired drivers, and how many the commuter has rated. */
   drivers_total?: number;
   drivers_rated?: number;
-  /** Pickups: the requester and accepted companions. */
   riders?: (RiderRow & { is_owner: boolean; is_me: boolean })[] | null;
   drivers?: (Omit<RiderRow, "user_id"> & {
     driver_id: string;

@@ -12,7 +12,7 @@ import UsersRound from "lucide-react-native/icons/users-round";
 import X from "lucide-react-native/icons/x";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
-import Animated from "react-native-reanimated";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
@@ -80,9 +80,18 @@ import {
 import { PlaceSearchField } from "@/components/place-search-field";
 import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
-import { checkOnline, useOnline } from "@/hooks/use-online";
+import {
+  checkOnline,
+  isOnline,
+  subscribeToOnline,
+  useOnline,
+} from "@/hooks/use-online";
 import { useNow } from "@/hooks/use-now";
 import { usePolling } from "@/hooks/use-polling";
+import {
+  getNotifications,
+  markNotificationsRead,
+} from "@/api/v1/notifications/controllers";
 import { getDistanceMeters } from "@/utils/geo";
 import { goBackOr } from "@/utils/navigation";
 
@@ -141,7 +150,6 @@ export default function PickupScreen() {
   const [sharedRideLoaded, setSharedRideLoaded] = useState(false);
   const [rentals, setRentals] = useState<Rental[]>([]);
   const rentalClock = useNow(30_000);
-  // Pickups pause only from an hour before to an hour after a rental pickup.
   const rentalWindow = commuterRentalWindow(rentals, rentalClock);
   const savedLocationKey = useRef<string | null>(null);
   const online = useOnline();
@@ -272,11 +280,19 @@ export default function PickupScreen() {
   };
 
   useEffect(() => {
-    if (online || !active) return;
-    const disconnectedPickup = active;
-    setActive(null);
-    void queuePickupCancellation(disconnectedPickup);
-  }, [active, online]);
+    if (!active) return;
+    const cancelIfOffline = () => {
+      if (isOnline()) return;
+      setActive(null);
+      void queuePickupCancellation(active);
+    };
+    const timer = setTimeout(cancelIfOffline, 0);
+    const stop = subscribeToOnline(cancelIfOffline);
+    return () => {
+      clearTimeout(timer);
+      stop();
+    };
+  }, [active]);
 
   const nearestRoute = useMemo(
     () => (place ? findNearestRoute(place, routes) : null),
@@ -381,7 +397,6 @@ export default function PickupScreen() {
       const statuses = await loadPickupCompanionStatuses(draftRequestId);
       if (statuses.ok) setCompanionList(statuses.data);
     });
-    // Only a change of location should trigger this.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requestLocationKey, draftRequestId, hasAcceptedCompanions]);
 
@@ -421,16 +436,22 @@ export default function PickupScreen() {
   }, [active]);
 
   const activeId = active?.id;
-  const activeStatus = active?.status;
   usePolling(
     async () => {
       if (!activeId) return;
       const latest = await loadActivePickup();
       if (!latest.ok) return;
-      if (!latest.data && activeStatus === "accepted") {
+      if (!latest.data) {
         const status = await loadRequestStatus(activeId);
-        if (status.ok && status.data === "completed")
+        if (status.ok && status.data === "completed") {
           setBoarded(lastActive.current);
+          const notice = getNotifications().find(
+            (item) =>
+              item.type === "pickup_boarded" &&
+              item.data.request_id === activeId,
+          );
+          if (notice) void markNotificationsRead([notice.id]);
+        }
       }
       setActive(latest.data);
     },
@@ -609,8 +630,12 @@ export default function PickupScreen() {
       <BoardedScreen
         request={boarded}
         onDone={() => {
+          const id = boarded.id;
           setBoarded(null);
-          goBack();
+          router.replace({
+            pathname: Routes.commuterBookings,
+            params: { tab: "pickup", open: id },
+          });
         }}
       />
     );
@@ -676,7 +701,8 @@ export default function PickupScreen() {
   return (
     <View style={styles.screen}>
       <StatusBar style="light" />
-      <Animated.ScrollView
+      <KeyboardAwareScrollView
+        bottomOffset={240}
         onScroll={chrome.scrollHandler}
         scrollEventThrottle={16}
         contentContainerStyle={{
@@ -991,7 +1017,7 @@ export default function PickupScreen() {
             onPress={confirm}
           />
         </View>
-      </Animated.ScrollView>
+      </KeyboardAwareScrollView>
 
       <StickyHeader chrome={chrome}>
         <ModuleHeader

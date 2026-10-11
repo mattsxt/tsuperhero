@@ -5,10 +5,11 @@ import Clock from "lucide-react-native/icons/clock";
 import BriefcaseBusiness from "lucide-react-native/icons/briefcase-business";
 import Route from "lucide-react-native/icons/route";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { RefreshControl, StyleSheet, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { loadMyTrips, type TripRecord } from "@/api/v1/operator/controllers";
 import { loadHome, peekHomeName } from "@/api/v1/profile/controllers";
 import {
   loadJobBoard,
@@ -28,6 +29,7 @@ import {
 } from "@/components/home-ui";
 import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
+import { ActiveWork, nextRentalJob } from "@/pages/transit/home/active-work";
 import { RatingsSummary } from "@/pages/transit/home/ratings-summary";
 import { HomeSkeleton } from "@/components/skeleton";
 
@@ -42,29 +44,54 @@ export default function TransitHomeScreen() {
   );
   const [openJobs, setOpenJobs] = useState(0);
   const [myJobs, setMyJobs] = useState<Rental[]>([]);
+  const [runningTrip, setRunningTrip] = useState<TripRecord | null>(null);
   const now = useNow(60_000);
-  // ACTIVE only from an hour before to an hour after a booked rental's pickup time.
   const rentalActive = !!rentalWindow(myJobs, now);
+
+  const [refreshing, setRefreshing] = useState(false);
+  const [ratingsKey, setRatingsKey] = useState(0);
+
+  const loadWork = useCallback(
+    (isActive: () => boolean) =>
+      Promise.all([
+        loadJobBoard().then((result) => {
+          if (isActive() && result.ok) {
+            setOpenJobs(
+              result.data.filter((job) => !job.scheduleConflict).length,
+            );
+          }
+        }),
+        loadRentalRequests().then((result) => {
+          if (isActive() && result.ok) setMyJobs(result.data);
+        }),
+        loadMyTrips().then((result) => {
+          if (isActive() && result.ok)
+            setRunningTrip(result.data.find((trip) => trip.inProgress) ?? null);
+        }),
+      ]),
+    [],
+  );
 
   useFocusEffect(
     useCallback(() => {
       let active = true;
-      loadJobBoard().then((result) => {
-        if (active && result.ok) {
-          // Only jobs this driver can take (not clashing with one they booked).
-          setOpenJobs(
-            result.data.filter((job) => !job.scheduleConflict).length,
-          );
-        }
-      });
-      loadRentalRequests().then((result) => {
-        if (active && result.ok) setMyJobs(result.data);
-      });
+      void loadWork(() => active);
       return () => {
         active = false;
       };
-    }, []),
+    }, [loadWork]),
   );
+
+  const refresh = async () => {
+    setRefreshing(true);
+    setRatingsKey((key) => key + 1);
+    const [home] = await Promise.all([
+      loadHome("transit_personnel"),
+      loadWork(() => true),
+    ]);
+    if (!("redirect" in home)) setFirstName(home.firstName);
+    setRefreshing(false);
+  };
 
   useEffect(() => {
     let active = true;
@@ -99,9 +126,23 @@ export default function TransitHomeScreen() {
             paddingTop: chrome.headerHeight,
             paddingBottom: insets.bottom + bottomNavHeight,
           }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={refresh}
+              tintColor={brandBlue}
+              colors={[brandBlue]}
+              progressViewOffset={chrome.headerHeight}
+            />
+          }
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.body}>
+            <ActiveWork
+              trip={runningTrip}
+              job={nextRentalJob(myJobs, now)}
+              rentalActive={rentalActive}
+            />
             <ActionRow>
               <ActionCard
                 title="Start Trip"
@@ -121,7 +162,6 @@ export default function TransitHomeScreen() {
                 }
                 onPress={() => router.push(Routes.transitRentalRequests)}
                 badge={rentalActive ? "ACTIVE" : undefined}
-                // Open jobs waiting; hidden while a booked rental is under way.
                 count={rentalActive ? 0 : openJobs}
               />
               <ActionCard
@@ -134,7 +174,7 @@ export default function TransitHomeScreen() {
 
             <SectionDivider />
             <SectionHeader title="Ratings" />
-            <RatingsSummary />
+            <RatingsSummary refreshKey={ratingsKey} />
           </View>
         </Animated.ScrollView>
 

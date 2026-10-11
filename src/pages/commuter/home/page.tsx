@@ -1,10 +1,10 @@
 import { BlurTargetView } from "expo-blur";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import Bus from "lucide-react-native/icons/bus";
 import MapPinSearch from "lucide-react-native/icons/map-pin-search";
-import { useEffect, useRef, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { RefreshControl, StyleSheet, View } from "react-native";
 import Animated, {
   FadeIn,
   FadeOut,
@@ -43,7 +43,20 @@ export default function CommuterHomeScreen() {
   const blurTarget = useRef<View | null>(null);
   const [firstName, setFirstName] = useState(() => peekHomeName("commuter"));
   const [searchOpen, setSearchOpen] = useState(false);
-  const pickupStatus = usePickupStatus();
+  const { status: pickupStatus, refresh: refreshPickupStatus } =
+    usePickupStatus();
+  const [refreshKey, setRefreshKey] = useState(0);
+  const firstFocus = useRef(true);
+  useFocusEffect(
+    useCallback(() => {
+      if (firstFocus.current) {
+        firstFocus.current = false;
+        return;
+      }
+      setRefreshKey((key) => key + 1);
+    }, []),
+  );
+  const [refreshing, setRefreshing] = useState(false);
   const scrollRef = useAnimatedRef<Animated.ScrollView>();
   const minimizedHeaderHeight = chrome.collapsedHeaderHeight ?? insets.top + 56;
 
@@ -53,6 +66,18 @@ export default function CommuterHomeScreen() {
     setSearchOpen(open);
   };
   const closeSearch = () => changeSearchOpen(false);
+
+  const refresh = async () => {
+    setRefreshing(true);
+    setRefreshKey((key) => key + 1);
+    const [home] = await Promise.all([
+      loadHome("commuter"),
+      refreshPickupStatus(),
+      loadWaitingAreas(),
+    ]);
+    if (!("redirect" in home)) setFirstName(home.firstName);
+    setRefreshing(false);
+  };
 
   useEffect(() => {
     let active = true;
@@ -91,6 +116,16 @@ export default function CommuterHomeScreen() {
             paddingBottom: insets.bottom + bottomNavHeight,
           }}
           keyboardShouldPersistTaps="handled"
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={refresh}
+              enabled={!searchOpen}
+              tintColor={brandBlue}
+              colors={[brandBlue]}
+              progressViewOffset={chrome.headerHeight}
+            />
+          }
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.body}>
@@ -139,7 +174,7 @@ export default function CommuterHomeScreen() {
                 </ActionRow>
 
                 <SectionDivider />
-                <RecentBookings limit={2} />
+                <RecentBookings limit={2} refreshKey={refreshKey} />
               </Animated.View>
             )}
           </View>

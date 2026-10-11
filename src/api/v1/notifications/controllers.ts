@@ -44,6 +44,7 @@ const targets: Record<string, AppRoute> = {
   rental_job_booked: Routes.transitRentalRequests,
   rental_job_completed: Routes.transitRentalRequests,
   rental_driver_removed: Routes.transitRentalRequests,
+  rental_driver_left: Routes.commuterRental,
   rental_cancelled: Routes.transitRentalRequests,
   rental_completed: Routes.commuterBookings,
 };
@@ -123,7 +124,10 @@ export function startNotificationSync({
       const item = toNotification(payload.new);
       const isNew = !notifications.some((current) => current.id === item.id);
       upsertNotification(item);
-      if (isNew && !item.read) onReceived(item);
+      if (isNew && !item.read && !announced.has(item.id)) {
+        announced.add(item.id);
+        onReceived(item);
+      }
     } else if (payload.eventType === "UPDATE") {
       const item = toNotification(payload.new);
       const before = notifications.find((current) => current.id === item.id);
@@ -131,17 +135,34 @@ export function startNotificationSync({
       if (item.read && before && !before.read) onRead([item.id]);
     }
   });
+  const startedAt = Date.now();
+  const announced = new Set<string>();
+  const refreshAndAnnounce = async () => {
+    const known = new Set(notifications.map((item) => item.id));
+    const result = await refreshNotifications();
+    if (!result.ok) return;
+    for (const item of result.data) {
+      if (item.read || known.has(item.id) || announced.has(item.id)) continue;
+      if (item.createdAt.getTime() < startedAt - 5_000) continue;
+      announced.add(item.id);
+      onReceived(item);
+    }
+  };
   refreshNotifications();
   const appState = AppState.addEventListener("change", (state) => {
-    if (state === "active") refreshNotifications();
+    if (state === "active") refreshAndAnnounce();
   });
   const stopOnline = subscribeToOnline(() => {
-    if (isOnline()) refreshNotifications();
+    if (isOnline()) refreshAndAnnounce();
   });
+  const poll = setInterval(() => {
+    if (isOnline() && AppState.currentState === "active") refreshAndAnnounce();
+  }, 30_000);
   return () => {
     stopRealtime();
     appState.remove();
     stopOnline();
+    clearInterval(poll);
   };
 }
 

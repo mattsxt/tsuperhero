@@ -67,12 +67,12 @@ export function BoardedScreen({
         <Animated.View entering={FadeIn.delay(350)} style={styles.note}>
           <Route color={successGreen} size={16} strokeWidth={2.2} />
           <Text style={styles.noteText}>
-            This ride was added to your trip history.
+            Request complete. It&apos;s in your bookings.
           </Text>
         </Animated.View>
       </View>
 
-      <ModuleButton label="BACK TO HOME" onPress={onDone} />
+      <ModuleButton label="VIEW BOOKING" onPress={onDone} />
     </View>
   );
 }

@@ -41,25 +41,17 @@ const issues = [
   "Wrong route",
 ];
 
-/**
- * Rates each hired driver of a completed rental, one at a time: stars, quick tags that
- * match the score, and an optional comment. Drivers can be skipped and rated later from
- * Bookings.
- */
 export function RateDriversModal({
   rental,
   onClose,
 }: {
   rental: Rental | null;
-  /** \`rated\` is how many drivers were rated in this session. */
   onClose: (rated: number) => void;
 }) {
-  // The drivers are fixed when the sheet opens; each gets a draft until everything is submitted.
   const [queue] = useState(() => (rental ? unratedDrivers(rental) : []));
   const [drafts, setDrafts] = useState<Draft[]>(() =>
     queue.map(() => ({ score: 0, tags: [], feedback: "" })),
   );
-  /** 0..n-1: rating a driver; n: review and submit. */
   const [index, setIndex] = useState(0);
   const [saving, setSaving] = useState(false);
   const [problem, setProblem] = useState("");
@@ -107,7 +99,6 @@ export function RateDriversModal({
         return;
       }
       sent += 1;
-      // Sent ones can't be resent; clear them so a retry only sends the rest.
       setDrafts((current) =>
         current.map((draftItem, at) =>
           at === position ? { score: 0, tags: [], feedback: "" } : draftItem,
@@ -353,7 +344,6 @@ export function RateDriversModal({
                 <StarInput
                   value={draft.score}
                   onChange={(value) =>
-                    // Tags only make sense for the side of the scale they were picked on.
                     update(
                       value >= 4 !== draft.score >= 4
                         ? { score: value, tags: [] }

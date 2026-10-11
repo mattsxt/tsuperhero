@@ -1,5 +1,5 @@
 import Star from "lucide-react-native/icons/star";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import {
@@ -27,19 +27,26 @@ function formatReviewDate(date: Date) {
   });
 }
 
-export function RatingsSummary() {
+export function RatingsSummary({ refreshKey = 0 }: { refreshKey?: number }) {
   const [summary, setSummary] = useState<RatingSummary | null>(null);
   const [problem, setProblem] = useState("");
 
-  const refresh = useCallback(async () => {
-    const result = await loadMyRatings();
-    if (result.ok) {
-      setSummary(result.data);
-      setProblem("");
-    } else setProblem(result.error);
-  }, []);
+  const apply = useCallback(
+    (result: Awaited<ReturnType<typeof loadMyRatings>>) => {
+      if (result.ok) {
+        setSummary(result.data);
+        setProblem("");
+      } else setProblem(result.error);
+    },
+    [],
+  );
+  const refresh = useCallback(() => loadMyRatings().then(apply), [apply]);
 
   usePolling(refresh, refreshMs);
+
+  useEffect(() => {
+    if (refreshKey > 0) loadMyRatings().then(apply);
+  }, [refreshKey, apply]);
 
   if (!summary) {
     return problem ? (

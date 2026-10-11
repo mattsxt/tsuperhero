@@ -49,7 +49,6 @@ export function ActiveRental({
   removingId,
   onRemoveDriver,
 }: {
-  /** The vehicle whose driver is being removed. */
   removingId: string | null;
   onRemoveDriver: (unitId: string) => void;
   rental: Rental;
@@ -57,7 +56,6 @@ export function ActiveRental({
   completing: boolean;
   problem: string;
   onCancel: () => void;
-  /** The commuter (not the drivers) marks the rental done after the trip. */
   onComplete: () => void;
 }) {
   const [confirming, setConfirming] = useState(false);

@@ -3,11 +3,7 @@ import {
   loadMyTrips,
   loadOperatorAssignment,
 } from "@/api/v1/operator/controllers";
-import {
-  loadActivePickup,
-  loadBookings,
-  loadTripHistory,
-} from "@/api/v1/pickups/controllers";
+import { loadActivePickup, loadBookings } from "@/api/v1/pickups/controllers";
 import {
   loadHomeRoute,
   loadProfileSummary,
@@ -71,7 +67,6 @@ async function prepare() {
     await Promise.allSettled([
       loadActivePickup(),
       loadBookings(),
-      loadTripHistory(),
       loadMyRentals(),
     ]);
     if (routes.ok) await saveRouteShapes(routes.data);

@@ -26,6 +26,7 @@ import {
 import { stopLocationSharing } from "@/api/v1/operator/location-sharing";
 import { prepareOffline, resetOfflinePreparation } from "@/api/v1/prefetch";
 import { clearOutbox } from "@/api/v1/operator/outbox";
+import { popupNotificationTypes } from "@/constants/popup-notifications";
 import { Routes, type AppRoute } from "@/constants/routes";
 import { isOnline, subscribeToOnline } from "@/hooks/use-online";
 import { useNotifications } from "@/hooks/use-notifications";
@@ -102,7 +103,10 @@ export function NotificationSync() {
       stopSync = startNotificationSync({
         userId: nextUserId,
         onReceived: (item) => {
-          if (notificationTarget(item.type) === currentRoute) {
+          if (
+            notificationTarget(item.type) === currentRoute &&
+            !popupNotificationTypes.has(item.type)
+          ) {
             markNotificationsRead([item.id]);
             return;
           }

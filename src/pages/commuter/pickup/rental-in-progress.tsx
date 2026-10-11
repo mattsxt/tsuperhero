@@ -19,7 +19,6 @@ export function RentalInProgress({
   onBack,
 }: {
   rental: Rental;
-  /** The rental pickup (or return pickup) that pauses pickups right now. */
   at: Date;
   onOpenRental: () => void;
   onBack: () => void;
@@ -61,7 +60,6 @@ const clock = (date: Date) =>
   date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 
 const styles = StyleSheet.create({
-  // Full width: in the centred card it would shrink and the arrow would cover the label.
   button: { alignSelf: "stretch", marginTop: 16 },
   screen: { flex: 1, backgroundColor: "#ffffff" },
   body: { paddingHorizontal: 16, paddingTop: 24 },

@@ -8,7 +8,7 @@ import Repeat from "lucide-react-native/icons/repeat";
 import Sparkles from "lucide-react-native/icons/sparkles";
 import Users from "lucide-react-native/icons/users";
 import X from "lucide-react-native/icons/x";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
   Linking,
   Modal,
@@ -21,6 +21,7 @@ import {
 
 import { formatRentalTime, type Rental } from "@/api/v1/rentals/controllers";
 import { palette } from "@/constants/colors";
+import { useNow } from "@/hooks/use-now";
 
 function statusOf(job: Rental) {
   if (job.status === "completed")
@@ -36,18 +37,43 @@ function statusOf(job: Rental) {
   return { label: "CLOSED", tone: "#6b6b6b" };
 }
 
-/** A job the driver took: the trip, their vehicle, the rest of the fleet and the commuter. */
 export function JobDetailsModal({
   job,
   onClose,
+  onDrop,
 }: {
   job: Rental | null;
   onClose: () => void;
+  onDrop: (job: Rental) => Promise<string | null>;
 }) {
+  const [confirmingDrop, setConfirmingDrop] = useState(false);
+  const [dropping, setDropping] = useState(false);
+  const [dropError, setDropError] = useState("");
+  const now = useNow(30_000);
   if (!job) return null;
+  const close = () => {
+    setConfirmingDrop(false);
+    setDropError("");
+    onClose();
+  };
+  const drop = async () => {
+    setDropping(true);
+    const error = await onDrop(job);
+    setDropping(false);
+    if (error) {
+      setDropError(error);
+      return;
+    }
+    setConfirmingDrop(false);
+    setDropError("");
+  };
   const status = statusOf(job);
   const mine = job.units.find((unit) => unit.isMine);
   const others = job.units.filter((unit) => !unit.isMine);
+  const droppable =
+    mine?.status === "booked" &&
+    (job.status === "pending" || job.status === "accepted") &&
+    job.pickupTime.getTime() > now;
 
   return (
     <Modal
@@ -55,7 +81,7 @@ export function JobDetailsModal({
       transparent
       animationType="fade"
       statusBarTranslucent
-      onRequestClose={onClose}
+      onRequestClose={close}
     >
       <View style={styles.backdrop}>
         <View accessibilityRole="alert" style={styles.card}>
@@ -187,9 +213,50 @@ export function JobDetailsModal({
               </Text>
             )}
 
+            {droppable && (
+              <View style={styles.dropBox}>
+                {confirmingDrop && (
+                  <Text style={styles.dropWarning}>
+                    Drop this job? Your{" "}
+                    {mine?.vehicleType.toLowerCase() ?? "vehicle"} goes back on
+                    the job board and the commuter is notified.
+                  </Text>
+                )}
+                {!!dropError && (
+                  <Text style={styles.dropError}>{dropError}</Text>
+                )}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityState={{ busy: dropping }}
+                  disabled={dropping}
+                  onPress={
+                    confirmingDrop ? drop : () => setConfirmingDrop(true)
+                  }
+                  style={({ pressed }) => [
+                    styles.drop,
+                    confirmingDrop && styles.dropConfirm,
+                    (pressed || dropping) && styles.pressed,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.dropText,
+                      confirmingDrop && styles.dropConfirmText,
+                    ]}
+                  >
+                    {dropping
+                      ? "DROPPING..."
+                      : confirmingDrop
+                        ? "YES, DROP THIS JOB"
+                        : "DROP THIS JOB"}
+                  </Text>
+                </Pressable>
+              </View>
+            )}
+
             <Pressable
               accessibilityRole="button"
-              onPress={onClose}
+              onPress={close}
               style={({ pressed }) => [styles.done, pressed && styles.pressed]}
             >
               <Text style={styles.doneText}>DONE</Text>
@@ -211,6 +278,25 @@ function Detail({ icon, children }: { icon: ReactNode; children: ReactNode }) {
 }
 
 const styles = StyleSheet.create({
+  dropBox: { gap: 8, marginTop: 12 },
+  dropWarning: {
+    color: palette.danger,
+    fontFamily: "Sora",
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  dropError: { color: palette.danger, fontFamily: "SoraBold", fontSize: 11 },
+  drop: {
+    height: 46,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: palette.danger,
+  },
+  dropConfirm: { backgroundColor: palette.danger },
+  dropText: { color: palette.danger, fontFamily: "SoraBold", fontSize: 13 },
+  dropConfirmText: { color: "#ffffff" },
   backdrop: {
     flex: 1,
     justifyContent: "center",

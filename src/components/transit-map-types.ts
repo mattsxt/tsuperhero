@@ -29,6 +29,7 @@ export type TransitMapState = {
     label?: string | null;
     occupancy?: OccupancyLevel;
     isFull?: boolean;
+    stale?: boolean;
   }[];
   focus: {
     key: number | string;
