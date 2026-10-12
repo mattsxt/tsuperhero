@@ -32,12 +32,17 @@ import { BrandHeader } from "@/components/brand-header";
 import { PasswordStrength } from "@/components/password-strength";
 import { Routes } from "@/constants/routes";
 import { palette } from "@/constants/colors";
+import { useNow } from "@/hooks/use-now";
 
 const stepErrorTitles = ["Email address", "Verification code", "Password"];
 
 const brandBlue = palette.brand;
 const inputWidth = 320;
 const stepFadeMs = 260;
+const resendCooldownMs = 60_000;
+
+const countdown = (seconds: number) =>
+  `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 
 export default function RegisterScreen() {
   const [step, setStep] = useState(1);
@@ -51,17 +56,21 @@ export default function RegisterScreen() {
   const [submitting, setSubmitting] = useState(false);
   const codeInputs = useRef<(TextInput | null)[]>([]);
   const keyboardVisible = useKeyboardVisible();
+  const [resendAt, setResendAt] = useState(0);
+  const now = useNow(1000, step === 2);
+  const resendSeconds = Math.max(0, Math.ceil((resendAt - now) / 1000));
 
   const focusCodeInput = (index: number) => {
     codeInputs.current[Math.max(0, Math.min(index, codeLength - 1))]?.focus();
   };
 
   const resendCode = async () => {
-    if (submitting) return;
+    if (submitting || resendAt > Date.now()) return;
     setSubmitting(true);
     setCode("");
     const result = await requestSignUpCode(email);
     setCodeError(result.ok ? "" : result.error);
+    if (result.ok) setResendAt(Date.now() + resendCooldownMs);
     setSubmitting(false);
   };
 
@@ -95,7 +104,10 @@ export default function RegisterScreen() {
       return;
     }
 
-    if (step === 1) setCode("");
+    if (step === 1) {
+      setCode("");
+      setResendAt(Date.now() + resendCooldownMs);
+    }
     if (step === 2) setCodeError("");
     setStep((currentStep) => Math.min(currentStep + 1, 4));
   };
@@ -166,9 +178,33 @@ export default function RegisterScreen() {
                 </Text>
                 <View style={styles.fieldHeading}>
                   <FieldLabel label="CODE" />
-                  <Pressable onPress={resendCode} style={styles.resendButton}>
-                    <RefreshCcw color="#171717" size={10} strokeWidth={2} />
-                    <Text style={styles.resendText}>RESEND CODE</Text>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: resendSeconds > 0 }}
+                    accessibilityLabel={
+                      resendSeconds > 0
+                        ? `Resend code available in ${resendSeconds} seconds`
+                        : "Resend code"
+                    }
+                    disabled={resendSeconds > 0}
+                    onPress={resendCode}
+                    style={styles.resendButton}
+                  >
+                    <RefreshCcw
+                      color={resendSeconds > 0 ? "#9a9a9a" : "#171717"}
+                      size={10}
+                      strokeWidth={2}
+                    />
+                    <Text
+                      style={[
+                        styles.resendText,
+                        resendSeconds > 0 && styles.resendWaiting,
+                      ]}
+                    >
+                      {resendSeconds > 0
+                        ? `RESEND CODE IN ${countdown(resendSeconds)}`
+                        : "RESEND CODE"}
+                    </Text>
                   </Pressable>
                 </View>
                 <View style={styles.codeRow}>
@@ -471,6 +507,7 @@ const styles = StyleSheet.create({
     fontFamily: "Sora",
     fontSize: 10,
   },
+  resendWaiting: { color: "#9a9a9a", fontVariant: ["tabular-nums"] },
   resendButton: {
     flexDirection: "row",
     alignItems: "center",
