@@ -305,3 +305,23 @@ export function reachedDropoff(
   if (stats) return stats.remainingMeters <= dropoffArrivalMeters;
   return getDistanceMeters(position, dropoff) <= dropoffArrivalMeters;
 }
+
+// The candidate point (e.g. a waiting area) closest to `origin` from which
+// some route also reaches drop-off point B; null when none does.
+export function nearestServedPoint<T extends Coordinates>(
+  origin: Coordinates,
+  candidates: T[],
+  dropoff: Coordinates,
+  routes: RouteCandidate[],
+): T | null {
+  return (
+    candidates
+      .map((candidate) => ({
+        candidate,
+        meters: getDistanceMeters(origin, candidate),
+      }))
+      .sort((a, b) => a.meters - b.meters)
+      .find(({ candidate }) => matchRoutes(candidate, dropoff, routes).length > 0)
+      ?.candidate ?? null
+  );
+}

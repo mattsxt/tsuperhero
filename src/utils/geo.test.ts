@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   choosePathFor,
+  nearestServedPoint,
   matchRoutes,
   nearestPointOnPath,
   pathLengthMeters,
@@ -208,4 +209,27 @@ test("reachedDropoff falls back to straight-line distance without a path", () =>
   const b = offNorth(121.01, 0);
   assert.equal(reachedDropoff(null, offNorth(121.01, 40), b), true);
   assert.equal(reachedDropoff(null, offNorth(121.01, 80), b), false);
+});
+
+test("nearestServedPoint skips a closer waiting area whose route never reaches B", () => {
+  // Route X runs east along 14.6 but stops at 121.01; route Y runs 700 m north
+  // and reaches B at 121.018.
+  const routeX: LatLngPair[] = [
+    [14.6, 121.0],
+    [14.6, 121.01],
+  ];
+  const routeY: LatLngPair[] = [
+    [14.6063, 121.0],
+    [14.6063, 121.02],
+  ];
+  const routes = [
+    { routeId: "x", paths: [routeX] },
+    { routeId: "y", paths: [routeY] },
+  ];
+  const place = { lat: 14.6005, lng: 121.002 };
+  const onX = { id: "on-x", lat: 14.6, lng: 121.002 };
+  const onY = { id: "on-y", lat: 14.6063, lng: 121.002 };
+  const b = { lat: 14.6063, lng: 121.018 };
+  assert.equal(nearestServedPoint(place, [onX, onY], b, routes)?.id, "on-y");
+  assert.equal(nearestServedPoint(place, [onX], b, routes), null);
 });

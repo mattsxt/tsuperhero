@@ -49,6 +49,7 @@ import {
   type LocationPermission,
 } from "@/api/v1/places/controllers";
 import {
+  findNearestPointServing,
   findNearestRoute,
   getTransitRoutes,
   loadTransitRoutes,
@@ -365,6 +366,20 @@ export default function PickupScreen() {
     routeWaitingAreas,
   ]);
   const recommendedWaitingArea = useMemo(() => {
+    // With a drop-off chosen, only recommend a waiting area on a route that
+    // also reaches it; the route nearest the pin may never pass the drop-off.
+    if (place && dropoffPlace) {
+      const priority = waitingAreas.find(
+        (area) => area.id === priorityWaitingAreaId,
+      );
+      const served =
+        (priority &&
+          findNearestPointServing(place, [priority], dropoffPlace)) ??
+        findNearestPointServing(place, waitingAreas, dropoffPlace);
+      return served
+        ? { ...served, distanceMeters: getDistanceMeters(place, served) }
+        : null;
+    }
     const priorityWaitingArea = routeWaitingAreas.find(
       (area) => area.id === priorityWaitingAreaId,
     );
@@ -374,7 +389,17 @@ export default function PickupScreen() {
           distanceMeters: getDistanceMeters(place, priorityWaitingArea),
         }
       : nearestWaitingArea;
-  }, [routeWaitingAreas, priorityWaitingAreaId, place, nearestWaitingArea]);
+    // routes: the matching helper reads the loaded routes, so recompute when they load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    routeWaitingAreas,
+    priorityWaitingAreaId,
+    place,
+    nearestWaitingArea,
+    dropoffPlace,
+    waitingAreas,
+    routes,
+  ]);
 
   const requestLocation = useMemo(
     () =>

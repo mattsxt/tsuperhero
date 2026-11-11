@@ -13,6 +13,7 @@ import {
   distanceToPath,
   getPairDistanceMeters,
   matchRoutes,
+  nearestServedPoint,
   type Coordinates,
   type RouteMatch,
 } from "@/utils/geo";
@@ -164,17 +165,25 @@ export function matchPickupRoutes(
   dropoff: Coordinates,
 ): PickupRouteMatch[] {
   const byId = new Map(selectableRoutes.map((route) => [route.id, route]));
-  return matchRoutes(
-    pickup,
-    dropoff,
-    selectableRoutes.map((route) => ({
-      routeId: route.id,
-      paths: [route.waypoints, ...route.alternativePaths],
-    })),
-  ).flatMap((match) => {
+  return matchRoutes(pickup, dropoff, pickupRouteCandidates()).flatMap((match) => {
     const route = byId.get(match.routeId);
     return route ? [{ ...match, route }] : [];
   });
+}
+
+const pickupRouteCandidates = () =>
+  selectableRoutes.map((route) => ({
+    routeId: route.id,
+    paths: [route.waypoints, ...route.alternativePaths],
+  }));
+
+/** The point closest to `origin` from which a registered route reaches B. */
+export function findNearestPointServing<T extends Coordinates>(
+  origin: Coordinates,
+  candidates: T[],
+  dropoff: Coordinates,
+): T | null {
+  return nearestServedPoint(origin, candidates, dropoff, pickupRouteCandidates());
 }
 
 export function findRoutesNear(point: {
