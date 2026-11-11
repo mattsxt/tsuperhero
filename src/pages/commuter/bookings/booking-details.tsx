@@ -159,7 +159,9 @@ export function BookingDetailsModal({
                 {rental ? "RENTAL · COMPLETED" : "PICKUP · COMPLETED"}
               </Text>
               <Text style={styles.title} numberOfLines={2}>
-                {booking.destination}
+                {!rental && booking.dropoffName
+                  ? `${booking.destination} → ${booking.dropoffName}`
+                  : booking.destination}
               </Text>
             </View>
             <Pressable
@@ -205,6 +207,38 @@ export function BookingDetailsModal({
               >
                 Shared by {booking.sharedBy}
               </Detail>
+            )}
+
+            {!rental && (
+              <View style={styles.group}>
+                <Text style={styles.section}>TRIP</Text>
+                <View>
+                  <TimelineStep
+                    title="Requested"
+                    detail={formatDate(booking.requestedAt)}
+                    done
+                  />
+                  <TimelineStep
+                    title={`Picked up at ${booking.destination}`}
+                    detail={
+                      booking.pickedUpAt
+                        ? clockTime(booking.pickedUpAt)
+                        : "Time not recorded"
+                    }
+                    done={!!booking.pickedUpAt}
+                  />
+                  <TimelineStep
+                    title={`Dropped off at ${booking.dropoffName ?? "your stop"}`}
+                    detail={
+                      booking.droppedOffAt
+                        ? clockTime(booking.droppedOffAt)
+                        : "Time not recorded"
+                    }
+                    done={!!booking.droppedOffAt}
+                    last
+                  />
+                </View>
+              </View>
             )}
 
             {!rental && booking.riders.length > 0 && (
@@ -307,6 +341,34 @@ export function BookingDetailsModal({
   );
 }
 
+const clockTime = (date: Date) =>
+  date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+
+function TimelineStep({
+  title,
+  detail,
+  done,
+  last = false,
+}: {
+  title: string;
+  detail: string;
+  done: boolean;
+  last?: boolean;
+}) {
+  return (
+    <View style={styles.step}>
+      <View style={styles.stepRail}>
+        <View style={[styles.stepDot, done && styles.stepDotDone]} />
+        {!last && <View style={styles.stepLine} />}
+      </View>
+      <View style={[styles.flex, !last && styles.stepBody]}>
+        <Text style={styles.stepTitle}>{title}</Text>
+        <Text style={styles.stepDetail}>{detail}</Text>
+      </View>
+    </View>
+  );
+}
+
 function Detail({ icon, children }: { icon: ReactNode; children: ReactNode }) {
   return (
     <View style={styles.detail}>
@@ -397,6 +459,27 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   group: { gap: 8, marginTop: 6 },
+  step: { flexDirection: "row", gap: 12 },
+  stepRail: { width: 14, alignItems: "center" },
+  stepDot: {
+    width: 14,
+    height: 14,
+    marginTop: 2,
+    borderRadius: 7,
+    borderWidth: 2,
+    borderColor: palette.brand,
+    backgroundColor: "#ffffff",
+  },
+  stepDotDone: { backgroundColor: palette.brand },
+  stepLine: { flex: 1, width: 2, marginVertical: 2, backgroundColor: "#cbd5e1" },
+  stepBody: { paddingBottom: 14 },
+  stepTitle: { color: "#111111", fontFamily: "SoraBold", fontSize: 12 },
+  stepDetail: {
+    marginTop: 2,
+    color: "#6b6b6b",
+    fontFamily: "Sora",
+    fontSize: 11,
+  },
   section: {
     marginLeft: 2,
     color: "#6b6b6b",
