@@ -22,11 +22,13 @@ import {
   getKnownSharedRide,
   isRideActive,
   isRouteSnapError,
+  pickupOnRouteMeters,
   leaveSharedRide,
   loadMyPickupDraft,
   loadMySharedRide,
   loadPickupCompanionStatuses,
   loadRequestStatus,
+  markPickupArrived,
   maxRidersFor,
   pickupVehicleCapacity,
   pickupVehicleNames,
@@ -35,6 +37,7 @@ import {
   removePickupCompanion,
   requestPickup,
   savePickupDraft,
+  savePickupPoint,
   sendPickupCompanionInvite,
   type PickupRequest,
   type PickupVehicle,
@@ -97,13 +100,14 @@ import {
   getNotifications,
   markNotificationsRead,
 } from "@/api/v1/notifications/controllers";
-import { getDistanceMeters } from "@/utils/geo";
+import { getDistanceMeters, snapToPaths, type Coordinates } from "@/utils/geo";
 import { goBackOr } from "@/utils/navigation";
 
 import { ErrorAlert, ErrorMark, ErrorOutline } from "@/components/error-alert";
 import { ActivePickup } from "./active-pickup";
 import { BoardedScreen } from "./boarded-screen";
 import { DropoffStep } from "./dropoff-step";
+import { GoToPickup } from "./go-to-pickup";
 import { PinLocationPicker } from "./pin-location-picker";
 import { ShareRideField } from "./share-ride-field";
 import { LocationPrimer } from "./location-primer";
@@ -150,6 +154,8 @@ export default function PickupScreen() {
   const [place, setPlace] = useState<Place | null>(null);
   const [dropoffPlace, setDropoffPlace] = useState<Place | null>(null);
   const [chosenRouteId, setChosenRouteId] = useState<string | null>(null);
+  const [pickupMapOpen, setPickupMapOpen] = useState(false);
+  const [goToPickup, setGoToPickup] = useState(false);
   const [priorityWaitingAreaId, setPriorityWaitingAreaId] = useState<
     string | null
   >(null);
@@ -442,6 +448,26 @@ export default function PickupScreen() {
     routesLoaded &&
     !routeMatches.length;
 
+  // "Pick me up at my selected location": the request is only sent once the
+  // commuter is at pickup point A. For jeepneys A is the pin moved onto the
+  // route (the chosen route once a drop-off is set); tricycles use the pin.
+  const selectedLocationMode = !!place && requestLocation === place;
+  const pickupTarget = useMemo(() => {
+    if (!place) return null;
+    if (!usesRoute) return place;
+    const snap = selectedMatch
+      ? selectedMatch.pickup
+      : nearestRoute
+        ? snapToPaths(place, [
+            nearestRoute.route.waypoints,
+            ...nearestRoute.route.alternativePaths,
+          ])
+        : null;
+    return snap && snap.distanceMeters > pickupOnRouteMeters
+      ? { ...place, ...snap.point }
+      : place;
+  }, [place, usesRoute, selectedMatch, nearestRoute]);
+
   useEffect(() => {
     if (!draftRequestId || !requestLocation || !requestLocationKey) return;
     if (requestLocationKey === savedLocationKey.current) return;
@@ -581,16 +607,17 @@ export default function PickupScreen() {
     requestDraftId: string | null,
     requestedDropoff: Place | null,
     requestedMatch: PickupRouteMatch | null,
-  ) => {
-    if (busy) return;
+  ): Promise<PickupRequest | null> => {
+    if (busy) return null;
     setBusy(true);
     clearProblem();
     if (!(await checkOnline())) {
       setBusy(false);
-      return showProblem(
+      showProblem(
         "Connection",
         "Reconnect to the internet before requesting a pickup.",
       );
+      return null;
     }
     const result = await requestPickup({
       vehicle: requestedVehicle,
@@ -611,7 +638,8 @@ export default function PickupScreen() {
     if (!result.ok) {
       // The route changed under us: make the commuter pick the route again.
       if (isRouteSnapError(result.error)) setChosenRouteId(null);
-      return showPickupProblem(result.error);
+      showPickupProblem(result.error);
+      return null;
     }
     setDropoffPlace(null);
     setChosenRouteId(null);
@@ -620,6 +648,31 @@ export default function PickupScreen() {
     setDraftRequestId(null);
     savedLocationKey.current = null;
     setActive(result.data);
+    return result.data;
+  };
+
+  // "I AM HERE": the commuter (and companions) reached pickup point A, so the
+  // request is sent and marked as arrived for drivers right away.
+  const sendFromPickupPoint = async (here: Coordinates) => {
+    const sent = await sendPickupRequest(
+      requestLocation,
+      vehicle,
+      passengers,
+      riders,
+      draftRequestId,
+      dropoffPlace,
+      usesRoute ? selectedMatch : null,
+    );
+    if (!sent) return;
+    setGoToPickup(false);
+    const arrived = await markPickupArrived(sent.id, here);
+    if (arrived.ok && arrived.data) {
+      setActive((current) =>
+        current?.id === sent.id
+          ? { ...current, arrived: true, arrivedAt: new Date() }
+          : current,
+      );
+    }
   };
 
   const inviteCompanion = async (rider: Rider): Promise<string | null> => {
@@ -704,6 +757,26 @@ export default function PickupScreen() {
     }
     if (usesRoute && !selectedMatch) {
       showProblem("Drop-off point", "Choose the route you’ll ride.");
+      return;
+    }
+    if (selectedLocationMode && pickupTarget) {
+      // Companions must reach the same point A, so save it on the draft first.
+      if (draftRequestId) {
+        setBusy(true);
+        const saved = await savePickupPoint(
+          draftRequestId,
+          usesRoute ? (selectedMatch?.routeId ?? null) : null,
+          pickupTarget,
+          {
+            name: dropoffPlace.name,
+            lat: dropoffPlace.lat,
+            lng: dropoffPlace.lng,
+          },
+        );
+        setBusy(false);
+        if (!saved.ok) return showPickupProblem(saved.error);
+      }
+      setGoToPickup(true);
       return;
     }
     await sendPickupRequest(
@@ -860,6 +933,22 @@ export default function PickupScreen() {
         at={rentalWindow.at}
         onOpenRental={() => router.replace(Routes.commuterRental)}
         onBack={goBack}
+      />
+    );
+  }
+
+  if (goToPickup && pickupTarget) {
+    return (
+      <GoToPickup
+        target={pickupTarget}
+        riders={riders}
+        busy={busy}
+        problem={problem}
+        onHere={sendFromPickupPoint}
+        onBack={() => {
+          clearProblem();
+          setGoToPickup(false);
+        }}
       />
     );
   }
@@ -1046,11 +1135,48 @@ export default function PickupScreen() {
                     Pick me up at my selected location
                   </Text>
                   <Text style={styles.locationChoiceDescription}>
-                    Request pickup at the pin or place you selected.
+                    {usesRoute
+                      ? "Wait at the point on the route nearest your pin. Your request is sent once you’re there."
+                      : "Request pickup at the pin or place you selected. Your request is sent once you’re there."}
                   </Text>
+                  {!useWaitingArea && pickupTarget && (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="View your pickup point on the map"
+                      onPress={() => setPickupMapOpen(true)}
+                      style={({ pressed }) => [
+                        styles.mapAction,
+                        pressed && styles.pressed,
+                      ]}
+                    >
+                      <Eye color="#ffffff" size={14} strokeWidth={2.2} />
+                      <Text style={styles.mapActionText}>VIEW ON MAP</Text>
+                    </Pressable>
+                  )}
                 </View>
               </Pressable>
             </View>
+          )}
+          {pickupMapOpen && place && pickupTarget && (
+            <RecommendedWaitingAreaMap
+              title="YOUR PICKUP POINT"
+              area={{
+                id: "pickup-point",
+                name: pickupTarget.name,
+                type: "stop",
+                lat: pickupTarget.lat,
+                lng: pickupTarget.lng,
+                routeId: null,
+                vicinity: null,
+                distanceMeters: getDistanceMeters(place, pickupTarget),
+              }}
+              detail={
+                getDistanceMeters(place, pickupTarget) > pickupOnRouteMeters
+                  ? `Moved ${formatDistance(getDistanceMeters(place, pickupTarget))} from your pin onto the route`
+                  : "Your pin is on the route"
+              }
+              onClose={() => setPickupMapOpen(false)}
+            />
           )}
           {waitingAreaMapOpen && recommendedWaitingArea && nearestRoute && (
             <RecommendedWaitingAreaMap
@@ -1246,9 +1372,13 @@ export default function PickupScreen() {
 function RecommendedWaitingAreaMap({
   area,
   onClose,
+  title = "RECOMMENDED WAITING AREA",
+  detail,
 }: {
   area: WaitingAreaRecommendation;
   onClose: () => void;
+  title?: string;
+  detail?: string;
 }) {
   const insets = useSafeAreaInsets();
   return (
@@ -1263,7 +1393,7 @@ function RecommendedWaitingAreaMap({
         <View style={[styles.waitingAreaMapTop, { top: insets.top + 12 }]}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Close waiting area map"
+            accessibilityLabel="Close map"
             onPress={onClose}
             style={({ pressed }) => [
               styles.waitingAreaMapClose,
@@ -1272,16 +1402,15 @@ function RecommendedWaitingAreaMap({
           >
             <X color={brandBlue} size={20} strokeWidth={2.5} />
           </Pressable>
-          <Text style={styles.waitingAreaMapTopTitle}>
-            RECOMMENDED WAITING AREA
-          </Text>
+          <Text style={styles.waitingAreaMapTopTitle}>{title}</Text>
         </View>
         <View
           style={[styles.waitingAreaMapCard, { bottom: insets.bottom + 14 }]}
         >
           <Text style={styles.waitingAreaMapName}>{area.name}</Text>
           <Text style={styles.waitingAreaMapRoute}>
-            {formatDistance(area.distanceMeters)} from your selected location
+            {detail ??
+              `${formatDistance(area.distanceMeters)} from your selected location`}
           </Text>
         </View>
       </View>

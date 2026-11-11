@@ -11,6 +11,7 @@ import {
   rideStats,
   straightRideStats,
   sliceAlong,
+  snapToPaths,
   type LatLngPair,
 } from "./geo.ts";
 
@@ -245,4 +246,15 @@ test("straightRideStats measures a route-less (tricycle) ride in a straight line
   assert.deepEqual(stats.ahead.at(-1), [b.lat, b.lng]);
   assert.equal(straightRideStats(a, b, null).progress, 0);
   assert.equal(reachedDropoff(straightRideStats(a, b, b), b, b), true);
+});
+
+test("snapToPaths snaps onto the closest of several paths", () => {
+  const far: LatLngPair[] = [
+    [14.61, 121.0],
+    [14.61, 121.02],
+  ];
+  const snap = snapToPaths(offNorth(121.005, 50), [far, P]);
+  near(snap!.point.lat, 14.6, 1e-6);
+  near(snap!.distanceMeters, 50, 2);
+  assert.equal(snapToPaths(offNorth(121.005, 50), []), null);
 });

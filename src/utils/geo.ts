@@ -353,3 +353,16 @@ export function straightRideStats(
     ahead: [toPair(position), toPair(b)],
   };
 }
+
+/** Snaps a point onto the closest of several paths (e.g. a route's main and alternative paths). */
+export function snapToPaths(
+  point: Coordinates,
+  paths: LatLngPair[][],
+): PathSnap | null {
+  return (
+    paths
+      .filter((path) => path.length > 0)
+      .map((path) => nearestPointOnPath(point, path))
+      .sort((a, b) => a.distanceMeters - b.distanceMeters)[0] ?? null
+  );
+}

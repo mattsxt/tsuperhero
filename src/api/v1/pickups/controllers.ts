@@ -481,6 +481,31 @@ export function loadRideProgress(): Promise<Result<RideProgress | null>> {
   });
 }
 
+/**
+ * Saves pickup point A (and B) on a shared-ride draft before it is sent, so
+ * companions are guided to, and checked against, the same point.
+ */
+export function savePickupPoint(
+  requestId: string,
+  routeId: string | null,
+  pickup: Coordinates,
+  dropoff: DropoffPoint,
+): Promise<Result<void>> {
+  return attempt(async () => {
+    await unwrap(
+      pickupRoutes.setPickupRoute(
+        requestId,
+        routeId,
+        pickup.lat,
+        pickup.lng,
+        dropoff.name,
+        dropoff.lat,
+        dropoff.lng,
+      ),
+    );
+  });
+}
+
 export function markPickupArrived(
   requestId: string,
   location: { lat: number; lng: number },
