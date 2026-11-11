@@ -127,16 +127,23 @@ export function GoToPickup({
               You’re at the pickup point
             </Text>
           </View>
-        ) : (
+        ) : distance === null ? (
           <View style={styles.statusRow}>
-            <Text style={styles.distance}>
-              {distance === null ? "—" : formatDistance(distance)}
-            </Text>
-            <Text style={styles.distanceMeta}>
-              {distance === null
-                ? "Finding your location…"
-                : `away · about ${Math.max(1, Math.round(distance / walkingMetersPerMinute))} min walk`}
-            </Text>
+            <Text style={styles.distanceMeta}>Finding your location…</Text>
+          </View>
+        ) : (
+          <View style={styles.stats}>
+            <View style={styles.stat}>
+              <Text style={styles.statValue}>{formatDistance(distance)}</Text>
+              <Text style={styles.statLabel}>AWAY</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.stat}>
+              <Text style={styles.statValue}>
+                {Math.max(1, Math.round(distance / walkingMetersPerMinute))} min
+              </Text>
+              <Text style={styles.statLabel}>WALK</Text>
+            </View>
           </View>
         )}
 
@@ -254,10 +261,20 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     shadowOffset: { width: 0, height: -2 },
   },
-  statusRow: { flexDirection: "row", alignItems: "baseline", gap: 8 },
+  statusRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   statusTitle: { fontFamily: "SoraBold", fontSize: 16 },
-  distance: { color: brandBlue, fontFamily: "SoraBold", fontSize: 24 },
   distanceMeta: { color: mutedText, fontFamily: "Sora", fontSize: 12 },
+  // Two equal stat blocks (distance | walking time) split by a thin divider.
+  stats: { flexDirection: "row", alignItems: "center" },
+  stat: { flex: 1, alignItems: "center", gap: 2 },
+  statValue: { color: brandBlue, fontFamily: "SoraBold", fontSize: 22 },
+  statLabel: {
+    color: mutedText,
+    fontFamily: "SoraBold",
+    fontSize: 10,
+    letterSpacing: 0.8,
+  },
+  statDivider: { width: 1, alignSelf: "stretch", backgroundColor: "#e2e8f0" },
   place: {
     flexDirection: "row",
     alignItems: "center",
