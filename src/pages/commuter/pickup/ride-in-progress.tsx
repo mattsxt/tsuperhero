@@ -2,14 +2,16 @@ import { StatusBar } from "expo-status-bar";
 import ArrowLeft from "lucide-react-native/icons/arrow-left";
 import Flag from "lucide-react-native/icons/flag";
 import RadioTower from "lucide-react-native/icons/radio-tower";
+import Siren from "lucide-react-native/icons/siren";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
   completeMyRide,
   formatEta,
   loadRideProgress,
+  reportRideEmergency,
   type PickupRequest,
   type RideProgress,
 } from "@/api/v1/pickups/controllers";
@@ -61,6 +63,7 @@ export function RideInProgress({
   const [ride, setRide] = useState<RideProgress | null>(null);
   const [me, setMe] = useState<Coordinates | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [sosOpen, setSosOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState("");
   const [cardHeight, setCardHeight] = useState(260);
@@ -232,6 +235,15 @@ export function RideInProgress({
         <View style={styles.titlePill}>
           <Text style={styles.topTitle}>ON THE WAY</Text>
         </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="SOS: call 911 and alert TsuperHero"
+          hitSlop={6}
+          onPress={() => setSosOpen(true)}
+          style={({ pressed }) => [styles.sos, pressed && styles.pressed]}
+        >
+          <Text style={styles.sosText}>SOS</Text>
+        </Pressable>
       </View>
 
       <View
@@ -302,6 +314,21 @@ export function RideInProgress({
       </View>
 
       <ConfirmModal
+        visible={sosOpen}
+        destructive
+        title="Call 911?"
+        message="This calls emergency services and sends your live location, driver and plate number to TsuperHero admins."
+        confirmLabel="Call 911"
+        cancelLabel="Cancel"
+        icon={<Siren color="#ffffff" size={22} strokeWidth={2.2} />}
+        onCancel={() => setSosOpen(false)}
+        onConfirm={() => {
+          setSosOpen(false);
+          void Linking.openURL("tel:911");
+          void reportRideEmergency(request.id, position);
+        }}
+      />
+      <ConfirmModal
         visible={confirmOpen}
         title="Dropped off?"
         message="This ends your ride. Only confirm once you've gotten off the vehicle."
@@ -343,6 +370,29 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.18,
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 2 },
+  },
+  sos: {
+    position: "absolute",
+    right: 0,
+    width: 48,
+    height: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 24,
+    borderWidth: 3,
+    borderColor: "#ffffff",
+    backgroundColor: "#dc2626",
+    elevation: 6,
+    shadowColor: "#000000",
+    shadowOpacity: 0.25,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  sosText: {
+    color: "#ffffff",
+    fontFamily: "SoraBold",
+    fontSize: 12,
+    letterSpacing: 0.6,
   },
   titlePill: {
     paddingVertical: 9,
