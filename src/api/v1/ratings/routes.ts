@@ -12,6 +12,7 @@ export type RatingSummaryRow = {
     request_type: "Pickup" | "Charter_Rental";
     destination: string | null;
     commuter_name: string | null;
+    commuter_picture?: string | null;
   }[];
 };
 

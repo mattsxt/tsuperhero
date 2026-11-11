@@ -1,6 +1,7 @@
 import { ratingRoutes, type RatingSummaryRow } from "@/api/v1/ratings/routes";
 import { unwrapCached } from "@/api/v1/cache";
 import { attempt, failure, unwrap, type Result } from "@/api/v1/result";
+import { profileRoutes } from "@/api/v1/profile/routes";
 
 export const maxFeedbackLength = 500;
 
@@ -12,6 +13,7 @@ export type Review = {
   kind: "pickup" | "rental";
   destination: string | null;
   commuterName: string | null;
+  commuterPicture: string | null;
 };
 
 export type RatingSummary = {
@@ -68,6 +70,9 @@ export function loadMyRatings(): Promise<Result<RatingSummary>> {
         kind: review.request_type === "Pickup" ? "pickup" : "rental",
         destination: review.destination,
         commuterName: review.commuter_name,
+        commuterPicture: review.commuter_picture
+          ? profileRoutes.getPictureUrl(review.commuter_picture)
+          : null,
       })),
     };
   });

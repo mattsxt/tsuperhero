@@ -1,3 +1,4 @@
+import { Image } from "expo-image";
 import Star from "lucide-react-native/icons/star";
 import { useCallback, useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
@@ -133,7 +134,19 @@ function ReviewCard({ review }: { review: Review }) {
     >
       <View style={styles.reviewTop}>
         <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{name.charAt(0).toUpperCase()}</Text>
+          {review.commuterPicture ? (
+            <Image
+              source={{ uri: review.commuterPicture }}
+              style={styles.avatarImage}
+              contentFit="cover"
+              transition={150}
+              accessibilityIgnoresInvertColors
+            />
+          ) : (
+            <Text style={styles.avatarText}>
+              {name.charAt(0).toUpperCase()}
+            </Text>
+          )}
         </View>
         <View style={styles.reviewWho}>
           <Text style={styles.reviewName} numberOfLines={1}>
@@ -222,9 +235,11 @@ const styles = StyleSheet.create({
     height: 40,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
     borderRadius: 20,
     backgroundColor: "#e0e7ff",
   },
+  avatarImage: { width: 40, height: 40 },
   avatarText: { color: brandBlue, fontFamily: "SoraBold", fontSize: 16 },
   reviewWho: { flex: 1, gap: 2 },
   reviewName: { color: "#111111", fontFamily: "SoraBold", fontSize: 14 },
