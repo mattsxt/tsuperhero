@@ -243,6 +243,8 @@ function fitTo(
   }
 }
 
+const mutedPinGrey = "#64748b";
+
 export function TransitMap({
   state,
   onDrag,
@@ -292,6 +294,7 @@ export function TransitMap({
               ? String(pickup.passengers)
               : ""),
           label: pickup.label?.trim() ?? "",
+          muted: !!pickup.muted,
         },
         geometry: {
           type: "Point" as const,
@@ -304,14 +307,20 @@ export function TransitMap({
   const pickupLineShape = useMemo(
     () =>
       lineCollection(
-        [
-          ...(state.pickupLine && state.pickupLine.length > 1
-            ? [state.pickupLine]
-            : []),
-          ...(state.extraLines ?? []).filter((line) => line.length > 1),
-        ].map((line) => line.map(toPosition)),
+        state.pickupLine && state.pickupLine.length > 1
+          ? [state.pickupLine.map(toPosition)]
+          : [],
       ),
-    [state.pickupLine, state.extraLines],
+    [state.pickupLine],
+  );
+  const extraLineShape = useMemo(
+    () =>
+      lineCollection(
+        (state.extraLines ?? [])
+          .filter((line) => line.length > 1)
+          .map((line) => line.map(toPosition)),
+      ),
+    [state.extraLines],
   );
 
   useEffect(() => {
@@ -448,19 +457,35 @@ export function TransitMap({
           />
         </ShapeSource>
 
+        <ShapeSource id="extra-lines" shape={extraLineShape}>
+          <LineLayer
+            id="extra-lines"
+            style={{
+              lineColor: mutedPinGrey,
+              lineWidth: 3,
+              lineOpacity: 0.9,
+              lineDasharray: [1, 1.6],
+              lineJoin: "round",
+            }}
+          />
+        </ShapeSource>
+
         <ShapeSource id="pickups" shape={pickupShape}>
           <CircleLayer
             id="pickup-pins"
             style={{
-              circleRadius: 13,
-              circleColor: pinRed,
+              circleRadius: ["case", ["get", "muted"], 7, 13],
+              circleColor: ["case", ["get", "muted"], mutedPinGrey, pinRed],
               circleStrokeColor: "#ffffff",
-              circleStrokeWidth: 2.5,
+              circleStrokeWidth: ["case", ["get", "muted"], 2, 2.5],
             }}
           />
           <CircleLayer
             id="pickup-pin-centers"
-            style={{ circleRadius: 8, circleColor: "#ffffff" }}
+            style={{
+              circleRadius: ["case", ["get", "muted"], 2.5, 8],
+              circleColor: "#ffffff",
+            }}
           />
           <SymbolLayer
             id="pickup-counts"
@@ -478,10 +503,15 @@ export function TransitMap({
             style={{
               textField: ["get", "label"],
               textSize: 11,
-              textColor: "#193caf",
+              textColor: ["case", ["get", "muted"], "#475569", "#193caf"],
               textHaloColor: "#ffffff",
               textHaloWidth: 2,
-              textOffset: [0, 1.9],
+              textOffset: [
+                "case",
+                ["get", "muted"],
+                ["literal", [0, 1.1]],
+                ["literal", [0, 1.9]],
+              ],
               textAnchor: "top",
               textMaxWidth: 12,
               textFont: ["Open Sans Bold", "Arial Unicode MS Bold"],

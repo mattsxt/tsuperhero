@@ -86,6 +86,12 @@ const mapHtml = `<!DOCTYPE html>
   }
   .waiting.hub .waiting-icon { border-radius: 6px; }
   .pickup { position: relative; line-height: 0; filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.35)); }
+  .pickup.muted { filter: none; }
+  .muted-dot {
+    display: block; width: 10px; height: 10px; border-radius: 50%;
+    background: #ffffff; border: 4px solid #64748b; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  }
+  .pickup.muted .pickup-label { color: #475569; }
   .me {
     width: 14px; height: 14px; border-radius: 50%;
     background: #1a73e8; border: 3px solid #ffffff;
@@ -236,9 +242,11 @@ const mapHtml = `<!DOCTYPE html>
       pickupMarkers = [];
       (state.pickups || []).forEach(function (pickup) {
         var content = document.createElement("div");
-        var counted = !!pickup.badge || typeof pickup.passengers === "number";
-        content.className = "pickup" + (counted ? " counted" : "");
-        content.innerHTML = counted ? COUNTED_PIN_SVG : MAP_PIN_SVG;
+        var counted = !pickup.muted && (!!pickup.badge || typeof pickup.passengers === "number");
+        content.className = "pickup" + (counted ? " counted" : "") + (pickup.muted ? " muted" : "");
+        content.innerHTML = pickup.muted
+          ? '<span class="muted-dot"></span>'
+          : counted ? COUNTED_PIN_SVG : MAP_PIN_SVG;
         if (counted) {
           var count = document.createElement("span");
           count.className = "pickup-count";
@@ -257,9 +265,10 @@ const mapHtml = `<!DOCTYPE html>
     var lineKey = JSON.stringify([state.pickupLine || null, state.extraLines || null]);
     if (lineKey !== lastPickupLineKey) {
       lastPickupLineKey = lineKey;
-      var lines = (state.pickupLine && state.pickupLine.length > 1 ? [state.pickupLine] : [])
-        .concat((state.extraLines || []).filter(function (line) { return line.length > 1; }));
-      setLines("pickup-line", lines.map(function (line) { return line.map(lngLat); }));
+      setLines("pickup-line", state.pickupLine && state.pickupLine.length > 1 ? [state.pickupLine.map(lngLat)] : []);
+      setLines("extra-lines", (state.extraLines || [])
+        .filter(function (line) { return line.length > 1; })
+        .map(function (line) { return line.map(lngLat); }));
     }
     var lineColor = state.pickupLineColor || "#1f2937";
     if (lineColor !== lastPickupLineColor) {
@@ -417,6 +426,7 @@ const mapHtml = `<!DOCTYPE html>
       map.addSource("alt", { type: "geojson", data: EMPTY });
       map.addSource("route", { type: "geojson", data: EMPTY });
       map.addSource("pickup-line", { type: "geojson", data: EMPTY });
+      map.addSource("extra-lines", { type: "geojson", data: EMPTY });
       map.addLayer({
         id: "alt", type: "line", source: "alt",
         paint: { "line-color": "#1034A6", "line-width": 4, "line-opacity": 0.95, "line-dasharray": [2, 2] }
@@ -430,6 +440,11 @@ const mapHtml = `<!DOCTYPE html>
         id: "pickup-line", type: "line", source: "pickup-line",
         layout: { "line-join": "round", "line-cap": "round" },
         paint: { "line-color": "#1f2937", "line-width": 3, "line-opacity": 0.9 }
+      });
+      map.addLayer({
+        id: "extra-lines", type: "line", source: "extra-lines",
+        layout: { "line-join": "round" },
+        paint: { "line-color": "#64748b", "line-width": 3, "line-opacity": 0.9, "line-dasharray": [1, 1.6] }
       });
       send({ type: "ready" });
     });

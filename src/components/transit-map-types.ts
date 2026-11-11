@@ -47,9 +47,11 @@ export type TransitMapState = {
     /** Short text drawn inside the pin (e.g. "A"), shown instead of passengers. */
     badge?: string;
     label?: string;
+    /** A secondary reference point (e.g. the commuter's original pin): small and grey. */
+    muted?: boolean;
   }[];
   pickupLine?: [number, number][] | null;
-  /** More lines drawn in the pickup-line style (e.g. pin -> point on route). */
+  /** Dashed grey walking lines (e.g. the commuter's pin -> point on the route). */
   extraLines?: [number, number][][];
   pickupLineColor?: string;
   userLocation?: { lat: number; lng: number } | null;
