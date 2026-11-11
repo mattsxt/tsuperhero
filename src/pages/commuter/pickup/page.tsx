@@ -947,6 +947,7 @@ export default function PickupScreen() {
     return (
       <GoToPickup
         target={pickupTarget}
+        routeName={usesRoute ? (selectedMatch?.route.name ?? null) : null}
         riders={riders}
         busy={busy}
         problem={problem}
