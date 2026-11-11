@@ -54,10 +54,6 @@ const { brandBlue, headerBlue, mutedText, softBlue, text } = moduleColors;
 const cardNavy = "#0f2a5c";
 const lightBlue = "#a8dcf7";
 const livePollMs = 3_000;
-let lastRouteId: string | null = null;
-const rememberRoute = (id: string | null) => {
-  lastRouteId = id;
-};
 const onRouteMeters = 60;
 const panelPadding = 20;
 const vehicleCardGap = 10;
@@ -96,7 +92,9 @@ export default function RoutesScreen() {
     destName?: string;
   }>();
   const transitRoutes = useTransitRoutes();
-  const startRouteId = params.routeId ?? lastRouteId;
+  // Leaving Routes clears the selection; only a route passed in (e.g. from
+  // Home's destination search) starts selected.
+  const startRouteId = params.routeId ?? null;
   const initialRoute = findRoute(startRouteId);
   const destination = useMemo(() => {
     const lat = Number.parseFloat(params.destLat ?? "");
@@ -253,12 +251,6 @@ export default function RoutesScreen() {
   const matchingRoutes = transitRoutes.filter((option) =>
     option.name.toLowerCase().includes(query.trim().toLowerCase()),
   );
-
-  // Remember the selected route however it was chosen (from the list here or
-  // passed in from Home's destination search), so reopening Routes restores it.
-  useEffect(() => {
-    rememberRoute(routeId);
-  }, [routeId]);
 
   // A restored route's name may only be known once the route list loads.
   const searchText = !query && !pickerOpen && route ? route.name : query;
