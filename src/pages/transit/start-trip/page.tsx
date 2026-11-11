@@ -1069,10 +1069,10 @@ function Trip({
             />
             <Text style={styles.statusChipText} numberOfLines={1}>
               {!onTrip
-                ? "Idle · location not shared"
+                ? "Idle"
                 : syncWaiting
                   ? `${tripStatusLabels[status]} · offline, will sync`
-                  : `${tripStatusLabels[status]} · sharing location`}
+                  : tripStatusLabels[status]}
             </Text>
           </View>
           <View
