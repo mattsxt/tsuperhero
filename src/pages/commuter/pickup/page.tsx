@@ -1410,7 +1410,9 @@ function RecommendedWaitingAreaMap({
           >
             <X color={brandBlue} size={20} strokeWidth={2.5} />
           </Pressable>
-          <Text style={styles.waitingAreaMapTopTitle}>{title}</Text>
+          <View style={styles.waitingAreaMapTitlePill}>
+            <Text style={styles.waitingAreaMapTopTitle}>{title}</Text>
+          </View>
         </View>
         <View
           style={[styles.waitingAreaMapCard, { bottom: insets.bottom + 14 }]}
@@ -1584,15 +1586,18 @@ const styles = StyleSheet.create({
   },
   mapActionText: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 10 },
   waitingAreaMapScreen: { flex: 1, backgroundColor: "#ffffff" },
+  // Close button pinned left; the title pill is centred on the screen.
   waitingAreaMapTop: {
     position: "absolute",
     left: 16,
     right: 16,
-    flexDirection: "row",
+    height: 42,
     alignItems: "center",
-    gap: 12,
+    justifyContent: "center",
   },
   waitingAreaMapClose: {
+    position: "absolute",
+    left: 0,
     width: 42,
     height: 42,
     alignItems: "center",
@@ -1600,15 +1605,27 @@ const styles = StyleSheet.create({
     borderRadius: 21,
     backgroundColor: "#ffffff",
     elevation: 4,
+    shadowColor: "#000000",
+    shadowOpacity: 0.18,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  waitingAreaMapTitlePill: {
+    paddingVertical: 9,
+    paddingHorizontal: 16,
+    borderRadius: 999,
+    backgroundColor: brandBlue,
+    elevation: 4,
+    shadowColor: "#000000",
+    shadowOpacity: 0.18,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
   },
   waitingAreaMapTopTitle: {
-    color: brandBlue,
+    color: "#ffffff",
     fontFamily: "SoraBold",
     fontSize: 11,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: "#ffffff",
+    letterSpacing: 0.6,
   },
   waitingAreaMapCard: {
     position: "absolute",
