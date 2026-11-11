@@ -8,6 +8,7 @@ import {
   nearestPointOnPath,
   pathLengthMeters,
   rideProgress,
+  shouldRefreshPosition,
   reachedDropoff,
   rideStats,
   straightRideStats,
@@ -338,4 +339,12 @@ test('pickRouteChoices offers only the best route when none passes the drop-off'
   const choices = pickRouteChoices([fakeMatch('best', 400), fakeMatch('next', 300)]);
   assert.deepEqual(choices.map((m) => m.routeId), ['best']);
   assert.deepEqual(pickRouteChoices([]), []);
+});
+
+test('shouldRefreshPosition skips GPS jitter but refreshes on movement or age', () => {
+  const prev = { lat: 14.6, lng: 121.0, at: 0 };
+  assert.equal(shouldRefreshPosition(null, prev), true);
+  assert.equal(shouldRefreshPosition(prev, { lat: 14.60001, lng: 121.0, at: 1000 }), false);
+  assert.equal(shouldRefreshPosition(prev, { lat: 14.60004, lng: 121.0, at: 1000 }), true);
+  assert.equal(shouldRefreshPosition(prev, { lat: 14.6, lng: 121.0, at: 5000 }), true);
 });

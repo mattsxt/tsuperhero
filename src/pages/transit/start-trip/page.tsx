@@ -92,7 +92,12 @@ import { ModuleHeader, moduleColors } from "@/components/module-ui";
 import { TransitMap, type TransitMapState } from "@/components/transit-map";
 import { occupancyPinColors } from "@/components/transit-map-types";
 import { Routes } from "@/constants/routes";
-import { getDistanceMeters, getPairDistanceMeters } from "@/utils/geo";
+import {
+  getDistanceMeters,
+  getPairDistanceMeters,
+  shouldRefreshPosition,
+  type TimedPosition,
+} from "@/utils/geo";
 import { goBackOr } from "@/utils/navigation";
 import { palette } from "@/constants/colors";
 import { useOnline } from "@/hooks/use-online";
@@ -268,6 +273,7 @@ function Trip({
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
 
   const latestCoords = useRef<LocationObjectCoords | null>(null);
+  const shownPosition = useRef<TimedPosition | null>(null);
   const anchor = useRef<LocationObjectCoords | null>(null);
   const lastMovedAt = useRef(0);
   const savedState = useRef<string | null>("idle:0:false");
@@ -341,6 +347,13 @@ function Trip({
           addTripPoint(next.latitude, next.longitude, next.accuracy);
         lastMovedAt.current = Date.now();
       }
+      const position = {
+        lat: next.latitude,
+        lng: next.longitude,
+        at: location.timestamp,
+      };
+      if (!shouldRefreshPosition(shownPosition.current, position)) return;
+      shownPosition.current = position;
       setFix(location);
       setZoomAt((current) => current ?? location.timestamp);
     }).then((result) => {
@@ -752,6 +765,16 @@ function Trip({
   };
 
   const coords = fix?.coords ?? null;
+  const mapPickups = useMemo(
+    () =>
+      [...pickups, ...accepted].map(({ id, lat, lng, passengers }) => ({
+        id,
+        lat,
+        lng,
+        passengers,
+      })),
+    [pickups, accepted],
+  );
   const mapState = useMemo<TransitMapState>(
     () => ({
       routeId: route?.id ?? null,
@@ -778,20 +801,12 @@ function Trip({
               zoom: fix.timestamp === zoomAt ? myVehicleZoom : undefined,
             }
           : null,
-      pickups: [...pickups, ...accepted].map(
-        ({ id, lat, lng, passengers }) => ({
-          id,
-          lat,
-          lng,
-          passengers,
-        }),
-      ),
+      pickups: mapPickups,
       padTop: headerHeight + 30,
       padBottom: panelHeight + 30,
     }),
     [
-      pickups,
-      accepted,
+      mapPickups,
       route,
       routePath,
       alternativePaths,

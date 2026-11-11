@@ -35,6 +35,7 @@ const routeBlue = "#1034A6";
 const pinRed = "#c81e1e";
 const defaultCenter: Position = [123.1948, 13.6218];
 const glideMs = 900;
+const glideFrameMs = 66;
 
 const vehicleBox = { width: 36, height: 31, pin: 31 };
 const waitingBox = { width: 200, height: 80, icon: 22 };
@@ -90,10 +91,16 @@ function useGlide(lat: number, lng: number) {
     const from = current.current;
     if (from.lat === lat && from.lng === lng) return;
     let start: number | null = null;
+    let lastDrawn = 0;
     let frame = 0;
     const step = (time: number) => {
       if (start === null) start = time;
       const t = Math.min((time - start) / glideMs, 1);
+      if (t < 1 && time - lastDrawn < glideFrameMs) {
+        frame = requestAnimationFrame(step);
+        return;
+      }
+      lastDrawn = time;
       const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
       const next = {
         lat: from.lat + (lat - from.lat) * eased,

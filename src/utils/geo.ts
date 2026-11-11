@@ -396,3 +396,19 @@ export function pickRouteChoices<T extends Pick<RouteMatch, "dropoff">>(
   );
   return passing.length ? passing.slice(0, max) : matches.slice(0, 1);
 }
+
+
+export type TimedPosition = Coordinates & { at: number };
+
+export function shouldRefreshPosition(
+  previous: TimedPosition | null,
+  next: TimedPosition,
+  minMeters = 3,
+  maxAgeMs = 5_000,
+) {
+  if (!previous) return true;
+  return (
+    next.at - previous.at >= maxAgeMs ||
+    getDistanceMeters(previous, next) >= minMeters
+  );
+}
