@@ -1,13 +1,13 @@
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
-import { router } from "expo-router";
+import { router, useNavigation } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import Camera from "lucide-react-native/icons/camera";
 import Lock from "lucide-react-native/icons/lock";
 import Mail from "lucide-react-native/icons/mail";
 import Phone from "lucide-react-native/icons/phone";
 import UserRoundPen from "lucide-react-native/icons/user-round-pen";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -24,6 +24,7 @@ import {
   type ProfileEditErrors,
   type ProfileEditField,
 } from "@/api/v1/profile/controllers";
+import { ConfirmModal } from "@/components/confirm-modal";
 import { DateTimeField } from "@/components/date-time-field";
 import { LoadingLogo } from "@/components/LoadingLogo";
 import { MiniToast, type MiniToastMessage } from "@/components/mini-toast";
@@ -67,6 +68,11 @@ export default function EditProfileScreen() {
   const [saveError, setSaveError] = useState("");
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<MiniToastMessage | null>(null);
+  const navigation = useNavigation();
+  const [discardOpen, setDiscardOpen] = useState(false);
+  const pendingLeave = useRef<(() => void) | null>(null);
+  const dirty = useRef(false);
+  const leaving = useRef(false);
 
   const showToast = (message: string) =>
     setToast((current) => ({ id: (current?.id ?? 0) + 1, text: message }));
@@ -93,7 +99,33 @@ export default function EditProfileScreen() {
     };
   }, []);
 
+  const hasChanges =
+    !!profile &&
+    (!!picture ||
+      email.trim() !== profile.email ||
+      contact !== profile.contact ||
+      (!!birthDate && toIsoDate(birthDate) !== toIsoDate(profile.birthDate)));
+
+  useEffect(() => {
+    dirty.current = hasChanges && !saving;
+  }, [hasChanges, saving]);
+
+  useEffect(
+    () =>
+      navigation.addListener("beforeRemove", (event) => {
+        if (!dirty.current || leaving.current) return;
+        event.preventDefault();
+        pendingLeave.current = () => navigation.dispatch(event.data.action);
+        setDiscardOpen(true);
+      }),
+    [navigation],
+  );
+
   const goBack = () => goBackOr(Routes.profile);
+  const leaveAfterSave = () => {
+    leaving.current = true;
+    goBack();
+  };
 
   const clearError = (field: ProfileEditField) => {
     if (errors[field]) {
@@ -121,12 +153,6 @@ export default function EditProfileScreen() {
     );
   }
 
-  const hasChanges =
-    !!picture ||
-    email.trim() !== profile.email ||
-    contact !== profile.contact ||
-    (!!birthDate && toIsoDate(birthDate) !== toIsoDate(profile.birthDate));
-
   const save = async () => {
     if (saving) return;
 
@@ -150,11 +176,11 @@ export default function EditProfileScreen() {
       Alert.alert(
         "Confirm your new email",
         `We sent a confirmation link to ${email.trim()}. Your email will change once you open it.`,
-        [{ text: "OK", onPress: goBack }],
+        [{ text: "OK", onPress: leaveAfterSave }],
       );
       return;
     }
-    goBack();
+    leaveAfterSave();
   };
 
   const pictureUri = picture?.uri ?? profile.pictureUrl;
@@ -306,11 +332,6 @@ export default function EditProfileScreen() {
         <ModuleButton
           label={saving ? "SAVING..." : "SAVE CHANGES"}
           disabled={saving || !hasChanges || !online}
-          disabledHint={
-            online && !saving && !hasChanges
-              ? "Change something above to save."
-              : undefined
-          }
           onPress={save}
           style={styles.saveButton}
         />
@@ -325,6 +346,25 @@ export default function EditProfileScreen() {
         />
       </StickyHeader>
       <MiniToast message={toast} top={insets.top + 12} />
+      <ConfirmModal
+        visible={discardOpen}
+        destructive
+        title="Discard changes?"
+        message="You have unsaved changes to your profile. If you leave now, they'll be lost."
+        confirmLabel="Discard"
+        cancelLabel="Keep editing"
+        onCancel={() => {
+          pendingLeave.current = null;
+          setDiscardOpen(false);
+        }}
+        onConfirm={() => {
+          setDiscardOpen(false);
+          leaving.current = true;
+          const leave = pendingLeave.current;
+          pendingLeave.current = null;
+          leave?.();
+        }}
+      />
     </View>
   );
 }
