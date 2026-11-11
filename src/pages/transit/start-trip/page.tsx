@@ -1359,7 +1359,7 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.7 },
   overlayStack: {
     position: "absolute",
-    zIndex: 2,
+    zIndex: 1,
     elevation: 6,
     left: 12,
     right: 12,
@@ -1461,6 +1461,8 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     backgroundColor: panelNavy,
+    zIndex: 3,
+    elevation: 16,
   },
   statusRow: {
     flexDirection: "row",
