@@ -9,6 +9,7 @@ import {
   rideProgress,
   reachedDropoff,
   rideStats,
+  straightRideStats,
   sliceAlong,
   type LatLngPair,
 } from "./geo.ts";
@@ -232,4 +233,16 @@ test("nearestServedPoint skips a closer waiting area whose route never reaches B
   const b = { lat: 14.6063, lng: 121.018 };
   assert.equal(nearestServedPoint(place, [onX, onY], b, routes)?.id, "on-y");
   assert.equal(nearestServedPoint(place, [onX], b, routes), null);
+});
+
+test("straightRideStats measures a route-less (tricycle) ride in a straight line", () => {
+  const a = { lat: 14.6, lng: 121.0 };
+  const b = { lat: 14.6, lng: 121.01 };
+  const half = { lat: 14.6, lng: 121.005 };
+  const stats = straightRideStats(a, b, half);
+  near(stats.progress, 0.5, 0.01);
+  near(stats.remainingMeters, stats.totalMeters / 2, 5);
+  assert.deepEqual(stats.ahead.at(-1), [b.lat, b.lng]);
+  assert.equal(straightRideStats(a, b, null).progress, 0);
+  assert.equal(reachedDropoff(straightRideStats(a, b, b), b, b), true);
 });

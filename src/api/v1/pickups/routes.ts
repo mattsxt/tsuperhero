@@ -56,7 +56,8 @@ export const pickupRoutes = {
 
   setPickupRoute: (
     requestId: string,
-    routeId: string,
+    /** null for tricycles, which have no fixed route. */
+    routeId: string | null,
     pickupLat: number,
     pickupLng: number,
     dropoffName: string,

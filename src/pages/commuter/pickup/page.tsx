@@ -368,7 +368,7 @@ export default function PickupScreen() {
   const recommendedWaitingArea = useMemo(() => {
     // With a drop-off chosen, only recommend a waiting area on a route that
     // also reaches it; the route nearest the pin may never pass the drop-off.
-    if (place && dropoffPlace) {
+    if (place && dropoffPlace && vehicle === "jeep") {
       const priority = waitingAreas.find(
         (area) => area.id === priorityWaitingAreaId,
       );
@@ -399,6 +399,7 @@ export default function PickupScreen() {
     dropoffPlace,
     waitingAreas,
     routes,
+    vehicle,
   ]);
 
   const requestLocation = useMemo(
@@ -417,14 +418,17 @@ export default function PickupScreen() {
     ? `${requestLocation.lat}:${requestLocation.lng}:${requestLocation.name}`
     : null;
 
+  // Jeepneys run fixed routes, so A and B must sit on one; tricycles pick up
+  // and drop off anywhere.
+  const usesRoute = vehicle === "jeep";
   // Routes that pass both pickup A and drop-off B; A and B snapped onto them.
   const routeMatches = useMemo<PickupRouteMatch[]>(
     () =>
-      requestLocation && dropoffPlace
+      usesRoute && requestLocation && dropoffPlace
         ? matchPickupRoutes(requestLocation, dropoffPlace)
         : [],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [requestLocationKey, dropoffPlace, routes],
+    [usesRoute, requestLocationKey, dropoffPlace, routes],
   );
   const selectedMatch =
     routeMatches.length === 1
@@ -432,7 +436,11 @@ export default function PickupScreen() {
       : (routeMatches.find((match) => match.routeId === chosenRouteId) ??
         null);
   const noRouteMatch =
-    !!requestLocation && !!dropoffPlace && routesLoaded && !routeMatches.length;
+    usesRoute &&
+    !!requestLocation &&
+    !!dropoffPlace &&
+    routesLoaded &&
+    !routeMatches.length;
 
   useEffect(() => {
     if (!draftRequestId || !requestLocation || !requestLocationKey) return;
@@ -686,15 +694,15 @@ export default function PickupScreen() {
       showProblem("Drop-off point", "Select where you want to be dropped off.");
       return;
     }
-    if (!routesLoaded) {
+    if (usesRoute && !routesLoaded) {
       showProblem("Drop-off point", "Routes are still loading. Try again in a moment.");
       return;
     }
-    if (!routeMatches.length) {
+    if (usesRoute && !routeMatches.length) {
       showProblem("Drop-off point", noRouteMessage);
       return;
     }
-    if (!selectedMatch) {
+    if (usesRoute && !selectedMatch) {
       showProblem("Drop-off point", "Choose the route you’ll ride.");
       return;
     }
@@ -705,7 +713,7 @@ export default function PickupScreen() {
       riders,
       draftRequestId,
       dropoffPlace,
-      selectedMatch,
+      usesRoute ? selectedMatch : null,
     );
   };
 
@@ -890,6 +898,10 @@ export default function PickupScreen() {
               <LocationSettingsButton color={brandBlue} background="#ffffff" />
             </View>
           )}
+          <SectionTitle
+            icon={<MapPin color="#ffffff" size={18} strokeWidth={2} />}
+            title="Where should we pick you up?"
+          />
           <ErrorOutline
             invalid={problemSource === "Pickup location"}
             color={error}
@@ -1097,7 +1109,7 @@ export default function PickupScreen() {
           {noRouteMatch && (
             <Text style={styles.routeProblem}>{noRouteMessage}</Text>
           )}
-          {requestLocation && routeMatches.length > 0 && (
+          {usesRoute && requestLocation && routeMatches.length > 0 && (
             <RouteMatchPreview
               original={requestLocation}
               matches={routeMatches}

@@ -26,6 +26,7 @@ import {
   dropoffArrivalMeters,
   reachedDropoff,
   rideStats,
+  straightRideStats,
   type Coordinates,
 } from "@/utils/geo";
 
@@ -121,7 +122,13 @@ export function RideInProgress({
   }, [routeId, pickup.lat, pickup.lng, dropoff?.lat, dropoff?.lng]);
 
   const stats = useMemo(
-    () => (path && dropoff ? rideStats(path, pickup, dropoff, position) : null),
+    () =>
+      !dropoff
+        ? null
+        : path
+          ? rideStats(path, pickup, dropoff, position)
+          : // Tricycles have no fixed route: measure point to point.
+            straightRideStats(pickup, dropoff, position),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [path, pickup.lat, pickup.lng, dropoff?.lat, dropoff?.lng, position?.lat, position?.lng],
   );

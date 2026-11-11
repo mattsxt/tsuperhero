@@ -285,7 +285,10 @@ export async function requestPickup(
   }
   const { dropoff, match } = form;
   if (!dropoff) return failure("Select where you want to be dropped off.");
-  if (!match) return failure("No registered route connects these points");
+  // Jeepneys run fixed routes; tricycles pick up and drop off anywhere.
+  if (vehicle === "jeep" && !match) {
+    return failure("No registered route connects these points");
+  }
   if (!(await checkOnline())) {
     return failure("Reconnect to the internet before requesting a pickup.");
   }
@@ -293,11 +296,14 @@ export async function requestPickup(
   // Pickup point A is moved onto the route. A point already on it (such as a
   // waiting area) keeps its exact coordinates. The draft keeps the location
   // companions were invited to; only set_pickup_route stores snapped A.
+  const routeMatch = vehicle === "jeep" ? match : null;
   const point =
-    match.walkMeters <= pickupOnRouteMeters
+    !routeMatch || routeMatch.walkMeters <= pickupOnRouteMeters
       ? location
-      : { ...location, ...match.pickup.point };
-  const dropoffPoint = { ...dropoff, ...match.dropoff.point };
+      : { ...location, ...routeMatch.pickup.point };
+  const dropoffPoint = routeMatch
+    ? { ...dropoff, ...routeMatch.dropoff.point }
+    : dropoff;
 
   return attempt(async () => {
     const requestId: string | null = await unwrap(
@@ -314,7 +320,7 @@ export async function requestPickup(
     await unwrap(
       pickupRoutes.setPickupRoute(
         requestId,
-        match.routeId,
+        routeMatch?.routeId ?? null,
         point.lat,
         point.lng,
         dropoffPoint.name,
@@ -336,7 +342,7 @@ export async function requestPickup(
       arrived: false,
       arrivedAt: null,
       dropoff: dropoffPoint,
-      routeId: match.routeId,
+      routeId: routeMatch?.routeId ?? null,
     };
     return knownActivePickup;
   });

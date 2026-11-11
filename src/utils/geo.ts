@@ -325,3 +325,31 @@ export function nearestServedPoint<T extends Coordinates>(
       ?.candidate ?? null
   );
 }
+
+// Ride stats without a route (tricycles go point to point): progress is the
+// straight-line distance closed from A towards B.
+export function straightRideStats(
+  a: Coordinates,
+  b: Coordinates,
+  position: Coordinates | null,
+): RideStats {
+  const totalMeters = getDistanceMeters(a, b);
+  const toPair = (point: Coordinates): LatLngPair => [point.lat, point.lng];
+  if (!position) {
+    return {
+      totalMeters,
+      remainingMeters: totalMeters,
+      progress: 0,
+      travelled: [],
+      ahead: [toPair(a), toPair(b)],
+    };
+  }
+  const remainingMeters = Math.min(totalMeters, getDistanceMeters(position, b));
+  return {
+    totalMeters,
+    remainingMeters,
+    progress: totalMeters ? 1 - remainingMeters / totalMeters : 1,
+    travelled: [toPair(a), toPair(position)],
+    ahead: [toPair(position), toPair(b)],
+  };
+}

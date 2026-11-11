@@ -34,7 +34,8 @@ export function RouteMatchPreview({
   selected: PickupRouteMatch | null;
   onSelect: (routeId: string) => void;
 }) {
-  const shown = selected ?? matches[0] ?? null;
+  // The map appears only once a route is selected (picked, or the only one).
+  const shown = selected;
   const moved = !!shown && shown.walkMeters > pickupOnRouteMeters;
 
   const state = useMemo<TransitMapState | null>(() => {
@@ -70,14 +71,16 @@ export function RouteMatchPreview({
     };
   }, [shown, moved, original]);
 
-  if (!shown || !state) return null;
+  if (!matches.length) return null;
 
   return (
     <View style={styles.wrap}>
-      <View style={styles.map}>
-        <TransitMap state={state} controls />
-      </View>
-      {moved && (
+      {shown && state && (
+        <View style={styles.map}>
+          <TransitMap state={state} controls />
+        </View>
+      )}
+      {shown && moved && (
         <Text style={styles.note}>
           {routeMovedNote} Walk about {formatWalk(shown.walkMeters)} to point A.
         </Text>
