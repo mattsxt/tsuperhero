@@ -1,4 +1,6 @@
 import { Image } from "expo-image";
+import Bus from "lucide-react-native/icons/bus";
+import MapPin from "lucide-react-native/icons/map-pin";
 import Star from "lucide-react-native/icons/star";
 import { useCallback, useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
@@ -120,12 +122,9 @@ export function RatingsSummary({ refreshKey = 0 }: { refreshKey?: number }) {
 
 function ReviewCard({ review }: { review: Review }) {
   const name = review.commuterName?.trim() || "A commuter";
-  const trip = [
-    review.kind === "rental" ? "Rental" : "Pickup",
-    review.destination,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const kindLabel = review.kind === "rental" ? "Rental" : "Pickup";
+  const KindIcon = review.kind === "rental" ? Bus : MapPin;
+  const trip = [kindLabel, review.destination].filter(Boolean).join(" · ");
   return (
     <View
       style={styles.review}
@@ -152,9 +151,17 @@ function ReviewCard({ review }: { review: Review }) {
           <Text style={styles.reviewName} numberOfLines={1}>
             {name}
           </Text>
-          <Text style={styles.reviewTrip} numberOfLines={1}>
-            {trip}
-          </Text>
+          <View style={styles.reviewTripRow}>
+            <KindIcon
+              color={mutedText}
+              size={14}
+              strokeWidth={2.2}
+              accessibilityLabel={kindLabel}
+            />
+            <Text style={styles.reviewTrip} numberOfLines={1}>
+              {review.destination ?? kindLabel}
+            </Text>
+          </View>
         </View>
         <View style={styles.reviewScore}>
           <StarRow score={review.score} size={15} />
@@ -243,7 +250,13 @@ const styles = StyleSheet.create({
   avatarText: { color: brandBlue, fontFamily: "SoraBold", fontSize: 16 },
   reviewWho: { flex: 1, gap: 2 },
   reviewName: { color: "#111111", fontFamily: "SoraBold", fontSize: 14 },
-  reviewTrip: { color: mutedText, fontFamily: "Sora", fontSize: 12 },
+  reviewTripRow: { flexDirection: "row", alignItems: "center", gap: 5 },
+  reviewTrip: {
+    flexShrink: 1,
+    color: mutedText,
+    fontFamily: "Sora",
+    fontSize: 12,
+  },
   reviewScore: { alignItems: "flex-end", gap: 4 },
   reviewDate: { color: mutedText, fontFamily: "Sora", fontSize: 11 },
   reviewText: {
