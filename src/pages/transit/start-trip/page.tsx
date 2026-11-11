@@ -139,6 +139,7 @@ const stationaryMs = 5_000;
 const pingMs = 3_000;
 const movedMeters = 15;
 const movingSpeedMps = 1.5;
+const followResumeMs = 8_000;
 const myVehicleZoom = 16;
 const pickupPollMs = 5_000;
 const overlayLayout = LinearTransition.duration(220);
@@ -281,6 +282,8 @@ function Trip({
   const shownPosition = useRef<TimedPosition | null>(null);
   const anchor = useRef<LocationObjectCoords | null>(null);
   const lastMovedAt = useRef(0);
+  const lastDragAt = useRef(0);
+  const followingRef = useRef(true);
   const savedState = useRef<string | null>("idle:0:false");
   const shareFailing = useRef(false);
   const tripActive = useRef(false);
@@ -361,6 +364,14 @@ function Trip({
       };
       if (!shouldRefreshPosition(shownPosition.current, position)) return;
       shownPosition.current = position;
+      if (
+        moved &&
+        !followingRef.current &&
+        Date.now() - lastDragAt.current >= followResumeMs
+      ) {
+        followingRef.current = true;
+        setFollowing(true);
+      }
       setFix(location);
       setZoomAt((current) => current ?? location.timestamp);
     }).then((result) => {
@@ -807,6 +818,7 @@ function Trip({
       setToast(null);
       setWatchAttempt((attempt) => attempt + 1);
     }
+    followingRef.current = true;
     setFollowing(true);
     setRecenters((count) => count + 1);
     setZoomAt(fix?.timestamp ?? null);
@@ -914,7 +926,14 @@ function Trip({
       onLayout={(event) => setScreenHeight(event.nativeEvent.layout.height)}
     >
       <StatusBar style="dark" />
-      <TransitMap state={mapState} onDrag={() => setFollowing(false)} />
+      <TransitMap
+        state={mapState}
+        onDrag={() => {
+          lastDragAt.current = Date.now();
+          followingRef.current = false;
+          setFollowing(false);
+        }}
+      />
 
       <Pressable
         accessibilityRole="button"
