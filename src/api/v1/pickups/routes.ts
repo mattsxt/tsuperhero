@@ -20,12 +20,12 @@ export const pickupRoutes = {
   findActiveRequest: (commuterId: string) =>
     requestTable()
       .select(
-        "*, pickup(pickup_id, pickup_destination, number_of_passengers, requested_vehicle_type)",
+        "*, pickup(pickup_id, pickup_destination, number_of_passengers, requested_vehicle_type, route_id, pickup_lat, pickup_lng, dropoff_name, dropoff_lat, dropoff_lng)",
       )
       .eq("commuter_id", commuterId)
       .eq("request_type", "Pickup")
       .eq("is_draft", false)
-      .in("request_status", ["pending", "accepted"])
+      .in("request_status", ["pending", "accepted", "riding"])
       .order("request_date", { ascending: false })
       .limit(1)
       .maybeSingle(),
@@ -53,6 +53,30 @@ export const pickupRoutes = {
     getSupabaseClient().rpc("get_pickup_companion_statuses", {
       p_request_id: requestId,
     }),
+
+  setPickupRoute: (
+    requestId: string,
+    routeId: string,
+    pickupLat: number,
+    pickupLng: number,
+    dropoffName: string,
+    dropoffLat: number,
+    dropoffLng: number,
+  ) =>
+    getSupabaseClient().rpc("set_pickup_route", {
+      p_request_id: requestId,
+      p_route_id: routeId,
+      p_pickup_lat: pickupLat,
+      p_pickup_lng: pickupLng,
+      p_dropoff_name: dropoffName,
+      p_dropoff_lat: dropoffLat,
+      p_dropoff_lng: dropoffLng,
+    }),
+
+  completeMyRide: (requestId: string) =>
+    getSupabaseClient().rpc("complete_my_ride", { p_request_id: requestId }),
+
+  findMyRideProgress: () => getSupabaseClient().rpc("get_my_ride_progress"),
 
   publishPickupDraft: (requestId: string) =>
     getSupabaseClient().rpc("publish_pickup_draft", {

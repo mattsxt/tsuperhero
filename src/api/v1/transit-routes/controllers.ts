@@ -9,7 +9,13 @@ import {
   type LiveVehicleRow,
   type RouteRow,
 } from "@/api/v1/transit-routes/routes";
-import { distanceToPath, getPairDistanceMeters } from "@/utils/geo";
+import {
+  distanceToPath,
+  getPairDistanceMeters,
+  matchRoutes,
+  type Coordinates,
+  type RouteMatch,
+} from "@/utils/geo";
 
 export type { LatLng };
 
@@ -145,6 +151,30 @@ export function findNearestRoute(
       .filter(({ distanceMeters }) => Number.isFinite(distanceMeters))
       .sort((a, b) => a.distanceMeters - b.distanceMeters)[0] ?? null
   );
+}
+
+export type PickupRouteMatch = RouteMatch & { route: TransitRoute };
+
+/**
+ * Registered routes that pass within 500 m of both the pickup point (A) and
+ * the drop-off point (B), with A and B snapped onto one path. Best first.
+ */
+export function matchPickupRoutes(
+  pickup: Coordinates,
+  dropoff: Coordinates,
+): PickupRouteMatch[] {
+  const byId = new Map(selectableRoutes.map((route) => [route.id, route]));
+  return matchRoutes(
+    pickup,
+    dropoff,
+    selectableRoutes.map((route) => ({
+      routeId: route.id,
+      paths: [route.waypoints, ...route.alternativePaths],
+    })),
+  ).flatMap((match) => {
+    const route = byId.get(match.routeId);
+    return route ? [{ ...match, route }] : [];
+  });
 }
 
 export function findRoutesNear(point: {

@@ -1,4 +1,9 @@
-export type RequestStatus = "pending" | "accepted" | "rejected" | "completed";
+export type RequestStatus =
+  | "pending"
+  | "accepted"
+  | "riding"
+  | "rejected"
+  | "completed";
 export type CompanionStatus = "pending" | "accepted" | "rejected";
 
 export type PickupDraftRow = {
@@ -20,6 +25,27 @@ export type PickupRow = {
   pickup_destination: string;
   number_of_passengers: number;
   requested_vehicle_type: "Jeepney" | "Tricycle";
+  route_id?: string | null;
+  pickup_lat?: number | null;
+  pickup_lng?: number | null;
+  dropoff_name?: string | null;
+  dropoff_lat?: number | null;
+  dropoff_lng?: number | null;
+};
+
+export type RideProgressRow = {
+  request_id: string;
+  route_id: string | null;
+  pickup_lat: number;
+  pickup_lng: number;
+  dropoff_lat: number | null;
+  dropoff_lng: number | null;
+  dropoff_name: string | null;
+  driver_name: string | null;
+  plate_number: string | null;
+  vehicle_lat: number | null;
+  vehicle_lng: number | null;
+  vehicle_recorded_at: string | null;
 };
 
 export type BookingRow = {

@@ -11,6 +11,7 @@ import type {
   PickupDriverRow,
   PickupRequestRow,
   RequestStatus,
+  RideProgressRow,
   RiderRow,
   ShareInviteRow,
   SharedRideRow,
@@ -33,20 +34,29 @@ import {
   type VehicleType,
 } from "@/api/v1/transit-routes/controllers";
 
+import type { Coordinates, RouteMatch } from "@/utils/geo";
+
 export type PickupVehicle = "jeep" | "tricy";
+
+export type DropoffPoint = { name: string; lat: number; lng: number };
 
 export type PickupRequest = {
   id: string;
   pickupName: string;
   vehicle: PickupVehicle;
   waitingAreaType?: WaitingAreaType;
+  /** Pickup point A: snapped onto the route when the request has one. */
   lat: number;
   lng: number;
   passengers: number;
   status: RequestStatus;
   arrived: boolean;
   arrivedAt: Date | null;
+  dropoff: DropoffPoint | null;
+  routeId: string | null;
 };
+
+export const isRideActive = (status: RequestStatus) => status === "riding";
 
 export const minPickupPassengers = 1;
 export const maxPickupPassengers = 10;
@@ -154,13 +164,16 @@ function watchAuthChanges() {
   if (!watchingNetwork) {
     watchingNetwork = true;
     subscribeToOnline(() => {
-      if (isOnline()) void flushPickupCancellations();
-      else if (knownActivePickup) {
+      if (isOnline()) {
+        void flushPickupCancellations();
+        void flushRideCompletions();
+      } else if (knownActivePickup && !isRideActive(knownActivePickup.status)) {
         void queuePickupCancellation(knownActivePickup);
       }
     });
   }
   void flushPickupCancellations();
+  void flushRideCompletions();
   getSupabaseClient().auth.onAuthStateChange((_event, session) => {
     const userId = session?.user.id ?? null;
     if (userId !== knownUserId) {
@@ -168,7 +181,10 @@ function watchAuthChanges() {
       knownActivePickup = null;
       knownSharedRide = null;
     }
-    if (userId) void flushPickupCancellations();
+    if (userId) {
+      void flushPickupCancellations();
+      void flushRideCompletions();
+    }
   });
 }
 
@@ -199,12 +215,21 @@ function fetchActivePickup(): Promise<Result<PickupRequest | null>> {
           Math.abs(area.lat - row.device_latitude) < 0.00001 &&
           Math.abs(area.lng - row.device_longitude) < 0.00001,
       )?.type,
-      lat: row.device_latitude,
-      lng: row.device_longitude,
+      lat: pickup.pickup_lat ?? row.device_latitude,
+      lng: pickup.pickup_lng ?? row.device_longitude,
       passengers: pickup.number_of_passengers,
       status: row.request_status,
       arrived: row.arrived_at !== null,
       arrivedAt: row.arrived_at ? new Date(row.arrived_at) : null,
+      dropoff:
+        pickup.dropoff_lat != null && pickup.dropoff_lng != null
+          ? {
+              name: pickup.dropoff_name ?? "",
+              lat: pickup.dropoff_lat,
+              lng: pickup.dropoff_lng,
+            }
+          : null,
+      routeId: pickup.route_id ?? null,
     };
   });
 }
@@ -222,6 +247,9 @@ type PickupForm = {
   location: PickupPoint | null;
   riders: Rider[];
   draftRequestId?: string | null;
+  dropoff: DropoffPoint | null;
+  /** The route A and B were snapped onto (from matchPickupRoutes). */
+  match: RouteMatch | null;
 };
 
 export async function requestPickup(
@@ -248,11 +276,20 @@ export async function requestPickup(
       `Set the passenger count to at least ${acceptedRiders.length + 1} to include everyone in this shared ride.`,
     );
   }
+  const { dropoff, match } = form;
+  if (!dropoff) return failure("Select where you want to be dropped off.");
+  if (!match) return failure("No registered route connects these points");
   if (!(await checkOnline())) {
     return failure("Reconnect to the internet before requesting a pickup.");
   }
 
-  const point = location;
+  // Pickup point A is moved onto the route. A point already on it (such as a
+  // waiting area) keeps its exact coordinates.
+  const point =
+    match.walkMeters <= pickupOnRouteMeters
+      ? location
+      : { ...location, ...match.pickup.point };
+  const dropoffPoint = { ...dropoff, ...match.dropoff.point };
 
   return attempt(async () => {
     const requestId: string | null = await unwrap(
@@ -266,6 +303,17 @@ export async function requestPickup(
       ),
     );
     if (!requestId) throw new Error("Your pickup request could not be saved.");
+    await unwrap(
+      pickupRoutes.setPickupRoute(
+        requestId,
+        match.routeId,
+        point.lat,
+        point.lng,
+        dropoffPoint.name,
+        dropoffPoint.lat,
+        dropoffPoint.lng,
+      ),
+    );
     await unwrap(pickupRoutes.publishPickupDraft(requestId));
 
     knownActivePickup = {
@@ -279,8 +327,129 @@ export async function requestPickup(
       status: "pending",
       arrived: false,
       arrivedAt: null,
+      dropoff: dropoffPoint,
+      routeId: match.routeId,
     };
     return knownActivePickup;
+  });
+}
+
+/** A pickup pin this close to the route counts as already on it. */
+export const pickupOnRouteMeters = 5;
+
+export const routeSnapErrorMessage =
+  "Pickup point must be on the route. Please re-select.";
+
+export const isRouteSnapError = (message: string) =>
+  message.includes(routeSnapErrorMessage);
+
+const rideCompletionKey = (userId: string) => `pending-ride-completions:${userId}`;
+let flushingRideCompletions: Promise<void> | null = null;
+
+async function currentUserId() {
+  const { data } = await getSupabaseClient()
+    .auth.getSession()
+    .catch(() => ({ data: { session: null } }));
+  return data.session?.user.id ?? null;
+}
+
+export async function flushRideCompletions(): Promise<void> {
+  if (flushingRideCompletions || !isOnline()) return;
+  flushingRideCompletions = (async () => {
+    const userId = await currentUserId();
+    if (!userId) return;
+    const key = rideCompletionKey(userId);
+    const requestIds = readCache<string[]>(key) ?? [];
+    const remaining: string[] = [];
+    for (const requestId of requestIds) {
+      try {
+        await unwrap(pickupRoutes.completeMyRide(requestId));
+      } catch {
+        // Retry only connection failures; a rejected drop-off won't succeed later.
+        if (!isOnline()) remaining.push(requestId);
+      }
+    }
+    writeCache(key, remaining);
+  })()
+    .catch(() => {})
+    .finally(() => {
+      flushingRideCompletions = null;
+    });
+  await flushingRideCompletions;
+}
+
+export async function queueRideCompletion(requestId: string): Promise<void> {
+  const userId = await currentUserId();
+  if (!userId) return;
+  const key = rideCompletionKey(userId);
+  const requestIds = readCache<string[]>(key) ?? [];
+  if (!requestIds.includes(requestId)) writeCache(key, [...requestIds, requestId]);
+}
+
+/**
+ * The commuter was dropped off. Offline, the drop-off is queued and synced on
+ * reconnect; the ride counts as finished on this phone right away.
+ */
+export async function completeMyRide(requestId: string): Promise<Result<void>> {
+  watchAuthChanges();
+  if (knownActivePickup?.id === requestId) knownActivePickup = null;
+  if (!isOnline()) {
+    await queueRideCompletion(requestId);
+    return success(undefined);
+  }
+  const result = await attempt(async () => {
+    await unwrap(pickupRoutes.completeMyRide(requestId));
+  });
+  if (!result.ok && !(await checkOnline())) {
+    // Lost the connection mid-call: sync the drop-off on reconnect.
+    await queueRideCompletion(requestId);
+    return success(undefined);
+  }
+  return result;
+}
+
+export type RideProgress = {
+  requestId: string;
+  routeId: string | null;
+  pickup: Coordinates;
+  dropoff: (Coordinates & { name: string }) | null;
+  driverName: string | null;
+  plateNumber: string | null;
+  vehicle: (Coordinates & { recordedAt: Date }) | null;
+};
+
+export function loadRideProgress(): Promise<Result<RideProgress | null>> {
+  return attempt(async () => {
+    const rows: RideProgressRow[] | null = await unwrap(
+      pickupRoutes.findMyRideProgress(),
+    );
+    const row = rows?.[0];
+    if (!row) return null;
+    return {
+      requestId: row.request_id,
+      routeId: row.route_id,
+      pickup: { lat: row.pickup_lat, lng: row.pickup_lng },
+      dropoff:
+        row.dropoff_lat != null && row.dropoff_lng != null
+          ? {
+              name: row.dropoff_name ?? "",
+              lat: row.dropoff_lat,
+              lng: row.dropoff_lng,
+            }
+          : null,
+      driverName: row.driver_name,
+      plateNumber: row.plate_number,
+      vehicle:
+        row.vehicle_lat != null &&
+        row.vehicle_lng != null &&
+        row.vehicle_recorded_at
+          ? {
+              lat: row.vehicle_lat,
+              lng: row.vehicle_lng,
+              recordedAt: new Date(row.vehicle_recorded_at),
+            }
+          : null,
+    };
   });
 }
 
