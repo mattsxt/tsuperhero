@@ -2,6 +2,7 @@ import { useLocalSearchParams } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import CircleAlert from "lucide-react-native/icons/circle-alert";
 import RouteIcon from "lucide-react-native/icons/route";
+import ArrowLeft from "lucide-react-native/icons/arrow-left";
 import BusFront from "lucide-react-native/icons/bus-front";
 import Check from "lucide-react-native/icons/check";
 import LocateFixed from "lucide-react-native/icons/locate-fixed";
@@ -238,13 +239,13 @@ function Trip({
   resumeRequested: boolean;
 }) {
   const insets = useSafeAreaInsets();
-  const { assignment, route, coverageTitle } = details;
+  const { assignment, route } = details;
   const { vehicle } = assignment;
   const capacity = vehicle.max_capacity;
   const reduceMotion = useReducedMotion();
   const sharingPulse = useSharedValue(1);
 
-  const [headerHeight, setHeaderHeight] = useState(140);
+  const headerHeight = insets.top + 60;
   const [panelHeight, setPanelHeight] = useState(240);
   const [screenHeight, setScreenHeight] = useState(0);
   const [panelTop, setPanelTop] = useState(0);
@@ -907,20 +908,22 @@ function Trip({
       style={styles.screen}
       onLayout={(event) => setScreenHeight(event.nativeEvent.layout.height)}
     >
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
       <TransitMap state={mapState} onDrag={() => setFollowing(false)} />
 
-      <View
-        style={styles.headerWrap}
-        onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Go back"
+        hitSlop={8}
+        onPress={leave}
+        style={({ pressed }) => [
+          styles.mapBack,
+          { top: insets.top + 12 },
+          pressed && styles.pressed,
+        ]}
       >
-        <ModuleHeader
-          title="Trip"
-          subtitle={coverageTitle.replace(" – ", " - ")}
-          icon={<MapPin color="#ffffff" size={44} strokeWidth={1.8} />}
-          onBack={leave}
-        />
-      </View>
+        <ArrowLeft color={brandBlue} size={24} strokeWidth={2.5} />
+      </Pressable>
 
       <View
         pointerEvents="box-none"
@@ -1008,7 +1011,7 @@ function Trip({
         onPress={locate}
         style={({ pressed }) => [
           styles.locateButton,
-          { top: headerHeight + 12 },
+          { top: insets.top + 12 },
           !!locationError && styles.locateError,
           pressed && styles.pressed,
         ]}
@@ -1451,6 +1454,21 @@ const styles = StyleSheet.create({
   emptyBody: { marginTop: 32 },
   screen: { flex: 1, backgroundColor: "#e8eaed" },
   headerWrap: { position: "absolute", top: 0, left: 0, right: 0 },
+  mapBack: {
+    position: "absolute",
+    left: 12,
+    width: 48,
+    height: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 24,
+    backgroundColor: "#ffffff",
+    elevation: 4,
+    shadowColor: "#000000",
+    shadowOpacity: 0.18,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+  },
   pressed: { opacity: 0.7 },
   overlayStack: {
     position: "absolute",
