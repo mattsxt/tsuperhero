@@ -605,7 +605,9 @@ export function TransitMap({
         top={controlsTop}
         onZoomIn={() => command({ type: "zoom", delta: 1 })}
         onZoomOut={() => command({ type: "zoom", delta: -1 })}
-        onRecenter={() => command({ type: "recenter" })}
+        onRecenter={
+          controls === "zoom" ? undefined : () => command({ type: "recenter" })
+        }
       />
     ) : null;
 

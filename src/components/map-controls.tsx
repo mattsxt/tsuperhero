@@ -15,12 +15,15 @@ export function MapControls({
   top?: number;
   onZoomIn: () => void;
   onZoomOut: () => void;
-  onRecenter: () => void;
+  /** Omit to hide the re-center button. */
+  onRecenter?: () => void;
 }) {
   const buttons = [
     { label: "Zoom in", icon: Plus, onPress: onZoomIn },
     { label: "Zoom out", icon: Minus, onPress: onZoomOut },
-    { label: "Re-center the map", icon: LocateFixed, onPress: onRecenter },
+    ...(onRecenter
+      ? [{ label: "Re-center the map", icon: LocateFixed, onPress: onRecenter }]
+      : []),
   ];
   return (
     <View style={[styles.column, { top }]} pointerEvents="box-none">

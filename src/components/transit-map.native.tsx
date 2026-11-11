@@ -572,11 +572,21 @@ export function TransitMap({
           top={controlsTop}
           onZoomIn={() => zoomBy(1)}
           onZoomOut={() => zoomBy(-1)}
-          onRecenter={() => {
-            if (camera.current && state.fit) {
-              fitTo(camera.current, state.fit, state.padTop, state.padBottom, 400);
-            }
-          }}
+          onRecenter={
+            controls === "zoom"
+              ? undefined
+              : () => {
+                  if (camera.current && state.fit) {
+                    fitTo(
+                      camera.current,
+                      state.fit,
+                      state.padTop,
+                      state.padBottom,
+                      400,
+                    );
+                  }
+                }
+          }
         />
       ) : null}
 

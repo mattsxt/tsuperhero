@@ -58,6 +58,7 @@ export function PinLocationPicker({
   const [start, setStart] = useState<MapCenter | null>(initial);
   const [center, setCenter] = useState<MapCenter | null>(initial);
   const [saving, setSaving] = useState(false);
+  const [topBarHeight, setTopBarHeight] = useState(insets.top + 80);
   const [routing, setRouting] = useState<{
     key: string;
     checking: boolean;
@@ -293,6 +294,8 @@ export function PinLocationPicker({
             isDragging.current = false;
             setCenter(next);
           }}
+          controls="zoom"
+          controlsTop={topBarHeight + 12}
         />
 
         <View pointerEvents="none" style={styles.pinLayer}>
@@ -302,7 +305,10 @@ export function PinLocationPicker({
           <View style={styles.pinShadow} />
         </View>
 
-        <View style={[styles.topBar, { paddingTop: insets.top + 10 }]}>
+        <View
+          style={[styles.topBar, { paddingTop: insets.top + 10 }]}
+          onLayout={(event) => setTopBarHeight(event.nativeEvent.layout.height)}
+        >
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Close map"

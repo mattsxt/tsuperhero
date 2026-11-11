@@ -66,7 +66,11 @@ export type TransitMapProps = {
   onCenterChange?: (center: MapCenter) => void;
   onVehiclePress?: (id: string) => void;
   /** Show zoom in / zoom out / re-center buttons. Re-center returns to `state.fit`. */
-  controls?: boolean;
+  /**
+   * Show map buttons: true for zoom in / zoom out / re-center, "zoom" for zoom
+   * only (e.g. a centre-pin picker, where re-centering would move the pin).
+   */
+  controls?: boolean | "zoom";
   /** Distance of the controls from the map's top edge (clear of overlays). */
   controlsTop?: number;
 };
