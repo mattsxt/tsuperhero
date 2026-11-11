@@ -20,6 +20,7 @@ import {
   getKnownActivePickup,
   loadActivePickup,
   getKnownSharedRide,
+  isRideActive,
   isRouteSnapError,
   leaveSharedRide,
   loadMyPickupDraft,
@@ -106,6 +107,7 @@ import { PinLocationPicker } from "./pin-location-picker";
 import { ShareRideField } from "./share-ride-field";
 import { LocationPrimer } from "./location-primer";
 import { RentalInProgress } from "./rental-in-progress";
+import { RideInProgress } from "./ride-in-progress";
 import { RouteMatchPreview } from "./route-match-preview";
 import { SharedRideScreen } from "./shared-ride";
 import { WaitingAreaDirectionsMap } from "./waiting-area-directions-map";
@@ -291,7 +293,8 @@ export default function PickupScreen() {
   };
 
   useEffect(() => {
-    if (!active) return;
+    // A commuter on board is never cancelled; their drop-off syncs later.
+    if (!active || isRideActive(active.status)) return;
     const cancelIfOffline = () => {
       if (isOnline()) return;
       setActive(null);
@@ -473,12 +476,14 @@ export default function PickupScreen() {
         const status = await loadRequestStatus(activeId);
         if (status.ok && status.data === "completed") {
           setBoarded(lastActive.current);
-          const notice = getNotifications().find(
+          const notices = getNotifications().filter(
             (item) =>
-              item.type === "pickup_boarded" &&
+              (item.type === "pickup_boarded" ||
+                item.type === "pickup_completed") &&
               item.data.request_id === activeId,
           );
-          if (notice) void markNotificationsRead([notice.id]);
+          if (notices.length)
+            void markNotificationsRead(notices.map((item) => item.id));
         }
       }
       setActive(latest.data);
@@ -693,6 +698,8 @@ export default function PickupScreen() {
     return (
       <BoardedScreen
         request={boarded}
+        title="You've arrived"
+        message="You've been dropped off. Thanks for riding!"
         onDone={() => {
           const id = boarded.id;
           setBoarded(null);
@@ -723,6 +730,19 @@ export default function PickupScreen() {
         <StatusBar style="dark" />
         <LoadingLogo label="Checking your pickup" />
       </View>
+    );
+  }
+
+  if (active && isRideActive(active.status)) {
+    return (
+      <RideInProgress
+        request={active}
+        onBack={goBack}
+        onArrived={() => {
+          setBoarded(active);
+          setActive(null);
+        }}
+      />
     );
   }
 

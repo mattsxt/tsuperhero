@@ -226,3 +226,67 @@ export function matchRoutes(
     .filter((match): match is RouteMatch => match !== undefined)
     .sort((x, y) => score(x) - score(y));
 }
+
+// The one path (of a route's main and alternative paths) that best fits both
+// A and B, i.e. whose farther snap distance is smallest.
+export function choosePathFor(
+  paths: LatLngPair[][],
+  a: Coordinates,
+  b: Coordinates,
+): LatLngPair[] | null {
+  let best: { path: LatLngPair[]; worst: number } | null = null;
+  for (const path of paths) {
+    if (path.length < 2) continue;
+    const worst = Math.max(
+      nearestPointOnPath(a, path).distanceMeters,
+      nearestPointOnPath(b, path).distanceMeters,
+    );
+    if (!best || worst < best.worst) best = { path, worst };
+  }
+  return best?.path ?? null;
+}
+
+export type RideStats = {
+  totalMeters: number;
+  remainingMeters: number;
+  /** 0-1 share of the A -> B ride already covered. */
+  progress: number;
+  /** A -> current position along the path (empty without a position). */
+  travelled: LatLngPair[];
+  /** Current position (or A) -> B along the path. */
+  ahead: LatLngPair[];
+};
+
+export function rideStats(
+  path: LatLngPair[],
+  a: Coordinates,
+  b: Coordinates,
+  position: Coordinates | null,
+): RideStats {
+  const alongA = nearestPointOnPath(a, path).alongMeters;
+  const alongB = nearestPointOnPath(b, path).alongMeters;
+  const totalMeters = Math.abs(alongB - alongA);
+  if (!position) {
+    return {
+      totalMeters,
+      remainingMeters: totalMeters,
+      progress: 0,
+      travelled: [],
+      ahead: sliceAlong(path, alongA, alongB),
+    };
+  }
+  const progress = rideProgress(
+    alongA,
+    alongB,
+    nearestPointOnPath(position, path).alongMeters,
+  );
+  // Clamp the position between A and B so the line never overshoots either end.
+  const alongNow = alongA + (alongB - alongA) * progress;
+  return {
+    totalMeters,
+    remainingMeters: totalMeters * (1 - progress),
+    progress,
+    travelled: sliceAlong(path, alongA, alongNow),
+    ahead: sliceAlong(path, alongNow, alongB),
+  };
+}

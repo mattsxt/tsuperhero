@@ -1,10 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  choosePathFor,
   matchRoutes,
   nearestPointOnPath,
   pathLengthMeters,
   rideProgress,
+  rideStats,
   sliceAlong,
   type LatLngPair,
 } from "./geo.ts";
@@ -137,4 +139,37 @@ test("matchRoutes rejects a drop-off too close to the pickup", () => {
     { routeId: "r1", paths: [P] },
   ]);
   assert.deepEqual(matches, []);
+});
+
+test("choosePathFor picks the single path closest to both points", () => {
+  const unrelated: LatLngPair[] = [
+    [14.7, 121.0],
+    [14.7, 121.02],
+  ];
+  const a = offNorth(121.002, 0);
+  const b = offNorth(121.018, 0);
+  assert.deepEqual(choosePathFor([unrelated, P], a, b), P);
+  assert.equal(choosePathFor([], a, b), null);
+});
+
+test("rideStats measures progress and remaining distance from A to B", () => {
+  const a = offNorth(121.002, 0);
+  const b = offNorth(121.018, 0);
+  const total = nearestPointOnPath(b, P).alongMeters - nearestPointOnPath(a, P).alongMeters;
+  const stats = rideStats(P, a, b, offNorth(121.01, 20));
+  near(stats.progress, 0.5, 0.01);
+  near(stats.remainingMeters, total / 2, 5);
+  near(nearestPointOnPath({ lat: stats.ahead.at(-1)![0], lng: stats.ahead.at(-1)![1] }, P).alongMeters,
+    nearestPointOnPath(b, P).alongMeters, 2);
+  near(nearestPointOnPath({ lat: stats.travelled[0][0], lng: stats.travelled[0][1] }, P).alongMeters,
+    nearestPointOnPath(a, P).alongMeters, 2);
+});
+
+test("rideStats without a position shows the whole ride ahead", () => {
+  const a = offNorth(121.002, 0);
+  const b = offNorth(121.018, 0);
+  const stats = rideStats(P, a, b, null);
+  assert.equal(stats.progress, 0);
+  assert.deepEqual(stats.travelled, []);
+  near(stats.remainingMeters, stats.totalMeters, 0.001);
 });

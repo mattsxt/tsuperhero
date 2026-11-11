@@ -16,9 +16,13 @@ const successGreen = "#1e9e45";
 export function BoardedScreen({
   request,
   onDone,
+  title = "You're on board!",
+  message = "Your driver picked you up. Enjoy the ride!",
 }: {
   request: PickupRequest;
   onDone: () => void;
+  title?: string;
+  message?: string;
 }) {
   const insets = useSafeAreaInsets();
   return (
@@ -38,10 +42,8 @@ export function BoardedScreen({
         </Animated.View>
 
         <Animated.View entering={FadeIn.delay(150)} style={styles.copy}>
-          <Text style={styles.title}>You&apos;re on board!</Text>
-          <Text style={styles.message}>
-            Your driver picked you up. Enjoy the ride!
-          </Text>
+          <Text style={styles.title}>{title}</Text>
+          <Text style={styles.message}>{message}</Text>
         </Animated.View>
 
         <Animated.View entering={FadeIn.delay(250)} style={styles.card}>
@@ -50,7 +52,9 @@ export function BoardedScreen({
               <MapPin color={brandBlue} size={16} strokeWidth={2.2} />
             </View>
             <Text style={styles.rowText} numberOfLines={2}>
-              {request.pickupName}
+              {request.dropoff?.name
+                ? `${request.pickupName} → ${request.dropoff.name}`
+                : request.pickupName}
             </Text>
           </View>
           <View style={styles.row}>
