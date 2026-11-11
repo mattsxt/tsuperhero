@@ -1200,61 +1200,70 @@ function PickupCard({
   onAccept: () => void;
   onDecline: () => void;
 }) {
-  const label = `${pickup.passengers} ${pickup.passengers === 1 ? "passenger" : "passengers"}`;
+  const people = `${pickup.passengers} ${pickup.passengers === 1 ? "person" : "people"}`;
+  const distance =
+    distanceMeters < 1000
+      ? `${Math.max(10, Math.round(distanceMeters / 10) * 10)} m away`
+      : `${(distanceMeters / 1000).toFixed(1)} km away`;
   return (
     <View
       style={styles.pickupCard}
-      accessibilityLabel={`Pickup request, ${label}`}
+      accessibilityLabel={`Passenger waiting, ${people}, ${distance}`}
     >
-      <View style={styles.pickupIcon}>
-        <Users color={brandBlue} size={22} strokeWidth={2.4} />
+      <View style={styles.pickupInfo}>
+        <View style={styles.pickupIcon}>
+          <Users color={brandBlue} size={22} strokeWidth={2.4} />
+          <Text style={styles.pickupCount}>{pickup.passengers}</Text>
+        </View>
+        <View style={styles.pickupText}>
+          <Text style={styles.pickupTitle}>Passenger waiting</Text>
+          <Text style={[styles.pickupMeta, !fits && styles.pickupWarn]}>
+            {fits ? `${people} · ${distance}` : `${people} · not enough seats`}
+          </Text>
+        </View>
       </View>
-      <View style={styles.pickupText}>
-        <Text style={styles.pickupTitle}>Pickup · {label}</Text>
-        <Text style={[styles.pickupMeta, !fits && styles.pickupWarn]}>
-          {fits ? `${Math.round(distanceMeters)} m away` : "Not enough seats"}
-        </Text>
+      <View style={styles.pickupActions}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Skip this passenger"
+          disabled={busy}
+          onPress={onDecline}
+          style={({ pressed }) => [
+            styles.pickupButton,
+            styles.pickupDecline,
+            pressed && styles.pressed,
+          ]}
+        >
+          <X color="#475569" size={22} strokeWidth={3} />
+          <Text style={[styles.pickupButtonText, styles.pickupDeclineText]}>
+            SKIP
+          </Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Pick up this passenger"
+          accessibilityState={{ disabled: !fits, busy }}
+          disabled={busy}
+          onPress={onAccept}
+          style={({ pressed }) => [
+            styles.pickupButton,
+            styles.pickupAccept,
+            !fits && styles.pickupAcceptBlocked,
+            pressed && styles.pressed,
+          ]}
+        >
+          {busy ? (
+            <LoadingLogo color="#ffffff" size={24} />
+          ) : (
+            <>
+              <Check color="#ffffff" size={24} strokeWidth={3} />
+              <Text style={[styles.pickupButtonText, { color: "#ffffff" }]}>
+                PICK UP
+              </Text>
+            </>
+          )}
+        </Pressable>
       </View>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Decline pickup request"
-        disabled={busy}
-        onPress={onDecline}
-        style={({ pressed }) => [
-          styles.pickupButton,
-          styles.pickupDecline,
-          pressed && styles.pressed,
-        ]}
-      >
-        <X color={declineRed} size={18} strokeWidth={3} />
-        <Text style={[styles.pickupButtonText, { color: declineRed }]}>
-          Decline
-        </Text>
-      </Pressable>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Accept pickup request"
-        accessibilityState={{ disabled: !fits, busy }}
-        disabled={busy}
-        onPress={onAccept}
-        style={({ pressed }) => [
-          styles.pickupButton,
-          styles.pickupAccept,
-          !fits && styles.pickupAcceptBlocked,
-          pressed && styles.pressed,
-        ]}
-      >
-        {busy ? (
-          <LoadingLogo color="#ffffff" size={20} />
-        ) : (
-          <>
-            <Check color="#ffffff" size={18} strokeWidth={3} />
-            <Text style={[styles.pickupButtonText, { color: "#ffffff" }]}>
-              Accept
-            </Text>
-          </>
-        )}
-      </Pressable>
     </View>
   );
 }
@@ -1469,11 +1478,9 @@ const styles = StyleSheet.create({
   },
   locateIdle: { opacity: 0.5 },
   pickupCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    padding: 12,
-    borderRadius: 16,
+    gap: 12,
+    padding: 14,
+    borderRadius: 18,
     backgroundColor: "#ffffff",
     elevation: 6,
     shadowColor: "#000000",
@@ -1481,45 +1488,51 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
   },
+  pickupInfo: { flexDirection: "row", alignItems: "center", gap: 12 },
   pickupIcon: {
-    width: 44,
-    height: 44,
+    width: 52,
+    height: 52,
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 12,
+    gap: 2,
+    borderRadius: 14,
     backgroundColor: chipBlue,
   },
+  pickupCount: { color: brandBlue, fontFamily: "SoraBold", fontSize: 18 },
   pickupText: { flex: 1 },
   pickupTitle: {
-    color: brandBlue,
+    color: "#111827",
     fontFamily: "SoraBold",
-    fontSize: 15,
-    lineHeight: 20,
+    fontSize: 18,
+    lineHeight: 24,
   },
   pickupMeta: {
     color: "#334155",
     fontFamily: "Sora",
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 15,
+    lineHeight: 21,
   },
   pickupWarn: { color: declineRed, fontFamily: "SoraBold" },
+  pickupActions: { flexDirection: "row", gap: 10 },
   pickupButton: {
-    height: 48,
+    height: 56,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 4,
-    paddingHorizontal: 12,
-    borderRadius: 12,
+    gap: 8,
+    borderRadius: 14,
   },
-  pickupButtonText: { fontFamily: "SoraBold", fontSize: 13 },
+  pickupButtonText: { fontFamily: "SoraBold", fontSize: 16, letterSpacing: 0.6 },
   pickupDecline: {
-    borderWidth: 1.5,
-    borderColor: declineRed,
-    backgroundColor: "#ffffff",
+    flex: 1,
+    borderWidth: 2,
+    borderColor: "#cbd5e1",
+    backgroundColor: "#f8fafc",
   },
-  pickupAccept: { backgroundColor: brandBlue },
-  pickupAcceptBlocked: { backgroundColor: "#9aa5c4" },
+  pickupDeclineText: { color: "#475569" },
+  pickupAccept: { flex: 2, backgroundColor: "#16a34a" },
+  pickupAcceptBlocked: { backgroundColor: "#94a3b8" },
   toast: {
     flexDirection: "row",
     alignItems: "center",
