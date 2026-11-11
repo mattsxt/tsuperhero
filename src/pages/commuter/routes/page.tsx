@@ -224,6 +224,14 @@ export default function RoutesScreen() {
         ? [{ id: "destination", ...destination, label: destinationName }]
         : [],
       focus: null,
+      // Re-center frames the selected route, as when it first loads.
+      fit:
+        routeId && path?.length
+          ? {
+              key: `route:${routeId}:${path.length}`,
+              points: [...path, ...alternativePaths.flat()],
+            }
+          : null,
       padTop: headerHeight + 30,
       padBottom: panelHeight + 70,
     }),
@@ -274,7 +282,12 @@ export default function RoutesScreen() {
   return (
     <View style={styles.screen}>
       <StatusBar style="light" />
-      <TransitMap state={mapState} onVehiclePress={setSelectedVehicleId} />
+      <TransitMap
+        state={mapState}
+        onVehiclePress={setSelectedVehicleId}
+        controls
+        controlsTop={headerHeight + 12}
+      />
 
       <View
         style={styles.headerWrap}

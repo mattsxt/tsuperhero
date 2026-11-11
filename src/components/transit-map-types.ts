@@ -63,4 +63,6 @@ export type TransitMapProps = {
   onVehiclePress?: (id: string) => void;
   /** Show zoom in / zoom out / re-center buttons. Re-center returns to `state.fit`. */
   controls?: boolean;
+  /** Distance of the controls from the map's top edge (clear of overlays). */
+  controlsTop?: number;
 };

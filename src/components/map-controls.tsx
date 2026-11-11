@@ -10,7 +10,9 @@ export function MapControls({
   onZoomIn,
   onZoomOut,
   onRecenter,
+  top = 10,
 }: {
+  top?: number;
   onZoomIn: () => void;
   onZoomOut: () => void;
   onRecenter: () => void;
@@ -21,7 +23,7 @@ export function MapControls({
     { label: "Re-center the map", icon: LocateFixed, onPress: onRecenter },
   ];
   return (
-    <View style={styles.column} pointerEvents="box-none">
+    <View style={[styles.column, { top }]} pointerEvents="box-none">
       {buttons.map(({ label, icon: Icon, onPress }) => (
         <Pressable
           key={label}
@@ -39,7 +41,7 @@ export function MapControls({
 }
 
 const styles = StyleSheet.create({
-  column: { position: "absolute", top: 10, right: 10, gap: 8 },
+  column: { position: "absolute", right: 10, gap: 8 },
   button: {
     width: 36,
     height: 36,

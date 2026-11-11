@@ -483,6 +483,7 @@ export function TransitMap({
   onCenterChange,
   onVehiclePress,
   controls = false,
+  controlsTop,
 }: TransitMapProps) {
   const [ready, setReady] = useState(false);
   const onDragRef = useRef(onDrag);
@@ -584,6 +585,7 @@ export function TransitMap({
   const mapControls =
     controls && ready ? (
       <MapControls
+        top={controlsTop}
         onZoomIn={() => command({ type: "zoom", delta: 1 })}
         onZoomOut={() => command({ type: "zoom", delta: -1 })}
         onRecenter={() => command({ type: "recenter" })}

@@ -249,6 +249,7 @@ export function TransitMap({
   onCenterChange,
   onVehiclePress,
   controls = false,
+  controlsTop,
 }: TransitMapProps) {
   const camera = useRef<Camera>(null);
   const zoom = useRef(14);
@@ -535,6 +536,7 @@ export function TransitMap({
 
       {controls && loaded ? (
         <MapControls
+          top={controlsTop}
           onZoomIn={() => zoomBy(1)}
           onZoomOut={() => zoomBy(-1)}
           onRecenter={() => {
