@@ -23,16 +23,15 @@ import { useNow } from "@/hooks/use-now";
 import { usePolling } from "@/hooks/use-polling";
 import {
   choosePathFor,
-  getDistanceMeters,
+  dropoffArrivalMeters,
+  reachedDropoff,
   rideStats,
   type Coordinates,
 } from "@/utils/geo";
 
 const { brandBlue, mutedText, softBlue, text } = moduleColors;
 
-/** Ride ends automatically within this distance of B ... */
-export const dropoffArrivalMeters = 50;
-/** ... for this many readings in a row. */
+/** Ride ends automatically after this many readings in a row at B. */
 const dropoffArrivalReadings = 2;
 /** Older vehicle locations fall back to the commuter's own GPS. */
 const vehicleStaleMs = 30_000;
@@ -142,17 +141,18 @@ export function RideInProgress({
     onArrived();
   }, [request.id, onArrived]);
 
-  // Auto drop-off: two readings in a row within 50 m of B.
+  // Auto drop-off: two readings in a row within 50 m of B along the route (or
+  // already past it). Re-checked on every tick, so a vehicle parked at B counts.
   useEffect(() => {
     if (isCompanion || !dropoff || !position) return;
-    if (getDistanceMeters(position, dropoff) <= dropoffArrivalMeters) {
+    if (reachedDropoff(stats, position, dropoff)) {
       arrivalReadings.current += 1;
       if (arrivalReadings.current >= dropoffArrivalReadings) void finish();
     } else {
       arrivalReadings.current = 0;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [position?.lat, position?.lng, dropoff?.lat, dropoff?.lng, isCompanion]);
+  }, [now, position?.lat, position?.lng, stats, isCompanion]);
 
   const mapState = useMemo<TransitMapState>(() => {
     const points: [number, number][] = [[pickup.lat, pickup.lng]];

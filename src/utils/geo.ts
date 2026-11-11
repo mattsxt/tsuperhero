@@ -290,3 +290,18 @@ export function rideStats(
     ahead: sliceAlong(path, alongNow, alongB),
   };
 }
+
+/** Distance from B (along the route when known) that counts as dropped off. */
+export const dropoffArrivalMeters = 50;
+
+// Whether a position counts as having reached drop-off point B. With route
+// stats it uses the distance left along the route, so passing beside B on an
+// earlier leg doesn't count, and a position already past B does.
+export function reachedDropoff(
+  stats: RideStats | null,
+  position: Coordinates,
+  dropoff: Coordinates,
+) {
+  if (stats) return stats.remainingMeters <= dropoffArrivalMeters;
+  return getDistanceMeters(position, dropoff) <= dropoffArrivalMeters;
+}

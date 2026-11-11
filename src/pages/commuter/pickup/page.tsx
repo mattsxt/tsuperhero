@@ -514,6 +514,25 @@ export default function PickupScreen() {
     !!activeId,
   );
 
+  // The ride screen is showing, so the "you're on board" pop-up is redundant.
+  const ridingId =
+    active && isRideActive(active.status)
+      ? active.id
+      : sharedRide?.stage === "riding"
+        ? sharedRide.requestId
+        : null;
+  useEffect(() => {
+    if (!ridingId) return;
+    const notices = getNotifications().filter(
+      (item) =>
+        (item.type === "pickup_boarded" ||
+          item.type === "shared_pickup_boarded") &&
+        item.data.request_id === ridingId &&
+        !item.read,
+    );
+    if (notices.length) void markNotificationsRead(notices.map((item) => item.id));
+  }, [ridingId]);
+
   const goBack = () => goBackOr(Routes.commuterHome);
 
   const sendPickupRequest = async (

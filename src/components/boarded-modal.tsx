@@ -23,34 +23,24 @@ export function BoardedModal() {
       !item.read &&
       !dismissed.includes(item.id) &&
       now - item.createdAt.getTime() < recentMs &&
-      !(item.type === "pickup_boarded" && pathname === Routes.commuterPickup),
+      // The pickup screen already shows the ride.
+      pathname !== Routes.commuterPickup,
   );
   if (!boarded) return null;
 
-  const requestId =
-    typeof boarded.data.request_id === "string"
-      ? boarded.data.request_id
-      : undefined;
-
-  const close = (openBooking: boolean) => {
+  // Boarding starts the ride: open the live trip view on the pickup screen.
+  const close = (followRide: boolean) => {
     setDismissed((current) => [...current, boarded.id]);
     void markNotificationsRead([boarded.id]);
-    if (openBooking) {
-      router.push({
-        pathname: Routes.commuterBookings,
-        params: requestId
-          ? { tab: "pickup", open: requestId }
-          : { tab: "pickup" },
-      });
-    }
+    if (followRide) router.push(Routes.commuterPickup);
   };
 
   return (
     <ConfirmModal
       visible
       title="You're on board!"
-      message={`${boarded.body} Request complete. It's in your bookings.`}
-      confirmLabel="View booking"
+      message={boarded.body}
+      confirmLabel="Follow ride"
       cancelLabel="Got it"
       icon={<CircleCheckBig color="#ffffff" size={22} strokeWidth={2.2} />}
       onConfirm={() => close(true)}

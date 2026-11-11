@@ -22,6 +22,7 @@ export type AppNotification = {
 const targets: Record<string, AppRoute> = {
   pickup_accepted: Routes.commuterPickup,
   pickup_boarded: Routes.commuterPickup,
+  pickup_completed: Routes.commuterBookings,
   pickup_released: Routes.commuterPickup,
   pickup_rejected: Routes.commuterPickup,
   pickup_shared: Routes.commuterHome,
@@ -32,7 +33,8 @@ const targets: Record<string, AppRoute> = {
   share_ride_left: Routes.commuterPickup,
   shared_pickup_accepted: Routes.commuterPickup,
   shared_pickup_released: Routes.commuterPickup,
-  shared_pickup_boarded: Routes.commuterBookings,
+  shared_pickup_boarded: Routes.commuterPickup,
+  shared_pickup_completed: Routes.commuterBookings,
   pickup_nearby: Routes.transitStartTrip,
   location_sharing: Routes.transitStartTrip,
   trip_completed: Routes.commuterBookings,

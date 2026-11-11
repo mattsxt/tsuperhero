@@ -56,6 +56,7 @@ const unreadBackground = "#eef4fe";
 const typeIcons: Record<string, typeof Bell> = {
   pickup_accepted: BusFront,
   pickup_boarded: CircleCheck,
+  pickup_completed: Flag,
   pickup_released: RotateCcw,
   pickup_shared: UsersRound,
   pickup_location_changed: MapPin,
@@ -64,6 +65,7 @@ const typeIcons: Record<string, typeof Bell> = {
   shared_pickup_accepted: BusFront,
   shared_pickup_released: RotateCcw,
   shared_pickup_boarded: CircleCheck,
+  shared_pickup_completed: Flag,
   pickup_rejected: CircleX,
   pickup_nearby: MapPin,
   trip_completed: Flag,

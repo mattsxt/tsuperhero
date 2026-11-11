@@ -6,6 +6,7 @@ import {
   nearestPointOnPath,
   pathLengthMeters,
   rideProgress,
+  reachedDropoff,
   rideStats,
   sliceAlong,
   type LatLngPair,
@@ -172,4 +173,39 @@ test("rideStats without a position shows the whole ride ahead", () => {
   assert.equal(stats.progress, 0);
   assert.deepEqual(stats.travelled, []);
   near(stats.remainingMeters, stats.totalMeters, 0.001);
+});
+
+test("reachedDropoff ignores a straight-line pass near B earlier on the route", () => {
+  // Out-and-back path: B sits beside the outbound leg, but is reached on the way back.
+  const outAndBack: LatLngPair[] = [
+    [14.6, 121.0],
+    [14.6, 121.02],
+    [14.6003, 121.02],
+    [14.6003, 121.0],
+  ];
+  const a = { lat: 14.6, lng: 121.0 };
+  const b = { lat: 14.6003, lng: 121.01 };
+  const outbound = { lat: 14.6, lng: 121.01 };
+  const stats = rideStats(outAndBack, a, b, outbound);
+  assert.equal(reachedDropoff(stats, outbound, b), false);
+});
+
+test("reachedDropoff fires within 50 m of B along the route", () => {
+  const a = offNorth(121.002, 0);
+  const b = offNorth(121.018, 0);
+  const here = offNorth(121.0177, 0);
+  assert.equal(reachedDropoff(rideStats(P, a, b, here), here, b), true);
+});
+
+test("reachedDropoff fires once the ride has passed B", () => {
+  const a = offNorth(121.002, 0);
+  const b = offNorth(121.01, 0);
+  const past = offNorth(121.019, 0);
+  assert.equal(reachedDropoff(rideStats(P, a, b, past), past, b), true);
+});
+
+test("reachedDropoff falls back to straight-line distance without a path", () => {
+  const b = offNorth(121.01, 0);
+  assert.equal(reachedDropoff(null, offNorth(121.01, 40), b), true);
+  assert.equal(reachedDropoff(null, offNorth(121.01, 80), b), false);
 });

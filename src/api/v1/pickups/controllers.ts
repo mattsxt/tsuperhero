@@ -1,6 +1,11 @@
 import { authRoutes } from "@/api/v1/auth/routes";
 import { getSupabaseClient } from "@/api/v1/client";
-import { readCache, unwrapCached, writeCache } from "@/api/v1/cache";
+import {
+  isConnectionError,
+  readCache,
+  unwrapCached,
+  writeCache,
+} from "@/api/v1/cache";
 import { pickupRoutes } from "@/api/v1/pickups/routes";
 import { profileRoutes } from "@/api/v1/profile/routes";
 import type {
@@ -206,6 +211,8 @@ function fetchActivePickup(): Promise<Result<PickupRequest | null>> {
     );
     const pickup = Array.isArray(row?.pickup) ? row.pickup[0] : row?.pickup;
     if (!row || !pickup) return null;
+    // Dropped off on this phone but not synced yet: the ride is over here.
+    if (await isRideCompletionQueued(row.request_id)) return null;
     return {
       id: row.request_id,
       pickupName: pickup.pickup_destination,
@@ -284,7 +291,8 @@ export async function requestPickup(
   }
 
   // Pickup point A is moved onto the route. A point already on it (such as a
-  // waiting area) keeps its exact coordinates.
+  // waiting area) keeps its exact coordinates. The draft keeps the location
+  // companions were invited to; only set_pickup_route stores snapped A.
   const point =
     match.walkMeters <= pickupOnRouteMeters
       ? location
@@ -295,9 +303,9 @@ export async function requestPickup(
     const requestId: string | null = await unwrap(
       pickupRoutes.savePickupDraft(
         form.draftRequestId ?? null,
-        point.lat,
-        point.lng,
-        point.name,
+        location.lat,
+        location.lng,
+        location.name,
         passengers,
         vehicle === "jeep" ? "Jeepney" : "Tricycle",
       ),
@@ -360,22 +368,36 @@ export async function flushRideCompletions(): Promise<void> {
     if (!userId) return;
     const key = rideCompletionKey(userId);
     const requestIds = readCache<string[]>(key) ?? [];
-    const remaining: string[] = [];
+    const done: string[] = [];
     for (const requestId of requestIds) {
       try {
         await unwrap(pickupRoutes.completeMyRide(requestId));
-      } catch {
-        // Retry only connection failures; a rejected drop-off won't succeed later.
-        if (!isOnline()) remaining.push(requestId);
+        done.push(requestId);
+      } catch (error) {
+        // Retry connection failures; a rejected drop-off won't succeed later.
+        if (!isConnectionError(error)) done.push(requestId);
       }
     }
-    writeCache(key, remaining);
+    // Re-read so drop-offs queued during this flush aren't overwritten.
+    const latest = readCache<string[]>(key) ?? [];
+    writeCache(
+      key,
+      latest.filter((requestId) => !done.includes(requestId)),
+    );
   })()
     .catch(() => {})
     .finally(() => {
       flushingRideCompletions = null;
     });
   await flushingRideCompletions;
+}
+
+async function isRideCompletionQueued(requestId: string) {
+  const userId = await currentUserId();
+  if (!userId) return false;
+  return (readCache<string[]>(rideCompletionKey(userId)) ?? []).includes(
+    requestId,
+  );
 }
 
 export async function queueRideCompletion(requestId: string): Promise<void> {
@@ -550,6 +572,9 @@ export async function describePickupBeforeSignOut(): Promise<string | null> {
       : "You have a pickup request in progress. Signing out will cancel it.";
   }
   if (shared.ok && shared.data) {
+    if (shared.data.stage === "riding") {
+      return `You're riding with ${shared.data.owner.name}. Signing out won't end the ride.`;
+    }
     return `You're in a shared ride with ${shared.data.owner.name}. Signing out will leave it and let them know.`;
   }
   return null;
