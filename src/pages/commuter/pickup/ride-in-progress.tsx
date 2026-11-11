@@ -238,7 +238,9 @@ export function RideInProgress({
         >
           <ArrowLeft color={brandBlue} size={20} strokeWidth={2.5} />
         </Pressable>
-        <Text style={styles.topTitle}>ON THE WAY</Text>
+        <View style={styles.titlePill}>
+          <Text style={styles.topTitle}>ON THE WAY</Text>
+        </View>
       </View>
 
       <View
@@ -328,15 +330,18 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#ffffff" },
   flex: { flex: 1 },
   pressed: { opacity: 0.8 },
+  // Back button pinned left; the title pill is centred on the screen.
   topBar: {
     position: "absolute",
     left: 16,
     right: 16,
-    flexDirection: "row",
+    height: 42,
     alignItems: "center",
-    gap: 12,
+    justifyContent: "center",
   },
   back: {
+    position: "absolute",
+    left: 0,
     width: 42,
     height: 42,
     alignItems: "center",
@@ -344,16 +349,27 @@ const styles = StyleSheet.create({
     borderRadius: 21,
     backgroundColor: "#ffffff",
     elevation: 4,
+    shadowColor: "#000000",
+    shadowOpacity: 0.18,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  titlePill: {
+    paddingVertical: 9,
+    paddingHorizontal: 16,
+    borderRadius: 999,
+    backgroundColor: brandBlue,
+    elevation: 4,
+    shadowColor: "#000000",
+    shadowOpacity: 0.18,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
   },
   topTitle: {
-    color: brandBlue,
+    color: "#ffffff",
     fontFamily: "SoraBold",
     fontSize: 11,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: "#ffffff",
-    overflow: "hidden",
+    letterSpacing: 0.6,
   },
   card: {
     position: "absolute",
