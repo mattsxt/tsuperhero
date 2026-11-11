@@ -8,6 +8,7 @@ import LocateFixed from "lucide-react-native/icons/locate-fixed";
 import MapPin from "lucide-react-native/icons/map-pin";
 import Minus from "lucide-react-native/icons/minus";
 import Plus from "lucide-react-native/icons/plus";
+import Flag from "lucide-react-native/icons/flag";
 import Users from "lucide-react-native/icons/users";
 import X from "lucide-react-native/icons/x";
 import type { LocationObject, LocationObjectCoords } from "expo-location";
@@ -49,6 +50,8 @@ import {
   loadMyTrips,
   type TripRecord,
   loadNearbyPickups,
+  loadVehicleRiders,
+  type VehicleRider,
   loadOperatorAssignment,
   saveTripState,
   queueTripState,
@@ -280,6 +283,8 @@ function Trip({
   const shareFailing = useRef(false);
   const tripActive = useRef(false);
   const seenPickups = useRef(new Set<string>());
+  const knownRiders = useRef(new Map<string, VehicleRider>());
+  const [riders, setRiders] = useState<VehicleRider[]>([]);
   const [unfinished, setUnfinished] = useState<TripRecord | null>(null);
   const passedPickups = useRef(new Set<string>());
 
@@ -499,6 +504,43 @@ function Trip({
     return () => clearInterval(timer);
   }, [onTrip]);
 
+  useEffect(() => {
+    if (!onTrip) return;
+    let loading = false;
+    const poll = async () => {
+      if (loading) return;
+      loading = true;
+      try {
+        const result = await loadVehicleRiders();
+        if (!result.ok || !tripActive.current) return;
+        const next = new Map(result.data.map((rider) => [rider.id, rider]));
+        const droppedOff = [...knownRiders.current.values()].filter(
+          (rider) => !next.has(rider.id),
+        );
+        knownRiders.current = next;
+        setRiders(result.data);
+        const dropped = droppedOff.reduce(
+          (total, rider) => total + rider.passengers,
+          0,
+        );
+        if (dropped > 0) {
+          setCount((current) => Math.max(0, current - dropped));
+          setToast(
+            nextToast(
+              `${dropped} passenger${dropped === 1 ? "" : "s"} dropped off at ${droppedOff[0].dropoffName}`,
+              "info",
+            ),
+          );
+        }
+      } finally {
+        loading = false;
+      }
+    };
+    poll();
+    const timer = setInterval(poll, pickupPollMs);
+    return () => clearInterval(timer);
+  }, [onTrip]);
+
   const boardingAttempts = useRef(new Map<string, number>());
   useEffect(() => {
     if (!fix || accepted.length === 0) return;
@@ -649,6 +691,8 @@ function Trip({
     clearTripPassengers();
     boardingAttempts.current.clear();
     seenPickups.current = new Set();
+    knownRiders.current = new Map();
+    setRiders([]);
     passedPickups.current = new Set();
     setAccepted([]);
     setCount(0);
@@ -683,6 +727,8 @@ function Trip({
     stopLocationSharing();
     setBackgroundSharing(false);
     setPickups([]);
+    knownRiders.current = new Map();
+    setRiders([]);
     setAccepted([]);
     setStatus("idle");
     setCount(0);
@@ -766,15 +812,42 @@ function Trip({
 
   const coords = fix?.coords ?? null;
   const mapPickups = useMemo(
-    () =>
-      [...pickups, ...accepted].map(({ id, lat, lng, passengers }) => ({
+    () => [
+      ...[...pickups, ...accepted].map(({ id, lat, lng, passengers }) => ({
         id,
         lat,
         lng,
         passengers,
       })),
-    [pickups, accepted],
+      ...riders.flatMap((rider) =>
+        rider.dropoff
+          ? [
+              {
+                id: `dropoff-${rider.id}`,
+                lat: rider.dropoff.lat,
+                lng: rider.dropoff.lng,
+                badge: "B",
+                label: rider.dropoffName,
+              },
+            ]
+          : [],
+      ),
+    ],
+    [pickups, accepted, riders],
   );
+  const nextDropoff = useMemo(() => {
+    if (!coords) return null;
+    const here = { lat: coords.latitude, lng: coords.longitude };
+    return (
+      riders
+        .filter((rider) => rider.dropoff)
+        .map((rider) => ({
+          rider,
+          meters: getDistanceMeters(here, rider.dropoff!),
+        }))
+        .sort((a, b) => a.meters - b.meters)[0] ?? null
+    );
+  }, [riders, coords]);
   const mapState = useMemo<TransitMapState>(
     () => ({
       routeId: route?.id ?? null,
@@ -1034,6 +1107,19 @@ function Trip({
               : `${Math.max(0, seatsLeft)} ${seatsLeft === 1 ? "seat" : "seats"} left${reserved ? ` · ${reserved} reserved for pickups` : ""}`}
           </Text>
         </View>
+
+        {onTrip && nextDropoff && (
+          <View style={styles.nextDropoff}>
+            <Flag color="#fcc419" size={18} strokeWidth={2.4} />
+            <Text style={styles.nextDropoffText} numberOfLines={1}>
+              Next drop-off · {nextDropoff.rider.dropoffName} ·{" "}
+              {nextDropoff.meters < 1000
+                ? `${Math.round(nextDropoff.meters / 10) * 10} m`
+                : `${(nextDropoff.meters / 1000).toFixed(1)} km`}
+              {riders.length > 1 ? ` · +${riders.length - 1} more` : ""}
+            </Text>
+          </View>
+        )}
 
         {!onTrip && cooldown && (
           <View style={styles.cooldown}>
@@ -1567,6 +1653,22 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   actions: { flexDirection: "row", gap: 10, marginTop: 12 },
+  nextDropoff: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    backgroundColor: "rgba(252, 196, 25, 0.14)",
+  },
+  nextDropoffText: {
+    flex: 1,
+    color: "#ffffff",
+    fontFamily: "SoraBold",
+    fontSize: 14,
+  },
   tripButton: {
     height: 56,
     alignItems: "center",
