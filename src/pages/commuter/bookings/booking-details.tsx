@@ -1,5 +1,6 @@
 import { Image } from "expo-image";
 import CalendarDays from "lucide-react-native/icons/calendar-days";
+import MapPin from "lucide-react-native/icons/map-pin";
 import ClipboardList from "lucide-react-native/icons/clipboard-list";
 import Sparkles from "lucide-react-native/icons/sparkles";
 import Star from "lucide-react-native/icons/star";
@@ -155,14 +156,10 @@ export function BookingDetailsModal({
               <ClipboardList color="#ffffff" size={22} strokeWidth={2.2} />
             </View>
             <View style={styles.flex}>
-              <Text style={styles.eyebrow}>
-                {rental ? "RENTAL · COMPLETED" : "PICKUP · COMPLETED"}
+              <Text style={styles.title} numberOfLines={1}>
+                {rental ? "Charter rental" : "Pickup ride"}
               </Text>
-              <Text style={styles.title} numberOfLines={2}>
-                {!rental && booking.dropoffName
-                  ? `${booking.destination} → ${booking.dropoffName}`
-                  : booking.destination}
-              </Text>
+              <Text style={styles.headerStatus}>Completed</Text>
             </View>
             <Pressable
               accessibilityRole="button"
@@ -175,6 +172,7 @@ export function BookingDetailsModal({
           </View>
 
           <ScrollView contentContainerStyle={styles.body}>
+            <Text style={styles.section}>DETAILS</Text>
             <Detail
               icon={
                 <CalendarDays color={palette.brand} size={15} strokeWidth={2} />
@@ -182,6 +180,13 @@ export function BookingDetailsModal({
             >
               {formatDate(booking.requestedAt)}
             </Detail>
+            {rental && (
+              <Detail
+                icon={<MapPin color={palette.brand} size={15} strokeWidth={2} />}
+              >
+                {booking.destination}
+              </Detail>
+            )}
             {booking.passengers !== null && (
               <Detail
                 icon={<Users color={palette.brand} size={15} strokeWidth={2} />}
@@ -215,11 +220,11 @@ export function BookingDetailsModal({
                 <View>
                   <TimelineStep
                     title="Requested"
-                    detail={formatDate(booking.requestedAt)}
+                    detail={clockTime(booking.requestedAt)}
                     done
                   />
                   <TimelineStep
-                    title={`Picked up at ${booking.destination}`}
+                    title={`Picked up at ${friendlyPlace(booking.destination, "your location")}`}
                     detail={
                       booking.pickedUpAt
                         ? clockTime(booking.pickedUpAt)
@@ -228,7 +233,7 @@ export function BookingDetailsModal({
                     done={!!booking.pickedUpAt}
                   />
                   <TimelineStep
-                    title={`Dropped off at ${booking.dropoffName ?? "your stop"}`}
+                    title={`Dropped off at ${friendlyPlace(booking.dropoffName, "your stop")}`}
                     detail={
                       booking.droppedOffAt
                         ? clockTime(booking.droppedOffAt)
@@ -341,6 +346,17 @@ export function BookingDetailsModal({
   );
 }
 
+const genericPlaces: Record<string, string> = {
+  "current location": "your location",
+  "pinned location": "your pinned spot",
+};
+
+function friendlyPlace(name: string | null | undefined, fallback: string) {
+  const trimmed = name?.trim();
+  if (!trimmed || /^[23456789CFGHJMPQRVWX]{2,8}\+/i.test(trimmed)) return fallback;
+  return genericPlaces[trimmed.toLowerCase()] ?? trimmed;
+}
+
 const clockTime = (date: Date) =>
   date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 
@@ -442,7 +458,12 @@ const styles = StyleSheet.create({
     borderRadius: 21,
     backgroundColor: "rgba(255, 255, 255, 0.16)",
   },
-  eyebrow: { color: palette.cyan, fontFamily: "SoraBold", fontSize: 10 },
+  headerStatus: {
+    marginTop: 2,
+    color: palette.cyan,
+    fontFamily: "SoraBold",
+    fontSize: 12,
+  },
   title: {
     color: "#ffffff",
     fontFamily: "SoraBold",
