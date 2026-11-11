@@ -159,9 +159,13 @@ export function RouteMatchPreview({
 
   return (
     <View style={styles.wrap}>
-      {matches.length > 1 && (
+      {matches.length > 0 && (
         <View style={styles.list}>
-          <Text style={styles.listTitle}>CHOOSE THE ROUTE YOU’LL RIDE</Text>
+          <Text style={styles.listTitle}>
+            {matches.length > 1
+              ? "CHOOSE THE ROUTE YOU’LL RIDE"
+              : "THE ROUTE YOU’LL RIDE"}
+          </Text>
           {matches.map((match) => {
             const checked = selected?.routeId === match.routeId;
             const dropoffAway =
