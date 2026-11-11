@@ -189,6 +189,11 @@ export type RouteMatch = {
   rideMeters: number;
 };
 
+// Route ranking = estimated trip time, with walking counted double (the usual
+// transit-planning weight, since people mind walking more than riding).
+const walkCostPerMeter = (2 * 3600) / 5000; // 5 km/h on foot, weighted x2
+const rideCostPerMeter = 3600 / 18000; // 18 km/h by jeepney
+
 // Routes with one single path that passes within `maxMeters` of pickup A,
 // with A and B snapped onto that path. Commuters are only dropped off on the
 // route, so B is redirected to the path's nearest point however far it is
@@ -203,7 +208,8 @@ export function matchRoutes(
   maxDropoffMeters = Infinity,
 ): RouteMatch[] {
   const score = (match: RouteMatch) =>
-    match.walkMeters + match.dropoff.distanceMeters + match.rideMeters;
+    (match.walkMeters + match.dropoff.distanceMeters) * walkCostPerMeter +
+    match.rideMeters * rideCostPerMeter;
   return routes
     .map((route) =>
       route.paths

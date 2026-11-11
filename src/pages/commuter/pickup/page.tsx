@@ -125,6 +125,9 @@ function formatDistance(meters: number) {
     : `${(meters / 1000).toFixed(1)} km`;
 }
 
+/** How many matching routes the commuter can choose from. */
+const maxRouteChoices = 3;
+
 export const noRouteMessage = "No registered route connects these points";
 
 function pickupProblemSource(message: string) {
@@ -427,11 +430,15 @@ export default function PickupScreen() {
   // Jeepneys run fixed routes, so A and B must sit on one; tricycles pick up
   // and drop off anywhere.
   const usesRoute = vehicle === "jeep";
-  // Routes that pass both pickup A and drop-off B; A and B snapped onto them.
+  // The best routes (least walking, closest drop-off) that pass pickup A, with
+  // A and B snapped onto them. Only the top few are offered as choices.
   const routeMatches = useMemo<PickupRouteMatch[]>(
     () =>
       usesRoute && requestLocation && dropoffPlace
-        ? matchPickupRoutes(requestLocation, dropoffPlace)
+        ? matchPickupRoutes(requestLocation, dropoffPlace).slice(
+            0,
+            maxRouteChoices,
+          )
         : [],
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [usesRoute, requestLocationKey, dropoffPlace, routes],

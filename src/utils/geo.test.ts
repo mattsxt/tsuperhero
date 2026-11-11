@@ -295,3 +295,25 @@ test("snapToPaths snaps onto the closest of several paths", () => {
   near(snap!.distanceMeters, 50, 2);
   assert.equal(snapToPaths(offNorth(121.005, 50), []), null);
 });
+
+test('matchRoutes ranks by trip time: walking costs more than riding', () => {
+  // 'short-walk' needs a longer ride but almost no walking; 'long-walk' rides
+  // less but needs ~800 m more walking in total.
+  const shortWalk: LatLngPair[] = [
+    [14.6, 121.0],
+    [14.6, 121.03],
+    [14.605, 121.03],
+    [14.605, 121.018],
+  ];
+  const longWalk: LatLngPair[] = [
+    [14.6036, 121.0],
+    [14.6036, 121.02],
+  ];
+  const a = offNorth(121.001, 0);
+  const b = { lat: 14.605, lng: 121.018 };
+  const matches = matchRoutes(a, b, [
+    { routeId: 'long-walk', paths: [longWalk] },
+    { routeId: 'short-walk', paths: [shortWalk] },
+  ]);
+  assert.deepEqual(matches.map((m) => m.routeId), ['short-walk', 'long-walk']);
+});
