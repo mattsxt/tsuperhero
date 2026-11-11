@@ -117,6 +117,47 @@ function useGlide(lat: number, lng: number) {
   return position;
 }
 
+const pinLabelHeight = 22;
+
+function pinAnchorY(pin: { muted?: boolean; label?: string }) {
+  const size = pin.muted ? 16 : 30;
+  const height = size + (pin.label ? pinLabelHeight : 0);
+  return size / 2 / height;
+}
+
+function PinMarker({
+  pin,
+}: {
+  pin: NonNullable<TransitMapProps["state"]["pickups"]>[number];
+}) {
+  const color = pin.color ?? pinRed;
+  return (
+    <MarkerView
+      coordinate={[pin.lng, pin.lat]}
+      anchor={{ x: 0.5, y: pinAnchorY(pin) }}
+      allowOverlap
+    >
+      <View style={styles.pinMarker} pointerEvents="none">
+        {pin.muted ? (
+          <View style={styles.pinMuted} />
+        ) : (
+          <View style={[styles.pinBadge, { backgroundColor: color }]}>
+            <Text style={styles.pinBadgeText}>{pin.badge ?? ""}</Text>
+          </View>
+        )}
+        {!!pin.label && (
+          <Text
+            style={[styles.pinLabel, pin.muted && styles.pinLabelMuted]}
+            numberOfLines={1}
+          >
+            {pin.label}
+          </Text>
+        )}
+      </View>
+    </MarkerView>
+  );
+}
+
 function VehicleMarker({
   vehicle,
   dimmed,
@@ -290,7 +331,9 @@ export function TransitMap({
   const pickupShape = useMemo(
     () => ({
       type: "FeatureCollection" as const,
-      features: (state.pickups ?? []).map((pickup) => ({
+      features: (state.pickups ?? [])
+        .filter((pickup) => !pickup.muted && !pickup.color)
+        .map((pickup) => ({
         type: "Feature" as const,
         id: pickup.id,
         properties: {
@@ -300,8 +343,6 @@ export function TransitMap({
               ? String(pickup.passengers)
               : ""),
           label: pickup.label?.trim() ?? "",
-          muted: !!pickup.muted,
-          color: pickup.color ?? pinRed,
         },
         geometry: {
           type: "Point" as const,
@@ -481,30 +522,22 @@ export function TransitMap({
           <CircleLayer
             id="pickup-pins"
             style={{
-              circleRadius: ["case", ["get", "muted"], 7, 13],
-              circleColor: [
-                "case",
-                ["get", "muted"],
-                mutedPinGrey,
-                ["get", "color"],
-              ],
+              circleRadius: 13,
+              circleColor: pinRed,
               circleStrokeColor: "#ffffff",
-              circleStrokeWidth: ["case", ["get", "muted"], 2, 2.5],
+              circleStrokeWidth: 2.5,
             }}
           />
           <CircleLayer
             id="pickup-pin-centers"
-            style={{
-              circleRadius: ["case", ["get", "muted"], 2.5, 8],
-              circleColor: "#ffffff",
-            }}
+            style={{ circleRadius: 8, circleColor: "#ffffff" }}
           />
           <SymbolLayer
             id="pickup-counts"
             style={{
               textField: ["get", "count"],
-              textSize: 12,
-              textColor: ["get", "color"],
+              textSize: 11,
+              textColor: pinRed,
               textFont: ["Open Sans Bold", "Arial Unicode MS Bold"],
               textAllowOverlap: true,
               textIgnorePlacement: true,
@@ -515,21 +548,22 @@ export function TransitMap({
             style={{
               textField: ["get", "label"],
               textSize: 11,
-              textColor: ["case", ["get", "muted"], "#475569", "#193caf"],
+              textColor: "#193caf",
               textHaloColor: "#ffffff",
               textHaloWidth: 2,
-              textOffset: [
-                "case",
-                ["get", "muted"],
-                ["literal", [0, 1.1]],
-                ["literal", [0, 1.9]],
-              ],
+              textOffset: [0, 1.9],
               textAnchor: "top",
               textMaxWidth: 12,
               textFont: ["Open Sans Bold", "Arial Unicode MS Bold"],
             }}
           />
         </ShapeSource>
+
+        {(state.pickups ?? [])
+          .filter((pickup) => pickup.muted || pickup.color)
+          .map((pickup) => (
+            <PinMarker key={pickup.id} pin={pickup} />
+          ))}
 
         {state.vehicles.map((vehicle) => (
           <VehicleMarker
@@ -614,6 +648,42 @@ export function TransitMap({
 }
 
 const styles = StyleSheet.create({
+  pinMarker: { alignItems: "center", maxWidth: 160 },
+  pinBadge: {
+    width: 30,
+    height: 30,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 15,
+    borderWidth: 3,
+    borderColor: "#ffffff",
+    elevation: 4,
+    shadowColor: "#000000",
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
+  },
+  pinBadgeText: { color: "#ffffff", fontWeight: "800", fontSize: 14 },
+  pinMuted: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 4,
+    borderColor: mutedPinGrey,
+    backgroundColor: "#ffffff",
+  },
+  pinLabel: {
+    marginTop: 3,
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    overflow: "hidden",
+    borderRadius: 6,
+    backgroundColor: "#ffffff",
+    color: "#193caf",
+    fontWeight: "700",
+    fontSize: 11,
+  },
+  pinLabelMuted: { color: "#475569" },
   message: {
     position: "absolute",
     top: 0,
