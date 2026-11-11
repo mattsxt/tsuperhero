@@ -88,9 +88,9 @@ import { watchLocation } from "@/api/v1/places/controllers";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorAlert } from "@/components/error-alert";
 import { LoadingLogo } from "@/components/LoadingLogo";
-import { VehicleIcon } from "@/components/module-icons";
 import { ModuleHeader, moduleColors } from "@/components/module-ui";
 import { TransitMap, type TransitMapState } from "@/components/transit-map";
+import { occupancyPinColors } from "@/components/transit-map-types";
 import { Routes } from "@/constants/routes";
 import { getDistanceMeters, getPairDistanceMeters } from "@/utils/geo";
 import { goBackOr } from "@/utils/navigation";
@@ -117,13 +117,10 @@ const clock = (date: Date) =>
   date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 
 const panelNavy = palette.navy;
-const routeCyan = palette.cyan;
-const counterBlue = "#7dd3f5";
 const circleNavy = palette.header;
 const modalBlue = "#d6ecf8";
 const { brandBlue } = moduleColors;
 const chipBlue = "#a8dcf7";
-const locateBlue = "rgba(168, 220, 247, 0.85)";
 const declineRed = palette.danger;
 const maxPickupCards = 3;
 
@@ -233,7 +230,7 @@ function Trip({
   resumeRequested: boolean;
 }) {
   const insets = useSafeAreaInsets();
-  const { assignment, route, vehicleLabel, coverageTitle } = details;
+  const { assignment, route, coverageTitle } = details;
   const { vehicle } = assignment;
   const capacity = vehicle.max_capacity;
   const reduceMotion = useReducedMotion();
@@ -831,7 +828,7 @@ function Trip({
       >
         <ModuleHeader
           title="Trip"
-          subtitle="View active vehicles, their locations and occupancy levels across your selected route."
+          subtitle={coverageTitle.replace(" – ", " - ")}
           icon={<MapPin color="#ffffff" size={44} strokeWidth={1.8} />}
           onBack={leave}
         />
@@ -862,15 +859,15 @@ function Trip({
           >
             <CircleAlert
               color={toastTones[toast.tone].color}
-              size={12}
-              strokeWidth={2.5}
+              size={22}
+              strokeWidth={2.4}
             />
             <Text
               style={[
                 styles.toastText,
                 { color: toastTones[toast.tone].color },
               ]}
-              numberOfLines={2}
+              numberOfLines={3}
             >
               {toast.text}
             </Text>
@@ -878,13 +875,13 @@ function Trip({
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Dismiss message"
-                hitSlop={10}
+                hitSlop={12}
                 onPress={() => setToast(null)}
               >
                 <X
                   color={toastTones[toast.tone].color}
-                  size={12}
-                  strokeWidth={3}
+                  size={20}
+                  strokeWidth={2.6}
                 />
               </Pressable>
             )}
@@ -943,15 +940,13 @@ function Trip({
           setPanelTop(event.nativeEvent.layout.y);
         }}
       >
-        <View style={styles.coverageRow}>
-          <Text style={styles.coverage} numberOfLines={1}>
-            {coverageTitle.toUpperCase().replace(" – ", " - ")}
-          </Text>
+        {/* Status at a glance: trip + location sharing, and occupancy. */}
+        <View style={styles.statusRow}>
           <View
             style={[
-              styles.sharing,
-              onTrip && styles.sharingOn,
-              onTrip && syncWaiting && styles.sharingOffline,
+              styles.statusChip,
+              onTrip && styles.statusChipOn,
+              onTrip && syncWaiting && styles.statusChipOffline,
             ]}
           >
             <Animated.View
@@ -961,40 +956,70 @@ function Trip({
                 onTrip && sharingPulseStyle,
               ]}
             />
-            <Text style={styles.sharingText}>
+            <Text style={styles.statusChipText} numberOfLines={1}>
               {!onTrip
-                ? "Location Not Shared"
+                ? "Idle · location not shared"
                 : syncWaiting
-                  ? "Offline · will sync"
-                  : "Location Shared"}
+                  ? `${tripStatusLabels[status]} · offline, will sync`
+                  : `${tripStatusLabels[status]} · sharing location`}
             </Text>
+          </View>
+          <View
+            style={[
+              styles.occupancyChip,
+              { backgroundColor: occupancyPinColors[occupancy] },
+            ]}
+          >
+            <Text style={styles.occupancyText}>{occupancy}</Text>
           </View>
         </View>
 
-        <View style={styles.infoRow}>
-          <View style={styles.vehicleIconBackdrop}>
-            <VehicleIcon
-              type={vehicle.vehicle_type}
-              color="#ffffff"
-              size={28}
+        {/* The passenger counter is what drivers use most. */}
+        <View style={styles.counterCard}>
+          <Text style={styles.counterLabel}>
+            {onTrip ? "PASSENGERS ON BOARD" : "START A TRIP TO COUNT PASSENGERS"}
+          </Text>
+          <View style={styles.counterRow}>
+            <CounterButton
+              variant="minus"
+              label="Remove a passenger"
+              disabled={!onTrip || markedFull || count === 0}
+              onPress={removePassenger}
+            >
+              <Minus color="#ffffff" size={36} strokeWidth={3} />
+            </CounterButton>
+            <View
+              style={styles.countBlock}
+              accessibilityLabel={`${count} of ${capacity} passengers`}
+            >
+              <Text style={styles.count}>{count}</Text>
+              <Text style={styles.countMax}>of {capacity}</Text>
+            </View>
+            <CounterButton
+              variant="plus"
+              label="Add a passenger"
+              disabled={!onTrip || markedFull || count >= capacity}
+              onPress={addPassenger}
+            >
+              <Plus color="#ffffff" size={36} strokeWidth={3} />
+            </CounterButton>
+          </View>
+          <View style={styles.seatTrack}>
+            <View
+              style={[
+                styles.seatFill,
+                {
+                  width: `${Math.min(100, Math.round((count / Math.max(1, capacity)) * 100))}%`,
+                  backgroundColor: occupancyPinColors[occupancy],
+                },
+              ]}
             />
           </View>
-          <View style={styles.plateBlock}>
-            <Text style={styles.plate} numberOfLines={1}>
-              {vehicle.plate_number}
-            </Text>
-            <Text style={styles.infoLabel}>{vehicleLabel}</Text>
-          </View>
-          <View style={styles.stats}>
-            <View style={styles.statsRow}>
-              <Stat label="Max Capacity" value={capacity} />
-              <Stat label="Occupancy Level" value={occupancy} />
-            </View>
-            <View style={styles.statsRow}>
-              <Stat label="Current Capacity" value={count} />
-              <Stat label="Status" value={tripStatusLabels[status]} />
-            </View>
-          </View>
+          <Text style={styles.seatsLeft}>
+            {markedFull
+              ? "Marked full · not taking passengers"
+              : `${Math.max(0, seatsLeft)} ${seatsLeft === 1 ? "seat" : "seats"} left${reserved ? ` · ${reserved} reserved for pickups` : ""}`}
+          </Text>
         </View>
 
         {!onTrip && cooldown && (
@@ -1009,48 +1034,31 @@ function Trip({
           </View>
         )}
 
-        <View style={styles.controls}>
-          <View style={styles.counter}>
-            <CounterButton
-              label="Remove a passenger"
-              disabled={!onTrip || markedFull || count === 0}
-              onPress={removePassenger}
-            >
-              <Minus color="#ffffff" size={30} strokeWidth={3} />
-            </CounterButton>
-            <Text style={styles.count}>{count}</Text>
-            <CounterButton
-              label="Add a passenger"
-              disabled={!onTrip || markedFull || count >= capacity}
-              onPress={addPassenger}
-            >
-              <Plus color="#ffffff" size={30} strokeWidth={3} />
-            </CounterButton>
-          </View>
-
-          <View style={styles.actions}>
-            {onTrip ? (
-              <>
-                <TripButton
-                  label="STOP"
-                  tone="stop"
-                  onPress={() => setConfirmingStop(true)}
-                />
-                <TripButton
-                  label="FULL"
-                  tone={full ? "full" : "fullOff"}
-                  onPress={toggleFull}
-                />
-              </>
-            ) : (
+        <View style={styles.actions}>
+          {onTrip ? (
+            <>
               <TripButton
-                label="START"
-                tone="start"
-                disabled={starting || !!cooldown}
-                onPress={start}
+                label={markedFull ? "FULL ✓" : "MARK FULL"}
+                tone={full ? "full" : "fullOff"}
+                onPress={toggleFull}
+                style={styles.fullButton}
               />
-            )}
-          </View>
+              <TripButton
+                label="END TRIP"
+                tone="stop"
+                onPress={() => setConfirmingStop(true)}
+                style={styles.endButton}
+              />
+            </>
+          ) : (
+            <TripButton
+              label={starting ? "STARTING…" : "START TRIP"}
+              tone="start"
+              disabled={starting || !!cooldown}
+              onPress={start}
+              style={styles.endButton}
+            />
+          )}
         </View>
       </View>
 
@@ -1093,17 +1101,17 @@ function PickupCard({
   onAccept: () => void;
   onDecline: () => void;
 }) {
-  const label = `${pickup.passengers} ${pickup.passengers === 1 ? "Passenger" : "Passengers"}`;
+  const label = `${pickup.passengers} ${pickup.passengers === 1 ? "passenger" : "passengers"}`;
   return (
     <View
       style={styles.pickupCard}
       accessibilityLabel={`Pickup request, ${label}`}
     >
       <View style={styles.pickupIcon}>
-        <Users color={brandBlue} size={15} strokeWidth={2.4} />
+        <Users color={brandBlue} size={22} strokeWidth={2.4} />
       </View>
-      <View>
-        <Text style={styles.pickupTitle}>{label}</Text>
+      <View style={styles.pickupText}>
+        <Text style={styles.pickupTitle}>Pickup · {label}</Text>
         <Text style={[styles.pickupMeta, !fits && styles.pickupWarn]}>
           {fits ? `${Math.round(distanceMeters)} m away` : "Not enough seats"}
         </Text>
@@ -1112,7 +1120,6 @@ function PickupCard({
         accessibilityRole="button"
         accessibilityLabel="Decline pickup request"
         disabled={busy}
-        hitSlop={4}
         onPress={onDecline}
         style={({ pressed }) => [
           styles.pickupButton,
@@ -1120,14 +1127,16 @@ function PickupCard({
           pressed && styles.pressed,
         ]}
       >
-        <X color={declineRed} size={15} strokeWidth={3} />
+        <X color={declineRed} size={18} strokeWidth={3} />
+        <Text style={[styles.pickupButtonText, { color: declineRed }]}>
+          Decline
+        </Text>
       </Pressable>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Accept pickup request"
         accessibilityState={{ disabled: !fits, busy }}
         disabled={busy}
-        hitSlop={4}
         onPress={onAccept}
         style={({ pressed }) => [
           styles.pickupButton,
@@ -1137,9 +1146,14 @@ function PickupCard({
         ]}
       >
         {busy ? (
-          <LoadingLogo color="#ffffff" size={18} />
+          <LoadingLogo color="#ffffff" size={20} />
         ) : (
-          <Check color="#ffffff" size={15} strokeWidth={3} />
+          <>
+            <Check color="#ffffff" size={18} strokeWidth={3} />
+            <Text style={[styles.pickupButtonText, { color: "#ffffff" }]}>
+              Accept
+            </Text>
+          </>
         )}
       </Pressable>
     </View>
@@ -1168,8 +1182,12 @@ function FinalizeTripModal({
       <View style={styles.modalRoot}>
         <View style={styles.modalCard}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Finalize Trip?</Text>
+            <Text style={styles.modalTitle}>End this trip?</Text>
           </View>
+          <Text style={styles.modalMessage}>
+            You’ll stop sharing your location. Riders still on board will be
+            marked as dropped off.
+          </Text>
           <View style={styles.modalBody}>
             <Pressable
               accessibilityRole="button"
@@ -1183,7 +1201,7 @@ function FinalizeTripModal({
               ]}
             >
               <Text style={[styles.modalButtonText, styles.modalCancelText]}>
-                CANCEL
+                KEEP DRIVING
               </Text>
             </Pressable>
             <Pressable
@@ -1202,7 +1220,7 @@ function FinalizeTripModal({
                 <LoadingLogo color="#ffffff" size={22} />
               ) : (
                 <Text style={[styles.modalButtonText, styles.modalConfirmText]}>
-                  CONFIRM
+                  END TRIP
                 </Text>
               )}
             </Pressable>
@@ -1213,25 +1231,15 @@ function FinalizeTripModal({
   );
 }
 
-function Stat({ label, value }: { label: string; value: string | number }) {
-  return (
-    <View style={styles.stat}>
-      <Text style={styles.infoLabel} numberOfLines={1}>
-        {label}
-      </Text>
-      <Text style={styles.infoValue} numberOfLines={1}>
-        {value}
-      </Text>
-    </View>
-  );
-}
-
 function CounterButton({
+  variant,
   label,
   disabled,
   onPress,
   children,
 }: {
+  /** "+" is the main action (filled green); "−" is secondary (outlined). */
+  variant: "plus" | "minus";
   label: string;
   disabled: boolean;
   onPress: () => void;
@@ -1244,9 +1252,12 @@ function CounterButton({
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}
+      hitSlop={6}
       style={({ pressed }) => [
         styles.circle,
-        (pressed || disabled) && styles.pressed,
+        variant === "plus" ? styles.circlePlus : styles.circleMinus,
+        disabled && styles.circleDisabled,
+        pressed && styles.pressed,
       ]}
     >
       {children}
@@ -1255,10 +1266,10 @@ function CounterButton({
 }
 
 const tripButtonTones = {
-  start: { backgroundColor: "#a3f7a3", color: palette.success },
-  stop: { backgroundColor: "#f87e7e", color: palette.danger },
-  full: { backgroundColor: "#fcc419", color: "#8a5300" },
-  fullOff: { backgroundColor: "#d6d6d6", color: "#a1a1a1" },
+  start: { backgroundColor: "#22c55e", color: "#ffffff" },
+  stop: { backgroundColor: palette.danger, color: "#ffffff" },
+  full: { backgroundColor: "#fcc419", color: "#5c3b00" },
+  fullOff: { backgroundColor: "rgba(255, 255, 255, 0.14)", color: "#ffffff" },
 };
 
 function TripButton({
@@ -1266,11 +1277,13 @@ function TripButton({
   tone,
   disabled = false,
   onPress,
+  style,
 }: {
   label: string;
   tone: keyof typeof tripButtonTones;
   disabled?: boolean;
   onPress: () => void;
+  style?: object;
 }) {
   const colors = tripButtonTones[tone];
   return (
@@ -1283,6 +1296,7 @@ function TripButton({
       style={({ pressed }) => [
         styles.tripButton,
         { backgroundColor: colors.backgroundColor },
+        style,
         (pressed || disabled) && styles.pressed,
       ]}
     >
@@ -1337,82 +1351,93 @@ const styles = StyleSheet.create({
     elevation: 6,
     left: 12,
     right: 12,
-    alignItems: "flex-end",
-    gap: 6,
+    alignItems: "stretch",
+    gap: 8,
   },
   locateButton: {
     position: "absolute",
     right: 12,
-    width: 34,
-    height: 34,
+    width: 48,
+    height: 48,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 9,
-    backgroundColor: locateBlue,
+    borderRadius: 24,
+    backgroundColor: "#ffffff",
+    elevation: 4,
+    shadowColor: "#000000",
+    shadowOpacity: 0.18,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
   },
   locateIdle: { opacity: 0.5 },
   pickupCard: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    padding: 5,
-    paddingLeft: 6,
-    borderRadius: 10,
-    backgroundColor: chipBlue,
-    elevation: 3,
+    gap: 10,
+    padding: 12,
+    borderRadius: 16,
+    backgroundColor: "#ffffff",
+    elevation: 6,
     shadowColor: "#000000",
     shadowOpacity: 0.2,
-    shadowRadius: 3,
-    shadowOffset: { width: 0, height: 1 },
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
   },
   pickupIcon: {
-    width: 26,
-    height: 26,
+    width: 44,
+    height: 44,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 6,
-    backgroundColor: "#ffffff",
+    borderRadius: 12,
+    backgroundColor: chipBlue,
   },
+  pickupText: { flex: 1 },
   pickupTitle: {
     color: brandBlue,
     fontFamily: "SoraBold",
-    fontSize: 11,
-    lineHeight: 14,
+    fontSize: 15,
+    lineHeight: 20,
   },
   pickupMeta: {
-    color: panelNavy,
+    color: "#334155",
     fontFamily: "Sora",
-    fontSize: 10,
-    lineHeight: 12,
+    fontSize: 13,
+    lineHeight: 18,
   },
   pickupWarn: { color: declineRed, fontFamily: "SoraBold" },
   pickupButton: {
-    width: 28,
-    height: 28,
+    height: 48,
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 7,
+    gap: 4,
+    paddingHorizontal: 12,
+    borderRadius: 12,
   },
-  pickupDecline: { backgroundColor: "#ffffff" },
+  pickupButtonText: { fontFamily: "SoraBold", fontSize: 13 },
+  pickupDecline: {
+    borderWidth: 1.5,
+    borderColor: declineRed,
+    backgroundColor: "#ffffff",
+  },
   pickupAccept: { backgroundColor: brandBlue },
   pickupAcceptBlocked: { backgroundColor: "#9aa5c4" },
   toast: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    maxWidth: "100%",
-    paddingVertical: 5,
-    paddingHorizontal: 8,
-    borderRadius: 6,
-    elevation: 4,
+    gap: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    elevation: 6,
   },
   errorToast: { alignSelf: "stretch", elevation: 4 },
   locateError: { borderWidth: 1.5, borderColor: palette.danger },
   toastText: {
-    flexShrink: 1,
+    flex: 1,
     fontFamily: "SoraBold",
-    fontSize: 10,
-    lineHeight: 13,
+    fontSize: 15,
+    lineHeight: 20,
   },
   panel: {
     position: "absolute",
@@ -1420,115 +1445,123 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     paddingTop: 16,
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     backgroundColor: panelNavy,
   },
-  coverageRow: {
+  statusRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    marginHorizontal: 6,
   },
-  coverage: {
+  statusChip: {
     flex: 1,
-    color: routeCyan,
-    fontFamily: "SoraBold",
-    fontSize: 12,
-  },
-  sharing: {
+    minHeight: 36,
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    paddingVertical: 3,
-    paddingHorizontal: 8,
+    gap: 8,
+    paddingHorizontal: 12,
     borderRadius: 999,
     backgroundColor: "rgba(255, 255, 255, 0.12)",
   },
-  sharingOn: { backgroundColor: "rgba(74, 222, 128, 0.22)" },
+  statusChipOn: { backgroundColor: "rgba(74, 222, 128, 0.22)" },
+  statusChipOffline: { backgroundColor: palette.warning },
+  statusChipText: {
+    flexShrink: 1,
+    color: "#ffffff",
+    fontFamily: "SoraBold",
+    fontSize: 12,
+  },
   sharingDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
     backgroundColor: "#9ca3af",
   },
   sharingDotOn: { backgroundColor: "#4ade80" },
-  sharingText: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 10 },
-  sharingOffline: { backgroundColor: palette.warning },
-  infoRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginTop: 12,
-    marginHorizontal: 6,
-  },
-  vehicleIconBackdrop: {
-    padding: 5,
-    borderRadius: 8,
-    backgroundColor: "rgba(255, 255, 255, 0.18)",
-  },
-  plateBlock: { width: 76, gap: 2 },
-  plate: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 12 },
-  stats: {
-    flex: 1,
-    gap: 8,
-    paddingLeft: 10,
-    borderLeftWidth: StyleSheet.hairlineWidth,
-    borderLeftColor: "rgba(255, 255, 255, 0.3)",
-  },
-  statsRow: { flexDirection: "row", gap: 8 },
-  stat: { flex: 1, gap: 1 },
-  infoLabel: {
-    color: "rgba(255, 255, 255, 0.65)",
-    fontFamily: "Sora",
-    fontSize: 10,
-    lineHeight: 11,
-  },
-  infoValue: {
-    color: "#ffffff",
-    fontFamily: "SoraBold",
-    fontSize: 10,
-    lineHeight: 14,
-  },
-  controls: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    marginTop: 12,
-  },
-  counter: {
-    flex: 1,
-    height: 96,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-evenly",
-    borderRadius: 18,
-    backgroundColor: counterBlue,
-  },
-  circle: {
-    width: 58,
-    height: 58,
-    alignItems: "center",
+  occupancyChip: {
+    minHeight: 36,
     justifyContent: "center",
-    borderRadius: 29,
-    backgroundColor: circleNavy,
+    paddingHorizontal: 14,
+    borderRadius: 999,
   },
-  count: {
-    minWidth: 56,
-    color: "#111111",
+  occupancyText: { color: "#1f2937", fontFamily: "SoraBold", fontSize: 12 },
+  counterCard: {
+    marginTop: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+  },
+  counterLabel: {
+    color: "rgba(255, 255, 255, 0.7)",
     fontFamily: "SoraBold",
-    fontSize: 32,
+    fontSize: 11,
+    letterSpacing: 0.8,
     textAlign: "center",
   },
-  actions: { width: 76, gap: 8, justifyContent: "center" },
-  tripButton: {
-    height: 44,
+  counterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 8,
+  },
+  circle: {
+    width: 76,
+    height: 76,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 8,
+    borderRadius: 38,
   },
-  tripButtonText: { fontFamily: "SoraBold", fontSize: 15 },
+  circlePlus: {
+    backgroundColor: "#22c55e",
+    elevation: 4,
+    shadowColor: "#000000",
+    shadowOpacity: 0.25,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  circleMinus: { borderWidth: 2.5, borderColor: "rgba(255, 255, 255, 0.6)" },
+  circleDisabled: { opacity: 0.35, elevation: 0 },
+  countBlock: { alignItems: "center" },
+  count: {
+    color: "#ffffff",
+    fontFamily: "SoraBold",
+    fontSize: 56,
+    lineHeight: 62,
+    includeFontPadding: false,
+  },
+  countMax: {
+    color: "rgba(255, 255, 255, 0.7)",
+    fontFamily: "SoraBold",
+    fontSize: 14,
+  },
+  seatTrack: {
+    height: 10,
+    marginTop: 12,
+    overflow: "hidden",
+    borderRadius: 5,
+    backgroundColor: "rgba(255, 255, 255, 0.15)",
+  },
+  seatFill: { height: 10, borderRadius: 5 },
+  seatsLeft: {
+    marginTop: 6,
+    color: "#ffffff",
+    fontFamily: "Sora",
+    fontSize: 13,
+    textAlign: "center",
+  },
+  actions: { flexDirection: "row", gap: 10, marginTop: 12 },
+  tripButton: {
+    height: 56,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 14,
+  },
+  fullButton: { flex: 1 },
+  endButton: { flex: 2 },
+  tripButtonText: { fontFamily: "SoraBold", fontSize: 16, letterSpacing: 0.6 },
   modalRoot: {
     flex: 1,
     justifyContent: "center",
@@ -1537,15 +1570,24 @@ const styles = StyleSheet.create({
   },
   modalCard: {
     overflow: "hidden",
-    borderRadius: 14,
+    borderRadius: 20,
     backgroundColor: modalBlue,
   },
   modalHeader: {
-    paddingVertical: 14,
+    paddingVertical: 18,
     alignItems: "center",
     backgroundColor: circleNavy,
   },
-  modalTitle: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 15 },
+  modalTitle: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 20 },
+  modalMessage: {
+    paddingTop: 18,
+    paddingHorizontal: 18,
+    color: "#1f2937",
+    fontFamily: "Sora",
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: "center",
+  },
   modalBody: {
     flexDirection: "row",
     gap: 12,
@@ -1554,10 +1596,10 @@ const styles = StyleSheet.create({
   },
   modalButton: {
     flex: 1,
-    height: 46,
+    height: 56,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 8,
+    borderRadius: 12,
   },
   modalCancel: {
     borderWidth: 1.5,
@@ -1565,7 +1607,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
   },
   modalConfirm: { backgroundColor: circleNavy },
-  modalButtonText: { fontFamily: "SoraBold", fontSize: 14 },
+  modalButtonText: { fontFamily: "SoraBold", fontSize: 16 },
   modalCancelText: { color: circleNavy },
   modalConfirmText: { color: "#ffffff" },
 });
