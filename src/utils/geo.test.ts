@@ -112,7 +112,7 @@ test("matchRoutes honours the 500 m boundary", () => {
   assert.equal(matchRoutes(offNorth(121.002, 501), offNorth(121.018, 0), routes).length, 0);
 });
 
-test("matchRoutes never mixes main and alternative paths", () => {
+test("matchRoutes snaps both points onto one path, never mixing paths", () => {
   const westHalf: LatLngPair[] = [
     [14.6, 121.0],
     [14.6, 121.005],
@@ -123,7 +123,44 @@ test("matchRoutes never mixes main and alternative paths", () => {
   ];
   const a = offNorth(121.002, 0);
   const b = { lat: 14.62, lng: 121.018 };
-  assert.deepEqual(matchRoutes(a, b, [{ routeId: "r2", paths: [westHalf, eastHalf] }]), []);
+  const matches = matchRoutes(a, b, [{ routeId: "r2", paths: [westHalf, eastHalf] }]);
+  assert.equal(matches.length, 1);
+  assert.deepEqual(matches[0].path, westHalf);
+  near(matches[0].dropoff.point.lat, 14.6, 1e-6);
+});
+
+test("matchRoutes redirects a far drop-off onto the pickup's route", () => {
+  const matches = matchRoutes(offNorth(121.002, 0), offNorth(121.018, 800), [
+    { routeId: "r1", paths: [P] },
+  ]);
+  assert.equal(matches.length, 1);
+  near(matches[0].dropoff.point.lat, 14.6, 1e-6);
+  near(matches[0].dropoff.point.lng, 121.018, 1e-6);
+  near(matches[0].dropoff.distanceMeters, 800, 3);
+});
+
+test("matchRoutes still rejects a pickup far from every route", () => {
+  assert.deepEqual(
+    matchRoutes(offNorth(121.002, 800), offNorth(121.018, 0), [{ routeId: "r1", paths: [P] }]),
+    [],
+  );
+});
+
+test("matchRoutes prefers the route that passes closer to the drop-off", () => {
+  // Both routes pass the pickup; only "near-b" runs close to B.
+  const nearB: LatLngPair[] = [
+    [14.6, 121.0],
+    [14.6, 121.02],
+  ];
+  const awayFromB: LatLngPair[] = [
+    [14.6, 121.0],
+    [14.59, 121.02],
+  ];
+  const matches = matchRoutes(offNorth(121.001, 0), offNorth(121.018, 50), [
+    { routeId: "away", paths: [awayFromB] },
+    { routeId: "near-b", paths: [nearB] },
+  ]);
+  assert.equal(matches[0].routeId, "near-b");
 });
 
 test("matchRoutes can match on an alternative path", () => {

@@ -304,11 +304,14 @@ export function TransitMap({
   const pickupLineShape = useMemo(
     () =>
       lineCollection(
-        state.pickupLine && state.pickupLine.length > 1
-          ? [state.pickupLine.map(toPosition)]
-          : [],
+        [
+          ...(state.pickupLine && state.pickupLine.length > 1
+            ? [state.pickupLine]
+            : []),
+          ...(state.extraLines ?? []).filter((line) => line.length > 1),
+        ].map((line) => line.map(toPosition)),
       ),
-    [state.pickupLine],
+    [state.pickupLine, state.extraLines],
   );
 
   useEffect(() => {

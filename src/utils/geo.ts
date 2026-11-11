@@ -189,16 +189,21 @@ export type RouteMatch = {
   rideMeters: number;
 };
 
-// Routes with one single path that passes within `maxMeters` of both A and B,
-// with A and B snapped onto that path. Best route first.
+// Routes with one single path that passes within `maxMeters` of pickup A,
+// with A and B snapped onto that path. Commuters are only dropped off on the
+// route, so B is redirected to the path's nearest point however far it is
+// (unless `maxDropoffMeters` says otherwise). Best route first: the least
+// walking to A, distance from B to the route, and riding.
 export function matchRoutes(
   a: Coordinates,
   b: Coordinates,
   routes: RouteCandidate[],
   maxMeters = 500,
   minRideMeters = 50,
+  maxDropoffMeters = Infinity,
 ): RouteMatch[] {
-  const score = (match: RouteMatch) => match.walkMeters + match.rideMeters;
+  const score = (match: RouteMatch) =>
+    match.walkMeters + match.dropoff.distanceMeters + match.rideMeters;
   return routes
     .map((route) =>
       route.paths
@@ -218,7 +223,7 @@ export function matchRoutes(
         .filter(
           (match) =>
             match.pickup.distanceMeters <= maxMeters &&
-            match.dropoff.distanceMeters <= maxMeters &&
+            match.dropoff.distanceMeters <= maxDropoffMeters &&
             match.rideMeters >= minRideMeters,
         )
         .sort((x, y) => score(x) - score(y))[0],
@@ -307,7 +312,7 @@ export function reachedDropoff(
 }
 
 // The candidate point (e.g. a waiting area) closest to `origin` from which
-// some route also reaches drop-off point B; null when none does.
+// some route also passes within 500 m of drop-off point B; null when none does.
 export function nearestServedPoint<T extends Coordinates>(
   origin: Coordinates,
   candidates: T[],
@@ -321,7 +326,10 @@ export function nearestServedPoint<T extends Coordinates>(
         meters: getDistanceMeters(origin, candidate),
       }))
       .sort((a, b) => a.meters - b.meters)
-      .find(({ candidate }) => matchRoutes(candidate, dropoff, routes).length > 0)
+      .find(
+        ({ candidate }) =>
+          matchRoutes(candidate, dropoff, routes, 500, 50, 500).length > 0,
+      )
       ?.candidate ?? null
   );
 }

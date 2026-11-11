@@ -11,6 +11,8 @@ const { brandBlue, mutedText, text } = moduleColors;
 
 export const routeMovedNote =
   "Your pickup point was moved to the route so drivers can reach you.";
+export const dropoffOutsideRouteNote =
+  "Your drop-off point is outside the route where jeepneys usually load/unload passengers.";
 
 function formatWalk(meters: number) {
   return meters < 1000
@@ -19,17 +21,20 @@ function formatWalk(meters: number) {
 }
 
 /**
- * Small map of the matched route: the commuter's original pickup pin, the
- * snapped pickup point A (with a walking line to it) and drop-off point B.
+ * Small map of the matched route: the commuter's original pickup and drop-off
+ * pins, and pickup point A / drop-off point B moved onto the route (with lines
+ * from each pin to its point).
  * Lists the routes to choose from when more than one fits.
  */
 export function RouteMatchPreview({
   original,
+  originalDropoff,
   matches,
   selected,
   onSelect,
 }: {
   original: Coordinates;
+  originalDropoff: Coordinates;
   matches: PickupRouteMatch[];
   selected: PickupRouteMatch | null;
   onSelect: (routeId: string) => void;
@@ -37,6 +42,12 @@ export function RouteMatchPreview({
   // The map appears only once a route is selected (picked, or the only one).
   const shown = selected;
   const moved = !!shown && shown.walkMeters > pickupOnRouteMeters;
+  const dropoffMoved =
+    !!shown && shown.dropoff.distanceMeters > pickupOnRouteMeters;
+  // Before a route is picked, warn when no route passes the drop-off pin.
+  const dropoffOutside = shown
+    ? dropoffMoved
+    : matches.every((match) => match.dropoff.distanceMeters > pickupOnRouteMeters);
 
   const state = useMemo<TransitMapState | null>(() => {
     if (!shown) return null;
@@ -52,7 +63,25 @@ export function RouteMatchPreview({
       pickups: [
         { id: "pickup-a", lat: a.lat, lng: a.lng, badge: "A", label: "Pickup" },
         { id: "dropoff-b", lat: b.lat, lng: b.lng, badge: "B", label: "Drop-off" },
+        ...(dropoffMoved
+          ? [
+              {
+                id: "dropoff-pin",
+                lat: originalDropoff.lat,
+                lng: originalDropoff.lng,
+                label: "Your drop-off pin",
+              },
+            ]
+          : []),
       ],
+      extraLines: dropoffMoved
+        ? [
+            [
+              [originalDropoff.lat, originalDropoff.lng],
+              [b.lat, b.lng],
+            ],
+          ]
+        : [],
       pickupLine: moved
         ? [
             [original.lat, original.lng],
@@ -66,10 +95,11 @@ export function RouteMatchPreview({
           [original.lat, original.lng],
           [a.lat, a.lng],
           [b.lat, b.lng],
+          [originalDropoff.lat, originalDropoff.lng],
         ],
       },
     };
-  }, [shown, moved, original]);
+  }, [shown, moved, dropoffMoved, original, originalDropoff]);
 
   if (!matches.length) return null;
 
@@ -83,6 +113,14 @@ export function RouteMatchPreview({
       {shown && moved && (
         <Text style={styles.note}>
           {routeMovedNote} Walk about {formatWalk(shown.walkMeters)} to point A.
+        </Text>
+      )}
+      {dropoffOutside && (
+        <Text style={[styles.note, styles.warning]}>
+          {dropoffOutsideRouteNote}{" "}
+          {shown
+            ? `You’ll be dropped off at point B on the route, about ${formatWalk(shown.dropoff.distanceMeters)} from your pin.`
+            : "You’ll be dropped off at the nearest point on the route you choose."}
         </Text>
       )}
       {matches.length > 1 && (
@@ -108,6 +146,9 @@ export function RouteMatchPreview({
                 <Text style={styles.optionLabel}>
                   {match.route.name} · walk {formatWalk(match.walkMeters)} to
                   pickup
+                  {match.dropoff.distanceMeters > pickupOnRouteMeters
+                    ? ` · drop-off ${formatWalk(match.dropoff.distanceMeters)} from your pin`
+                    : ""}
                 </Text>
               </Pressable>
             );
@@ -127,6 +168,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e2e8f0",
   },
+  warning: { color: "#92400e", fontFamily: "SoraBold" },
   note: {
     color: text,
     fontFamily: "Sora",

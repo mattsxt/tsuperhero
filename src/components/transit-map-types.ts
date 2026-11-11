@@ -49,6 +49,8 @@ export type TransitMapState = {
     label?: string;
   }[];
   pickupLine?: [number, number][] | null;
+  /** More lines drawn in the pickup-line style (e.g. pin -> point on route). */
+  extraLines?: [number, number][][];
   pickupLineColor?: string;
   userLocation?: { lat: number; lng: number } | null;
   fit?: { key: number | string; points: [number, number][] } | null;

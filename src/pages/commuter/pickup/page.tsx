@@ -1238,6 +1238,7 @@ export default function PickupScreen() {
           {usesRoute && requestLocation && routeMatches.length > 0 && (
             <RouteMatchPreview
               original={requestLocation}
+              originalDropoff={dropoffPlace ?? requestLocation}
               matches={routeMatches}
               selected={selectedMatch}
               onSelect={(routeId) => {

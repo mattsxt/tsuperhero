@@ -254,10 +254,12 @@ const mapHtml = `<!DOCTYPE html>
         pickupMarkers.push(markerAt(content, pickup.lat, pickup.lng, 800));
       });
     }
-    var lineKey = JSON.stringify(state.pickupLine || null);
+    var lineKey = JSON.stringify([state.pickupLine || null, state.extraLines || null]);
     if (lineKey !== lastPickupLineKey) {
       lastPickupLineKey = lineKey;
-      setLines("pickup-line", state.pickupLine && state.pickupLine.length > 1 ? [state.pickupLine.map(lngLat)] : []);
+      var lines = (state.pickupLine && state.pickupLine.length > 1 ? [state.pickupLine] : [])
+        .concat((state.extraLines || []).filter(function (line) { return line.length > 1; }));
+      setLines("pickup-line", lines.map(function (line) { return line.map(lngLat); }));
     }
     var lineColor = state.pickupLineColor || "#1f2937";
     if (lineColor !== lastPickupLineColor) {
