@@ -1,5 +1,6 @@
 import { StatusBar } from "expo-status-bar";
 import ArrowLeft from "lucide-react-native/icons/arrow-left";
+import BusFront from "lucide-react-native/icons/bus-front";
 import Flag from "lucide-react-native/icons/flag";
 import RadioTower from "lucide-react-native/icons/radio-tower";
 import Siren from "lucide-react-native/icons/siren";
@@ -9,17 +10,22 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
   completeMyRide,
-  formatEta,
   loadRideProgress,
   reportRideEmergency,
   type PickupRequest,
   type RideProgress,
 } from "@/api/v1/pickups/controllers";
 import { watchLocation } from "@/api/v1/places/controllers";
-import { findRoute } from "@/api/v1/transit-routes/controllers";
+import {
+  findRoute,
+  loadAlternativeGeometry,
+  loadEtaRoute,
+  loadRouteGeometry,
+  type LatLng,
+} from "@/api/v1/transit-routes/controllers";
 import { ConfirmModal } from "@/components/confirm-modal";
 import { ErrorAlert } from "@/components/error-alert";
-import { ModuleButton, moduleColors } from "@/components/module-ui";
+import { moduleColors } from "@/components/module-ui";
 import { TransitMap, type TransitMapState } from "@/components/transit-map";
 import { useNow } from "@/hooks/use-now";
 import { usePolling } from "@/hooks/use-polling";
@@ -33,16 +39,28 @@ import {
 } from "@/utils/geo";
 
 const { brandBlue, mutedText, softBlue, text } = moduleColors;
+const pickupGreen = "#16a34a";
+const dropoffRed = "#dc2626";
 
 const dropoffArrivalReadings = 2;
 const vehicleStaleMs = 30_000;
 const progressPollMs = 5_000;
 const etaSpeedKmh = 18;
 
-function formatKm(meters: number) {
+const genericPlaceNames = /^(pinned location|current location|dropped pin)$/i;
+const isPlusCode = (name: string) => /^[23456789CFGHJMPQRVWX]{2,8}\+/i.test(name);
+
+function placeLabel(name: string | null | undefined) {
+  if (!name || genericPlaceNames.test(name.trim()) || isPlusCode(name.trim())) {
+    return "Your drop-off point";
+  }
+  return name;
+}
+
+function splitDistance(meters: number) {
   return meters < 1000
-    ? `${Math.max(0, Math.round(meters / 10) * 10)} m left`
-    : `${(meters / 1000).toFixed(1)} km left`;
+    ? { value: `${Math.max(0, Math.round(meters / 10) * 10)} m` }
+    : { value: `${(meters / 1000).toFixed(1)} km` };
 }
 
 export function RideInProgress({
@@ -67,6 +85,9 @@ export function RideInProgress({
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState("");
   const [cardHeight, setCardHeight] = useState(260);
+  const [roads, setRoads] = useState<{ key: string; paths: LatLng[][] } | null>(
+    null,
+  );
   const now = useNow(progressPollMs);
   const arrivalReadings = useRef(0);
   const finished = useRef(false);
@@ -101,21 +122,58 @@ export function RideInProgress({
   const dropoff = ride?.dropoff ?? request.dropoff;
   const routeId = ride?.routeId ?? request.routeId;
 
+  const roadKey = routeId
+    ? `route:${routeId}`
+    : dropoff
+      ? `trip:${pickup.lat},${pickup.lng}>${dropoff.lat},${dropoff.lng}`
+      : null;
+
+  useEffect(() => {
+    if (!roadKey) return;
+    let active = true;
+    const route = findRoute(routeId);
+    const load: Promise<LatLng[][]> = route
+      ? Promise.all([
+          loadRouteGeometry(route),
+          loadAlternativeGeometry(route),
+        ]).then(([main, alternatives]) => [main, ...alternatives])
+      : dropoff
+        ? loadEtaRoute(
+            [pickup.lat, pickup.lng],
+            [dropoff.lat, dropoff.lng],
+          ).then((result) => (result.ok ? [result.data.path] : []))
+        : Promise.resolve([]);
+    load
+      .then((paths) => {
+        if (active) {
+          setRoads({
+            key: roadKey,
+            paths: paths.filter((path) => path.length > 1),
+          });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roadKey]);
+
   const vehicleLive =
     !!ride?.vehicle && now - ride.vehicle.recordedAt.getTime() <= vehicleStaleMs;
   const position: Coordinates | null =
     vehicleLive && ride?.vehicle ? ride.vehicle : me;
 
   const path = useMemo(() => {
+    if (!dropoff) return null;
+    const roadPaths = roads?.key === roadKey ? roads.paths : [];
+    if (roadPaths.length) return choosePathFor(roadPaths, pickup, dropoff);
     const route = findRoute(routeId);
-    if (!route || !dropoff) return null;
-    return choosePathFor(
-      [route.waypoints, ...route.alternativePaths],
-      pickup,
-      dropoff,
-    );
+    return route
+      ? choosePathFor([route.waypoints, ...route.alternativePaths], pickup, dropoff)
+      : null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routeId, pickup.lat, pickup.lng, dropoff?.lat, dropoff?.lng]);
+  }, [roads, roadKey, routeId, pickup.lat, pickup.lng, dropoff?.lat, dropoff?.lng]);
 
   const stats = useMemo(
     () =>
@@ -123,8 +181,7 @@ export function RideInProgress({
         ? null
         : path
           ? rideStats(path, pickup, dropoff, position)
-          :
-            straightRideStats(pickup, dropoff, position),
+          : straightRideStats(pickup, dropoff, position),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [path, pickup.lat, pickup.lng, dropoff?.lat, dropoff?.lng, position?.lat, position?.lng],
   );
@@ -171,12 +228,18 @@ export function RideInProgress({
                 lat: ride.vehicle.lat,
                 lng: ride.vehicle.lng,
                 type: request.vehicle,
-                label: ride.plateNumber,
               },
             ]
           : [],
       pickups: [
-        { id: "ride-a", lat: pickup.lat, lng: pickup.lng, badge: "A" },
+        {
+          id: "ride-a",
+          lat: pickup.lat,
+          lng: pickup.lng,
+          badge: "A",
+          label: "Pickup",
+          color: pickupGreen,
+        },
         ...(dropoff
           ? [
               {
@@ -184,7 +247,8 @@ export function RideInProgress({
                 lat: dropoff.lat,
                 lng: dropoff.lng,
                 badge: "B",
-                label: dropoff.name,
+                label: "Drop-off",
+                color: dropoffRed,
               },
             ]
           : []),
@@ -211,12 +275,12 @@ export function RideInProgress({
   ]);
 
   const remaining = stats?.remainingMeters ?? null;
-  const etaText =
+  const arrivingNow = remaining !== null && remaining <= dropoffArrivalMeters;
+  const minutes =
     remaining === null
       ? null
-      : remaining <= dropoffArrivalMeters
-        ? "Arriving now"
-        : `Arriving ${formatEta(remaining / ((etaSpeedKmh * 1000) / 3600))}`;
+      : Math.max(1, Math.round(remaining / ((etaSpeedKmh * 1000) / 60)));
+  const progressPercent = Math.round((stats?.progress ?? 0) * 100);
 
   return (
     <View style={styles.screen}>
@@ -252,64 +316,91 @@ export function RideInProgress({
       >
         <View style={styles.destinationRow}>
           <View style={styles.destinationIcon}>
-            <Flag color="#ffffff" size={16} strokeWidth={2.2} />
+            <Flag color="#ffffff" size={18} strokeWidth={2.4} />
           </View>
           <View style={styles.flex}>
-            <Text style={styles.label}>DROP-OFF</Text>
-            <Text style={styles.destination} numberOfLines={2}>
-              {dropoff?.name || "Your drop-off point"}
+            <Text style={styles.label}>DROPPING YOU OFF AT</Text>
+            <Text style={styles.destination} numberOfLines={1}>
+              {placeLabel(dropoff?.name)}
             </Text>
           </View>
         </View>
 
         {stats && (
           <>
-            <View style={styles.track}>
-              <View
-                style={[
-                  styles.trackFill,
-                  { width: `${Math.round(stats.progress * 100)}%` },
-                ]}
-              />
-            </View>
-            <View style={styles.statsRow}>
-              <Text style={styles.statStrong}>
-                {formatKm(stats.remainingMeters)}
-              </Text>
-              {etaText && <Text style={styles.stat}>{etaText}</Text>}
+            {arrivingNow ? (
+              <Text style={styles.arriving}>Arriving now</Text>
+            ) : (
+              <View style={styles.stats}>
+                <View style={styles.stat}>
+                  <Text style={styles.statValue}>{minutes} min</Text>
+                  <Text style={styles.statLabel}>TO GO</Text>
+                </View>
+                <View style={styles.statDivider} />
+                <View style={styles.stat}>
+                  <Text style={styles.statValue}>
+                    {splitDistance(remaining ?? 0).value}
+                  </Text>
+                  <Text style={styles.statLabel}>LEFT</Text>
+                </View>
+              </View>
+            )}
+
+            <View
+              style={styles.journey}
+              accessibilityLabel={`${progressPercent}% of the way to your drop-off`}
+            >
+              <View style={[styles.journeyDot, { backgroundColor: pickupGreen }]}>
+                <Text style={styles.journeyDotText}>A</Text>
+              </View>
+              <View style={styles.track}>
+                <View
+                  style={[styles.trackFill, { width: `${progressPercent}%` }]}
+                />
+              </View>
+              <View style={[styles.journeyDot, { backgroundColor: dropoffRed }]}>
+                <Text style={styles.journeyDotText}>B</Text>
+              </View>
             </View>
           </>
         )}
 
-        {(ride?.driverName || ride?.plateNumber) && (
-          <Text style={styles.driver}>
-            {[ride.driverName, ride.plateNumber].filter(Boolean).join(" · ")}
-          </Text>
+        {!!ride?.plateNumber && (
+          <View style={styles.vehicleRow}>
+            <BusFront color={brandBlue} size={18} strokeWidth={2.2} />
+            <Text style={styles.vehicleText}>
+              Your vehicle:{" "}
+              <Text style={styles.plate}>{ride.plateNumber}</Text>
+            </Text>
+          </View>
         )}
 
         {!vehicleLive && (
           <View style={styles.liveNote}>
             <RadioTower color={mutedText} size={14} strokeWidth={2} />
             <Text style={styles.liveNoteText}>
-              Live vehicle location unavailable
+              Showing your phone’s location. Live vehicle location unavailable.
             </Text>
           </View>
         )}
 
-        {!!problem && (
-          <ErrorAlert
-            title="Drop-off"
-            message={problem}
-            style={{ marginTop: 10 }}
-          />
-        )}
+        {!!problem && <ErrorAlert title="Drop-off" message={problem} />}
 
         {!isCompanion && (
-          <ModuleButton
-            label={busy ? "FINISHING..." : "I'VE BEEN DROPPED OFF"}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ disabled: busy, busy }}
             disabled={busy}
             onPress={() => setConfirmOpen(true)}
-          />
+            style={({ pressed }) => [
+              styles.offButton,
+              (pressed || busy) && styles.pressed,
+            ]}
+          >
+            <Text style={styles.offButtonText}>
+              {busy ? "FINISHING…" : "I’VE BEEN DROPPED OFF"}
+            </Text>
+          </Pressable>
         )}
       </View>
 
@@ -352,18 +443,18 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 16,
     right: 16,
-    height: 42,
+    height: 48,
     alignItems: "center",
     justifyContent: "center",
   },
   back: {
     position: "absolute",
     left: 0,
-    width: 42,
-    height: 42,
+    width: 48,
+    height: 48,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 21,
+    borderRadius: 24,
     backgroundColor: "#ffffff",
     elevation: 4,
     shadowColor: "#000000",
@@ -381,7 +472,7 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     borderWidth: 3,
     borderColor: "#ffffff",
-    backgroundColor: "#dc2626",
+    backgroundColor: dropoffRed,
     elevation: 6,
     shadowColor: "#000000",
     shadowOpacity: 0.25,
@@ -416,8 +507,8 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    gap: 10,
-    paddingTop: 18,
+    gap: 14,
+    paddingTop: 20,
     paddingHorizontal: 18,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
@@ -430,35 +521,89 @@ const styles = StyleSheet.create({
   },
   destinationRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   destinationIcon: {
-    width: 34,
-    height: 34,
+    width: 40,
+    height: 40,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 17,
-    backgroundColor: brandBlue,
+    borderRadius: 20,
+    backgroundColor: dropoffRed,
   },
-  label: { color: mutedText, fontFamily: "SoraBold", fontSize: 10 },
+  label: {
+    color: mutedText,
+    fontFamily: "SoraBold",
+    fontSize: 10,
+    letterSpacing: 0.6,
+  },
   destination: {
+    marginTop: 2,
     color: text,
     fontFamily: "SoraBold",
-    fontSize: 15,
-    marginTop: 2,
+    fontSize: 17,
   },
+  stats: { flexDirection: "row", alignItems: "center" },
+  stat: { flex: 1, alignItems: "center", gap: 2 },
+  statValue: { color: brandBlue, fontFamily: "SoraBold", fontSize: 24 },
+  statLabel: {
+    color: mutedText,
+    fontFamily: "SoraBold",
+    fontSize: 10,
+    letterSpacing: 0.8,
+  },
+  statDivider: { width: 1, alignSelf: "stretch", backgroundColor: "#e2e8f0" },
+  arriving: {
+    color: pickupGreen,
+    fontFamily: "SoraBold",
+    fontSize: 22,
+    textAlign: "center",
+  },
+  journey: { flexDirection: "row", alignItems: "center", gap: 8 },
+  journeyDot: {
+    width: 24,
+    height: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 12,
+  },
+  journeyDotText: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 11 },
   track: {
+    flex: 1,
     height: 8,
     overflow: "hidden",
     borderRadius: 4,
     backgroundColor: softBlue,
   },
   trackFill: { height: 8, borderRadius: 4, backgroundColor: brandBlue },
-  statsRow: {
+  vehicleRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: "#f8fafc",
   },
-  statStrong: { color: brandBlue, fontFamily: "SoraBold", fontSize: 12 },
-  stat: { color: mutedText, fontFamily: "Sora", fontSize: 11 },
-  driver: { color: text, fontFamily: "Sora", fontSize: 11 },
+  vehicleText: { color: mutedText, fontFamily: "Sora", fontSize: 13 },
+  plate: { color: text, fontFamily: "SoraBold", fontSize: 14 },
   liveNote: { flexDirection: "row", alignItems: "center", gap: 6 },
-  liveNoteText: { color: mutedText, fontFamily: "Sora", fontSize: 10 },
+  liveNoteText: {
+    flex: 1,
+    color: mutedText,
+    fontFamily: "Sora",
+    fontSize: 11,
+  },
+  offButton: {
+    height: 52,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: brandBlue,
+    backgroundColor: "#ffffff",
+  },
+  offButtonText: {
+    color: brandBlue,
+    fontFamily: "SoraBold",
+    fontSize: 15,
+    letterSpacing: 0.6,
+  },
 });

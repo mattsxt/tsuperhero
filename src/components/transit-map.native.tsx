@@ -301,6 +301,7 @@ export function TransitMap({
               : ""),
           label: pickup.label?.trim() ?? "",
           muted: !!pickup.muted,
+          color: pickup.color ?? pinRed,
         },
         geometry: {
           type: "Point" as const,
@@ -481,7 +482,12 @@ export function TransitMap({
             id="pickup-pins"
             style={{
               circleRadius: ["case", ["get", "muted"], 7, 13],
-              circleColor: ["case", ["get", "muted"], mutedPinGrey, pinRed],
+              circleColor: [
+                "case",
+                ["get", "muted"],
+                mutedPinGrey,
+                ["get", "color"],
+              ],
               circleStrokeColor: "#ffffff",
               circleStrokeWidth: ["case", ["get", "muted"], 2, 2.5],
             }}
@@ -497,8 +503,8 @@ export function TransitMap({
             id="pickup-counts"
             style={{
               textField: ["get", "count"],
-              textSize: 11,
-              textColor: pinRed,
+              textSize: 12,
+              textColor: ["get", "color"],
               textFont: ["Open Sans Bold", "Arial Unicode MS Bold"],
               textAllowOverlap: true,
               textIgnorePlacement: true,

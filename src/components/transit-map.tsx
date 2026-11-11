@@ -244,13 +244,15 @@ const mapHtml = `<!DOCTYPE html>
         var content = document.createElement("div");
         var counted = !pickup.muted && (!!pickup.badge || typeof pickup.passengers === "number");
         content.className = "pickup" + (counted ? " counted" : "") + (pickup.muted ? " muted" : "");
+        var pinColor = pickup.color || "#c81e1e";
         content.innerHTML = pickup.muted
           ? '<span class="muted-dot"></span>'
-          : counted ? COUNTED_PIN_SVG : MAP_PIN_SVG;
+          : (counted ? COUNTED_PIN_SVG : MAP_PIN_SVG).split("#c81e1e").join(pinColor);
         if (counted) {
           var count = document.createElement("span");
           count.className = "pickup-count";
           count.textContent = pickup.badge || String(pickup.passengers);
+          count.style.color = pinColor;
           content.appendChild(count);
         }
         if (pickup.label) {

@@ -47,6 +47,7 @@ export type TransitMapState = {
     badge?: string;
     label?: string;
     muted?: boolean;
+    color?: string;
   }[];
   pickupLine?: [number, number][] | null;
   extraLines?: [number, number][][];

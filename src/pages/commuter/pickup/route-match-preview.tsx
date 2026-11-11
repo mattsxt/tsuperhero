@@ -5,13 +5,21 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { pickupOnRouteMeters } from "@/api/v1/pickups/controllers";
 import {
+  loadAlternativeGeometry,
+  loadRouteGeometry,
   loadWalkingRoute,
   type LatLng,
   type PickupRouteMatch,
 } from "@/api/v1/transit-routes/controllers";
 import { moduleColors } from "@/components/module-ui";
 import { TransitMap, type TransitMapState } from "@/components/transit-map";
-import { dropoffOnRouteMeters, type Coordinates } from "@/utils/geo";
+import {
+  choosePathFor,
+  dropoffOnRouteMeters,
+  sliceAlong,
+  nearestPointOnPath,
+  type Coordinates,
+} from "@/utils/geo";
 
 const { brandBlue, mutedText, text } = moduleColors;
 
@@ -73,6 +81,47 @@ export function RouteMatchPreview({
     !shown &&
     matches.every((match) => match.dropoff.distanceMeters > dropoffOnRouteMeters);
 
+  const [roads, setRoads] = useState<{
+    routeId: string;
+    paths: LatLng[][];
+  } | null>(null);
+  const shownRoute = shown?.route ?? null;
+  useEffect(() => {
+    if (!shownRoute) return;
+    let active = true;
+    Promise.all([
+      loadRouteGeometry(shownRoute),
+      loadAlternativeGeometry(shownRoute),
+    ])
+      .then(([main, alternatives]) => {
+        if (active) {
+          setRoads({
+            routeId: shownRoute.id,
+            paths: [main, ...alternatives].filter((path) => path.length > 1),
+          });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [shownRoute]);
+
+  const routeLine = useMemo(() => {
+    if (!shown) return null;
+    const roadPaths =
+      roads?.routeId === shown.routeId ? roads.paths : [];
+    const path = roadPaths.length
+      ? choosePathFor(roadPaths, shown.pickup.point, shown.dropoff.point)
+      : null;
+    if (!path) return shown.path;
+    return sliceAlong(
+      path,
+      nearestPointOnPath(shown.pickup.point, path).alongMeters,
+      nearestPointOnPath(shown.dropoff.point, path).alongMeters,
+    );
+  }, [shown, roads]);
+
   const pickupWalk = useWalkingLine(
     pickupMoved ? original : null,
     pickupMoved && shown ? shown.pickup.point : null,
@@ -88,7 +137,7 @@ export function RouteMatchPreview({
     const b = shown.dropoff.point;
     return {
       routeId: shown.routeId,
-      route: shown.path,
+      route: routeLine,
       vehicles: [],
       focus: null,
       padTop: 36,
@@ -116,8 +165,22 @@ export function RouteMatchPreview({
               },
             ]
           : []),
-        { id: "pickup-a", lat: a.lat, lng: a.lng, badge: "A", label: "Pickup" },
-        { id: "dropoff-b", lat: b.lat, lng: b.lng, badge: "B", label: "Drop-off" },
+        {
+          id: "pickup-a",
+          lat: a.lat,
+          lng: a.lng,
+          badge: "A",
+          label: "Pickup",
+          color: "#16a34a",
+        },
+        {
+          id: "dropoff-b",
+          lat: b.lat,
+          lng: b.lng,
+          badge: "B",
+          label: "Drop-off",
+          color: "#dc2626",
+        },
       ],
       extraLines: [pickupWalk, dropoffWalk].filter(
         (line): line is LatLng[] => !!line,
@@ -140,6 +203,7 @@ export function RouteMatchPreview({
     originalDropoff,
     pickupWalk,
     dropoffWalk,
+    routeLine,
   ]);
 
   if (!matches.length) return null;
