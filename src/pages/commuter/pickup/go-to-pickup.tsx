@@ -121,7 +121,7 @@ export function GoToPickup({
         onLayout={(event) => setCardHeight(event.nativeEvent.layout.height)}
       >
         {here ? (
-          <View style={styles.statusRow}>
+          <View style={[styles.statusRow, styles.hereRow]}>
             <CircleCheck color={palette.success} size={22} strokeWidth={2.2} />
             <Text style={[styles.statusTitle, { color: palette.success }]}>
               You’re at the pickup point
@@ -262,7 +262,21 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: -2 },
   },
   statusRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  statusTitle: { fontFamily: "SoraBold", fontSize: 16 },
+  hereRow: {
+    justifyContent: "center",
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: palette.successSoft,
+  },
+  // Line height matches the 22 px icon; Android's extra font padding is
+  // removed so the text sits on the icon's centre line.
+  statusTitle: {
+    fontFamily: "SoraBold",
+    fontSize: 15,
+    lineHeight: 22,
+    includeFontPadding: false,
+    textAlignVertical: "center",
+  },
   distanceMeta: { color: mutedText, fontFamily: "Sora", fontSize: 12 },
   // Two equal stat blocks (distance | walking time) split by a thin divider.
   stats: { flexDirection: "row", alignItems: "center" },
