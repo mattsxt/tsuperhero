@@ -172,7 +172,7 @@ export default function EditProfileScreen() {
         scrollEventThrottle={16}
         contentContainerStyle={{
           paddingTop: chrome.headerHeight,
-          paddingBottom: insets.bottom + 24,
+          paddingBottom: 16,
         }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
@@ -180,43 +180,48 @@ export default function EditProfileScreen() {
         overScrollMode="never"
       >
         <View style={styles.body}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Change profile picture"
-            onPress={pickPicture}
-            style={({ pressed }) => [
-              styles.avatarButton,
-              pressed && styles.pressed,
-            ]}
-          >
-            <View style={styles.avatar}>
-              {pictureUri ? (
-                <Image
-                  source={{ uri: pictureUri }}
-                  style={styles.avatarImage}
-                  contentFit="cover"
-                />
-              ) : (
-                <Text style={styles.avatarText}>{profile.initials}</Text>
-              )}
+          <View style={styles.identity}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Change profile picture"
+              onPress={pickPicture}
+              style={({ pressed }) => pressed && styles.pressed}
+            >
+              <View style={styles.avatar}>
+                {pictureUri ? (
+                  <Image
+                    source={{ uri: pictureUri }}
+                    style={styles.avatarImage}
+                    contentFit="cover"
+                  />
+                ) : (
+                  <Text style={styles.avatarText}>{profile.initials}</Text>
+                )}
+              </View>
+              <View style={styles.cameraBadge}>
+                <Camera color="#ffffff" size={14} strokeWidth={2} />
+              </View>
+            </Pressable>
+            <View style={styles.identityText}>
+              <Text style={styles.name} numberOfLines={2}>
+                {[profile.firstName, profile.lastName].filter(Boolean).join(" ")}
+              </Text>
+              <View style={styles.lockedRow}>
+                <Lock color={mutedText} size={12} strokeWidth={2} />
+                <Text style={styles.lockedHint}>
+                  Your name can&apos;t be changed
+                </Text>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                hitSlop={8}
+                onPress={pickPicture}
+                style={({ pressed }) => pressed && styles.pressed}
+              >
+                <Text style={styles.changePhoto}>Change photo</Text>
+              </Pressable>
             </View>
-            <View style={styles.cameraBadge}>
-              <Camera color="#ffffff" size={16} strokeWidth={2} />
-            </View>
-          </Pressable>
-          <Text style={styles.avatarHint}>Tap to change your picture</Text>
-
-          <View style={styles.row}>
-            <Field label="First Name">
-              <LockedField value={profile.firstName} />
-            </Field>
-            <Field label="Last Name">
-              <LockedField value={profile.lastName} />
-            </Field>
           </View>
-          <Text style={styles.lockedHint}>
-            Your name can&apos;t be changed.
-          </Text>
 
           <Field label="Email Address" error={errors.email}>
             <SoftField
@@ -295,25 +300,25 @@ export default function EditProfileScreen() {
               style={styles.saveError}
             />
           )}
-          <ModuleButton
-            label={saving ? "SAVING..." : "SAVE CHANGES"}
-            disabled={saving || !hasChanges || !online}
-            disabledHint={
-              online && !saving && !hasChanges
-                ? "Change something above to save."
-                : undefined
-            }
-            onPress={save}
-            style={
-              alertMessage ? styles.saveButtonAfterError : styles.saveButton
-            }
-          />
         </View>
       </KeyboardAwareScrollView>
+      <View style={[styles.footer, { paddingBottom: insets.bottom + 12 }]}>
+        <ModuleButton
+          label={saving ? "SAVING..." : "SAVE CHANGES"}
+          disabled={saving || !hasChanges || !online}
+          disabledHint={
+            online && !saving && !hasChanges
+              ? "Change something above to save."
+              : undefined
+          }
+          onPress={save}
+          style={styles.saveButton}
+        />
+      </View>
       <StickyHeader chrome={chrome}>
         <ModuleHeader
           title="Edit Profile"
-          subtitle="Update your profile picture and personal information."
+          subtitle="Update your photo and contact details."
           icon={<UserRoundPen color="#ffffff" size={44} strokeWidth={1.8} />}
           onBack={goBack}
           collapsed={chrome.collapsed}
@@ -343,19 +348,6 @@ function Field({
   );
 }
 
-function LockedField({ value }: { value: string }) {
-  return (
-    <SoftField
-      value={value}
-      editable={false}
-      accessibilityState={{ disabled: true }}
-      trailing={<Lock color={mutedText} size={14} strokeWidth={2} />}
-      style={styles.lockedField}
-      inputStyle={styles.lockedInput}
-    />
-  );
-}
-
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   loadingScreen: {
@@ -365,53 +357,53 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
   },
   screen: { flex: 1, backgroundColor: "#ffffff" },
-  body: { paddingHorizontal: 16, paddingTop: 22 },
+  body: { paddingHorizontal: 16, paddingTop: 16 },
   pressed: { opacity: 0.8 },
-  avatarButton: { alignSelf: "center" },
+  identity: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    padding: 12,
+    borderRadius: 16,
+    backgroundColor: "#f5f8ff",
+  },
   avatar: {
-    width: 104,
-    height: 104,
+    width: 76,
+    height: 76,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
-    borderRadius: 52,
+    borderRadius: 38,
     borderWidth: 3,
     borderColor: brandBlue,
     backgroundColor: "#d4ecf9",
   },
   avatarImage: { width: "100%", height: "100%" },
-  avatarText: { color: text, fontFamily: "SoraBold", fontSize: 30 },
+  avatarText: { color: text, fontFamily: "SoraBold", fontSize: 24 },
   cameraBadge: {
     position: "absolute",
-    right: 0,
-    bottom: 2,
-    width: 32,
-    height: 32,
+    right: -2,
+    bottom: 0,
+    width: 28,
+    height: 28,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 2,
     borderColor: "#ffffff",
     backgroundColor: brandBlue,
   },
-  avatarHint: {
-    color: mutedText,
-    fontFamily: "Sora",
-    fontSize: 10,
-    textAlign: "center",
-    marginTop: 8,
-    marginBottom: 8,
+  identityText: { flex: 1, gap: 4 },
+  name: { color: text, fontFamily: "SoraBold", fontSize: 17 },
+  lockedRow: { flexDirection: "row", alignItems: "center", gap: 5 },
+  lockedHint: { color: mutedText, fontFamily: "Sora", fontSize: 11 },
+  changePhoto: {
+    marginTop: 2,
+    color: brandBlue,
+    fontFamily: "SoraBold",
+    fontSize: 12,
   },
-  row: { flexDirection: "row", gap: 12 },
-  field: { flex: 1, marginTop: 16 },
-  lockedField: { backgroundColor: "#eeeeee" },
-  lockedInput: { color: mutedText },
-  lockedHint: {
-    color: mutedText,
-    fontFamily: "Sora",
-    fontSize: 10,
-    marginTop: 6,
-  },
+  field: { flex: 1, marginTop: 14 },
   pendingHint: {
     color: brandBlue,
     fontFamily: "Sora",
@@ -420,7 +412,14 @@ const styles = StyleSheet.create({
   },
   contactIcon: { flexDirection: "row", alignItems: "center", gap: 10 },
   contactPrefix: { color: text, fontFamily: "Sora", fontSize: 11 },
-  saveError: { marginTop: 28 },
+  saveError: { marginTop: 14 },
+  footer: {
+    paddingTop: 12,
+    paddingHorizontal: 16,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
+  },
   offlineHint: {
     color: "#6b6b6b",
     fontFamily: "Sora",
@@ -428,6 +427,5 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 12,
   },
-  saveButton: { marginTop: 28 },
-  saveButtonAfterError: { marginTop: 12 },
+  saveButton: { marginTop: 0 },
 });
