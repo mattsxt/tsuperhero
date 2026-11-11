@@ -305,7 +305,6 @@ export default function PickupScreen() {
   };
 
   useEffect(() => {
-    // A commuter on board is never cancelled; their drop-off syncs later.
     if (!active || isRideActive(active.status)) return;
     const cancelIfOffline = () => {
       if (isOnline()) return;
@@ -377,8 +376,6 @@ export default function PickupScreen() {
     routeWaitingAreas,
   ]);
   const recommendedWaitingArea = useMemo(() => {
-    // With a drop-off chosen, only recommend a waiting area on a route that
-    // also reaches it; the route nearest the pin may never pass the drop-off.
     if (place && dropoffPlace && vehicle === "jeep") {
       const priority = waitingAreas.find(
         (area) => area.id === priorityWaitingAreaId,
@@ -400,7 +397,6 @@ export default function PickupScreen() {
           distanceMeters: getDistanceMeters(place, priorityWaitingArea),
         }
       : nearestWaitingArea;
-    // routes: the matching helper reads the loaded routes, so recompute when they load.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     routeWaitingAreas,
@@ -429,11 +425,7 @@ export default function PickupScreen() {
     ? `${requestLocation.lat}:${requestLocation.lng}:${requestLocation.name}`
     : null;
 
-  // Jeepneys run fixed routes, so A and B must sit on one; tricycles pick up
-  // and drop off anywhere.
   const usesRoute = vehicle === "jeep";
-  // Routes that pass pickup A, best first, with A and B snapped onto them: up
-  // to 3 that pass the drop-off pin, otherwise just the best one.
   const routeMatches = useMemo<PickupRouteMatch[]>(
     () =>
       usesRoute && requestLocation && dropoffPlace
@@ -454,9 +446,6 @@ export default function PickupScreen() {
     routesLoaded &&
     !routeMatches.length;
 
-  // "Pick me up at my selected location": the request is only sent once the
-  // commuter is at pickup point A. For jeepneys A is the pin moved onto the
-  // route (the chosen route once a drop-off is set); tricycles use the pin.
   const selectedLocationMode = !!place && requestLocation === place;
   const pickupTarget = useMemo(() => {
     if (!place) return null;
@@ -513,10 +502,7 @@ export default function PickupScreen() {
     async () => {
       const result = await loadMySharedRide();
       if (!result.ok) return;
-      // A companion's ride ended (owner dropped off or driver ended the trip).
       const previous = lastSharedRide.current;
-      // Companions can't read the owner's request, but a riding shared ride
-      // only disappears once it is completed.
       if (previous?.stage === "riding" && !result.data) {
         setBoarded({
           id: previous.requestId,
@@ -579,7 +565,6 @@ export default function PickupScreen() {
     !!activeId,
   );
 
-  // The ride screen is showing, so the "you're on board" pop-up is redundant.
   const ridingId =
     active && isRideActive(active.status)
       ? active.id
@@ -642,7 +627,6 @@ export default function PickupScreen() {
     });
     setBusy(false);
     if (!result.ok) {
-      // The route changed under us: make the commuter pick the route again.
       if (isRouteSnapError(result.error)) setChosenRouteId(null);
       showPickupProblem(result.error);
       return null;
@@ -657,8 +641,6 @@ export default function PickupScreen() {
     return result.data;
   };
 
-  // "I AM HERE": the commuter (and companions) reached pickup point A, so the
-  // request is sent and marked as arrived for drivers right away.
   const sendFromPickupPoint = async (here: Coordinates) => {
     const sent = await sendPickupRequest(
       requestLocation,
@@ -766,7 +748,6 @@ export default function PickupScreen() {
       return;
     }
     if (selectedLocationMode && pickupTarget) {
-      // Companions must reach the same point A, so save it on the draft first.
       if (draftRequestId) {
         setBusy(true);
         const saved = await savePickupPoint(
@@ -1586,7 +1567,6 @@ const styles = StyleSheet.create({
   },
   mapActionText: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 10 },
   waitingAreaMapScreen: { flex: 1, backgroundColor: "#ffffff" },
-  // Close button pinned left; the title pill is centred on the screen.
   waitingAreaMapTop: {
     position: "absolute",
     left: 16,

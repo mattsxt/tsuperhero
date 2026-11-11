@@ -150,7 +150,6 @@ test("matchRoutes still rejects a pickup far from every route", () => {
 });
 
 test("matchRoutes prefers the route that passes closer to the drop-off", () => {
-  // Both routes pass the pickup; only "near-b" runs close to B.
   const nearB: LatLngPair[] = [
     [14.6, 121.0],
     [14.6, 121.02],
@@ -219,7 +218,6 @@ test("rideStats without a position shows the whole ride ahead", () => {
 });
 
 test("reachedDropoff ignores a straight-line pass near B earlier on the route", () => {
-  // Out-and-back path: B sits beside the outbound leg, but is reached on the way back.
   const outAndBack: LatLngPair[] = [
     [14.6, 121.0],
     [14.6, 121.02],
@@ -254,8 +252,6 @@ test("reachedDropoff falls back to straight-line distance without a path", () =>
 });
 
 test("nearestServedPoint skips a closer waiting area whose route never reaches B", () => {
-  // Route X runs east along 14.6 but stops at 121.01; route Y runs 700 m north
-  // and reaches B at 121.018.
   const routeX: LatLngPair[] = [
     [14.6, 121.0],
     [14.6, 121.01],
@@ -300,8 +296,6 @@ test("snapToPaths snaps onto the closest of several paths", () => {
 });
 
 test('matchRoutes ranks by trip time: walking costs more than riding', () => {
-  // 'short-walk' needs a longer ride but almost no walking; 'long-walk' rides
-  // less but needs ~800 m more walking in total.
   const shortWalk: LatLngPair[] = [
     [14.6, 121.0],
     [14.6, 121.03],

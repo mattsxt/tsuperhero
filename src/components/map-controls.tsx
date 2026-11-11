@@ -5,7 +5,6 @@ import { Pressable, StyleSheet, View } from "react-native";
 
 import { palette } from "@/constants/colors";
 
-/** Zoom in / zoom out / re-center buttons drawn over a map. */
 export function MapControls({
   onZoomIn,
   onZoomOut,
@@ -15,7 +14,6 @@ export function MapControls({
   top?: number;
   onZoomIn: () => void;
   onZoomOut: () => void;
-  /** Omit to hide the re-center button. */
   onRecenter?: () => void;
 }) {
   const buttons = [

@@ -27,8 +27,6 @@ export function getPairDistanceMeters(
   );
 }
 
-// Flat-earth projection of a point onto one segment: `t` is the clamped
-// fraction along the segment where the closest point lies.
 function projectOntoSegment(
   point: Coordinates,
   [startLat, startLng]: LatLngPair,
@@ -147,8 +145,6 @@ function pointAtAlong(path: LatLngPair[], along: number): LatLngPair {
   return path[0];
 }
 
-// The part of `path` between two along-route distances, in travel order
-// (reversed when `fromAlong` is after `toAlong`).
 export function sliceAlong(
   path: LatLngPair[],
   fromAlong: number,
@@ -169,8 +165,6 @@ export function sliceAlong(
   return slice;
 }
 
-// Fraction (0-1) of the ride from A to B covered at `alongNow`. Works whichever
-// way the ride runs along the path.
 export function rideProgress(alongA: number, alongB: number, alongNow: number) {
   const total = Math.abs(alongB - alongA);
   if (!total) return 1;
@@ -189,16 +183,9 @@ export type RouteMatch = {
   rideMeters: number;
 };
 
-// Route ranking = estimated trip time, with walking counted double (the usual
-// transit-planning weight, since people mind walking more than riding).
-const walkCostPerMeter = (2 * 3600) / 5000; // 5 km/h on foot, weighted x2
-const rideCostPerMeter = 3600 / 18000; // 18 km/h by jeepney
+const walkCostPerMeter = (2 * 3600) / 5000;
+const rideCostPerMeter = 3600 / 18000;
 
-// Routes with one single path that passes within `maxMeters` of pickup A,
-// with A and B snapped onto that path. Commuters are only dropped off on the
-// route, so B is redirected to the path's nearest point however far it is
-// (unless `maxDropoffMeters` says otherwise). Best route first: the least
-// walking to A, distance from B to the route, and riding.
 export function matchRoutes(
   a: Coordinates,
   b: Coordinates,
@@ -238,8 +225,6 @@ export function matchRoutes(
     .sort((x, y) => score(x) - score(y));
 }
 
-// The one path (of a route's main and alternative paths) that best fits both
-// A and B, i.e. whose farther snap distance is smallest.
 export function choosePathFor(
   paths: LatLngPair[][],
   a: Coordinates,
@@ -260,11 +245,8 @@ export function choosePathFor(
 export type RideStats = {
   totalMeters: number;
   remainingMeters: number;
-  /** 0-1 share of the A -> B ride already covered. */
   progress: number;
-  /** A -> current position along the path (empty without a position). */
   travelled: LatLngPair[];
-  /** Current position (or A) -> B along the path. */
   ahead: LatLngPair[];
 };
 
@@ -291,7 +273,6 @@ export function rideStats(
     alongB,
     nearestPointOnPath(position, path).alongMeters,
   );
-  // Clamp the position between A and B so the line never overshoots either end.
   const alongNow = alongA + (alongB - alongA) * progress;
   return {
     totalMeters,
@@ -302,12 +283,8 @@ export function rideStats(
   };
 }
 
-/** Distance from B (along the route when known) that counts as dropped off. */
 export const dropoffArrivalMeters = 50;
 
-// Whether a position counts as having reached drop-off point B. With route
-// stats it uses the distance left along the route, so passing beside B on an
-// earlier leg doesn't count, and a position already past B does.
 export function reachedDropoff(
   stats: RideStats | null,
   position: Coordinates,
@@ -317,8 +294,6 @@ export function reachedDropoff(
   return getDistanceMeters(position, dropoff) <= dropoffArrivalMeters;
 }
 
-// The candidate point (e.g. a waiting area) closest to `origin` from which
-// some route also passes within 500 m of drop-off point B; null when none does.
 export function nearestServedPoint<T extends Coordinates>(
   origin: Coordinates,
   candidates: T[],
@@ -340,8 +315,6 @@ export function nearestServedPoint<T extends Coordinates>(
   );
 }
 
-// Ride stats without a route (tricycles go point to point): progress is the
-// straight-line distance closed from A towards B.
 export function straightRideStats(
   a: Coordinates,
   b: Coordinates,
@@ -368,7 +341,6 @@ export function straightRideStats(
   };
 }
 
-/** Snaps a point onto the closest of several paths (e.g. a route's main and alternative paths). */
 export function snapToPaths(
   point: Coordinates,
   paths: LatLngPair[][],
@@ -381,12 +353,8 @@ export function snapToPaths(
   );
 }
 
-/** A drop-off pin within this distance of a route counts as on that route. */
 export const dropoffOnRouteMeters = 50;
 
-// Route choices for the commuter, from matches ranked best first: up to `max`
-// routes that pass the drop-off pin, or just the best route when none does
-// (its drop-off point is then moved onto it).
 export function pickRouteChoices<T extends Pick<RouteMatch, "dropoff">>(
   matches: T[],
   max = 3,
@@ -396,7 +364,6 @@ export function pickRouteChoices<T extends Pick<RouteMatch, "dropoff">>(
   );
   return passing.length ? passing.slice(0, max) : matches.slice(0, 1);
 }
-
 
 export type TimedPosition = Coordinates & { at: number };
 

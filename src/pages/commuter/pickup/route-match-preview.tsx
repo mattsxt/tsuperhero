@@ -26,10 +26,6 @@ function formatWalk(meters: number) {
 
 const pair = (point: Coordinates): LatLng => [point.lat, point.lng];
 
-/**
- * Walking path between a commuter's pin and its point on the route, following
- * streets when directions load, otherwise a straight line.
- */
 function useWalkingLine(from: Coordinates | null, to: Coordinates | null) {
   const key = from && to ? `${from.lat},${from.lng}>${to.lat},${to.lng}` : null;
   const [routed, setRouted] = useState<{ key: string; path: LatLng[] } | null>(
@@ -49,7 +45,6 @@ function useWalkingLine(from: Coordinates | null, to: Coordinates | null) {
   const routedPath = routed?.key === key ? routed.path : null;
   return useMemo(() => {
     if (!from || !to) return null;
-    // Close the small gap between the street path's ends and the exact points.
     return routedPath
       ? [pair(from), ...routedPath, pair(to)]
       : [pair(from), pair(to)];
@@ -57,12 +52,6 @@ function useWalkingLine(from: Coordinates | null, to: Coordinates | null) {
   }, [key, routedPath]);
 }
 
-/**
- * Preview of the chosen route: pickup point A and drop-off point B on the
- * route, the commuter's own pins as small grey markers, and dashed walking
- * lines between each pin and its point. Lists routes to choose from when more
- * than one fits.
- */
 export function RouteMatchPreview({
   original,
   originalDropoff,
@@ -76,12 +65,10 @@ export function RouteMatchPreview({
   selected: PickupRouteMatch | null;
   onSelect: (routeId: string) => void;
 }) {
-  // The map appears only once a route is selected (picked, or the only one).
   const shown = selected;
   const pickupMoved = !!shown && shown.walkMeters > pickupOnRouteMeters;
   const dropoffMoved =
     !!shown && shown.dropoff.distanceMeters > dropoffOnRouteMeters;
-  // Before a route is picked, warn when no route passes the drop-off pin.
   const dropoffOffEveryRoute =
     !shown &&
     matches.every((match) => match.dropoff.distanceMeters > dropoffOnRouteMeters);

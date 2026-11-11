@@ -156,10 +156,6 @@ export function findNearestRoute(
 
 export type PickupRouteMatch = RouteMatch & { route: TransitRoute };
 
-/**
- * Registered routes that pass within 500 m of both the pickup point (A) and
- * the drop-off point (B), with A and B snapped onto one path. Best first.
- */
 export function matchPickupRoutes(
   pickup: Coordinates,
   dropoff: Coordinates,
@@ -177,7 +173,6 @@ const pickupRouteCandidates = () =>
     paths: [route.waypoints, ...route.alternativePaths],
   }));
 
-/** The point closest to `origin` from which a registered route reaches B. */
 export function findNearestPointServing<T extends Coordinates>(
   origin: Coordinates,
   candidates: T[],

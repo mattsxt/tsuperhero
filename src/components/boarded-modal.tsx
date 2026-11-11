@@ -23,12 +23,10 @@ export function BoardedModal() {
       !item.read &&
       !dismissed.includes(item.id) &&
       now - item.createdAt.getTime() < recentMs &&
-      // The pickup screen already shows the ride.
       pathname !== Routes.commuterPickup,
   );
   if (!boarded) return null;
 
-  // Boarding starts the ride: open the live trip view on the pickup screen.
   const close = (followRide: boolean) => {
     setDismissed((current) => [...current, boarded.id]);
     void markNotificationsRead([boarded.id]);

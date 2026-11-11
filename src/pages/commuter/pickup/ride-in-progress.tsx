@@ -32,9 +32,7 @@ import {
 
 const { brandBlue, mutedText, softBlue, text } = moduleColors;
 
-/** Ride ends automatically after this many readings in a row at B. */
 const dropoffArrivalReadings = 2;
-/** Older vehicle locations fall back to the commuter's own GPS. */
 const vehicleStaleMs = 30_000;
 const progressPollMs = 5_000;
 const etaSpeedKmh = 18;
@@ -45,11 +43,6 @@ function formatKm(meters: number) {
     : `${(meters / 1000).toFixed(1)} km left`;
 }
 
-/**
- * The commuter is on board: a minimal A -> B journey map with live progress.
- * Ends when the commuter reaches drop-off point B (or taps "I've been dropped
- * off"). Companions follow the owner's ride and can't end it themselves.
- */
 export function RideInProgress({
   request,
   onArrived,
@@ -127,7 +120,7 @@ export function RideInProgress({
         ? null
         : path
           ? rideStats(path, pickup, dropoff, position)
-          : // Tricycles have no fixed route: measure point to point.
+          :
             straightRideStats(pickup, dropoff, position),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [path, pickup.lat, pickup.lng, dropoff?.lat, dropoff?.lng, position?.lat, position?.lng],
@@ -148,8 +141,6 @@ export function RideInProgress({
     onArrived();
   }, [request.id, onArrived]);
 
-  // Auto drop-off: two readings in a row within 50 m of B along the route (or
-  // already past it). Re-checked on every tick, so a vehicle parked at B counts.
   useEffect(() => {
     if (isCompanion || !dropoff || !position) return;
     if (reachedDropoff(stats, position, dropoff)) {
@@ -330,7 +321,6 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#ffffff" },
   flex: { flex: 1 },
   pressed: { opacity: 0.8 },
-  // Back button pinned left; the title pill is centred on the screen.
   topBar: {
     position: "absolute",
     left: 16,

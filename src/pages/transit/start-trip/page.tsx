@@ -955,7 +955,6 @@ function Trip({
           setPanelTop(event.nativeEvent.layout.y);
         }}
       >
-        {/* Status at a glance: trip + location sharing, and occupancy. */}
         <View style={styles.statusRow}>
           <View
             style={[
@@ -989,7 +988,6 @@ function Trip({
           </View>
         </View>
 
-        {/* The passenger counter is what drivers use most. */}
         <View style={styles.counterCard}>
           <Text style={styles.counterLabel}>
             {onTrip ? "PASSENGERS ON BOARD" : "START A TRIP TO COUNT PASSENGERS"}
@@ -1253,7 +1251,6 @@ function CounterButton({
   onPress,
   children,
 }: {
-  /** "+" is the main action (filled green); "−" is secondary (outlined). */
   variant: "plus" | "minus";
   label: string;
   disabled: boolean;

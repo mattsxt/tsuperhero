@@ -44,14 +44,11 @@ export type TransitMapState = {
     lat: number;
     lng: number;
     passengers?: number;
-    /** Short text drawn inside the pin (e.g. "A"), shown instead of passengers. */
     badge?: string;
     label?: string;
-    /** A secondary reference point (e.g. the commuter's original pin): small and grey. */
     muted?: boolean;
   }[];
   pickupLine?: [number, number][] | null;
-  /** Dashed grey walking lines (e.g. the commuter's pin -> point on the route). */
   extraLines?: [number, number][][];
   pickupLineColor?: string;
   userLocation?: { lat: number; lng: number } | null;
@@ -65,12 +62,6 @@ export type TransitMapProps = {
   onDrag?: () => void;
   onCenterChange?: (center: MapCenter) => void;
   onVehiclePress?: (id: string) => void;
-  /** Show zoom in / zoom out / re-center buttons. Re-center returns to `state.fit`. */
-  /**
-   * Show map buttons: true for zoom in / zoom out / re-center, "zoom" for zoom
-   * only (e.g. a centre-pin picker, where re-centering would move the pin).
-   */
   controls?: boolean | "zoom";
-  /** Distance of the controls from the map's top edge (clear of overlays). */
   controlsTop?: number;
 };

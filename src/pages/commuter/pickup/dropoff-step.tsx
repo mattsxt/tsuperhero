@@ -15,7 +15,6 @@ import { PinLocationPicker } from "./pin-location-picker";
 
 const { brandBlue, softBlue, error } = moduleColors;
 
-/** Step where the commuter chooses drop-off point B. */
 export function DropoffStep({
   value,
   onChange,

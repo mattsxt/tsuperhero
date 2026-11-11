@@ -50,7 +50,6 @@ export type PickupRequest = {
   pickupName: string;
   vehicle: PickupVehicle;
   waitingAreaType?: WaitingAreaType;
-  /** Pickup point A: snapped onto the route when the request has one. */
   lat: number;
   lng: number;
   passengers: number;
@@ -211,7 +210,6 @@ function fetchActivePickup(): Promise<Result<PickupRequest | null>> {
     );
     const pickup = Array.isArray(row?.pickup) ? row.pickup[0] : row?.pickup;
     if (!row || !pickup) return null;
-    // Dropped off on this phone but not synced yet: the ride is over here.
     if (await isRideCompletionQueued(row.request_id)) return null;
     return {
       id: row.request_id,
@@ -255,7 +253,6 @@ type PickupForm = {
   riders: Rider[];
   draftRequestId?: string | null;
   dropoff: DropoffPoint | null;
-  /** The route A and B were snapped onto (from matchPickupRoutes). */
   match: RouteMatch | null;
 };
 
@@ -285,7 +282,6 @@ export async function requestPickup(
   }
   const { dropoff, match } = form;
   if (!dropoff) return failure("Select where you want to be dropped off.");
-  // Jeepneys run fixed routes; tricycles pick up and drop off anywhere.
   if (vehicle === "jeep" && !match) {
     return failure("No registered route connects these points");
   }
@@ -293,9 +289,6 @@ export async function requestPickup(
     return failure("Reconnect to the internet before requesting a pickup.");
   }
 
-  // Pickup point A is moved onto the route. A point already on it (such as a
-  // waiting area) keeps its exact coordinates. The draft keeps the location
-  // companions were invited to; only set_pickup_route stores snapped A.
   const routeMatch = vehicle === "jeep" ? match : null;
   const point =
     !routeMatch || routeMatch.walkMeters <= pickupOnRouteMeters
@@ -348,7 +341,6 @@ export async function requestPickup(
   });
 }
 
-/** A pickup pin this close to the route counts as already on it. */
 export const pickupOnRouteMeters = 5;
 
 export const routeSnapErrorMessage =
@@ -380,11 +372,9 @@ export async function flushRideCompletions(): Promise<void> {
         await unwrap(pickupRoutes.completeMyRide(requestId));
         done.push(requestId);
       } catch (error) {
-        // Retry connection failures; a rejected drop-off won't succeed later.
         if (!isConnectionError(error)) done.push(requestId);
       }
     }
-    // Re-read so drop-offs queued during this flush aren't overwritten.
     const latest = readCache<string[]>(key) ?? [];
     writeCache(
       key,
@@ -414,10 +404,6 @@ export async function queueRideCompletion(requestId: string): Promise<void> {
   if (!requestIds.includes(requestId)) writeCache(key, [...requestIds, requestId]);
 }
 
-/**
- * The commuter was dropped off. Offline, the drop-off is queued and synced on
- * reconnect; the ride counts as finished on this phone right away.
- */
 export async function completeMyRide(requestId: string): Promise<Result<void>> {
   watchAuthChanges();
   if (knownActivePickup?.id === requestId) knownActivePickup = null;
@@ -429,7 +415,6 @@ export async function completeMyRide(requestId: string): Promise<Result<void>> {
     await unwrap(pickupRoutes.completeMyRide(requestId));
   });
   if (!result.ok && !(await checkOnline())) {
-    // Lost the connection mid-call: sync the drop-off on reconnect.
     await queueRideCompletion(requestId);
     return success(undefined);
   }
@@ -481,10 +466,6 @@ export function loadRideProgress(): Promise<Result<RideProgress | null>> {
   });
 }
 
-/**
- * Saves pickup point A (and B) on a shared-ride draft before it is sent, so
- * companions are guided to, and checked against, the same point.
- */
 export function savePickupPoint(
   requestId: string,
   routeId: string | null,
@@ -577,7 +558,6 @@ export async function cancelActivePickupBeforeSignOut(): Promise<Result<void>> {
   const ride = shared.data;
   if (!request && !ride) return success(undefined);
   return attempt(async () => {
-    // A ride already under way isn't cancelled; it ends at drop-off.
     if (request && !isRideActive(request.status)) {
       await deletePickupRequest(request.id);
       knownActivePickup = null;

@@ -229,7 +229,6 @@ function WaitingAreaMarker({
   );
 }
 
-// Frames the fit points (re-center goes back to this view).
 function fitTo(
   view: Camera,
   fit: NonNullable<TransitMapProps["state"]["fit"]>,

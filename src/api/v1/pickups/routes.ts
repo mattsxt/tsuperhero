@@ -56,7 +56,6 @@ export const pickupRoutes = {
 
   setPickupRoute: (
     requestId: string,
-    /** null for tricycles, which have no fixed route. */
     routeId: string | null,
     pickupLat: number,
     pickupLng: number,
@@ -96,7 +95,6 @@ export const pickupRoutes = {
   findMyDriver: () => getSupabaseClient().rpc("get_my_pickup_driver"),
 
   findMyBookings: () => getSupabaseClient().rpc("get_my_bookings"),
-
 
   searchCommuters: (query: string) =>
     getSupabaseClient().rpc("search_available_commuters", { p_query: query }),

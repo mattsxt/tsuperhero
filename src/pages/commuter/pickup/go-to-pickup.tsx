@@ -25,15 +25,8 @@ import {
 const { brandBlue, mutedText, softBlue, text } = moduleColors;
 const walkingMetersPerMinute = 5000 / 60;
 
-// Reverse geocoding falls back to Plus Codes ("J6C2+CV6") for unnamed spots;
-// they mean nothing to commuters.
 const isPlusCode = (name: string) => /^[23456789CFGHJMPQRVWX]{2,8}\+/i.test(name);
 
-/**
- * Before a "pick me up at my selected location" request is sent, the commuter
- * (and every companion who accepted) must be at pickup point A. "I AM HERE"
- * sends the request once everyone is within 60 m of it.
- */
 export function GoToPickup({
   target,
   routeName,
@@ -44,7 +37,6 @@ export function GoToPickup({
   onBack,
 }: {
   target: { name: string; lat: number; lng: number };
-  /** The jeepney route the pickup point is on (null for tricycles). */
   routeName: string | null;
   riders: Rider[];
   busy: boolean;
@@ -203,7 +195,6 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#ffffff" },
   flex: { flex: 1 },
   pressed: { opacity: 0.8 },
-  // Back button pinned left; the title pill is centred on the screen.
   topBar: {
     position: "absolute",
     left: 16,
@@ -268,8 +259,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: palette.successSoft,
   },
-  // Line height matches the 22 px icon; Android's extra font padding is
-  // removed so the text sits on the icon's centre line.
   statusTitle: {
     fontFamily: "SoraBold",
     fontSize: 15,
@@ -278,7 +267,6 @@ const styles = StyleSheet.create({
     textAlignVertical: "center",
   },
   distanceMeta: { color: mutedText, fontFamily: "Sora", fontSize: 12 },
-  // Two equal stat blocks (distance | walking time) split by a thin divider.
   stats: { flexDirection: "row", alignItems: "center" },
   stat: { flex: 1, alignItems: "center", gap: 2 },
   statValue: { color: brandBlue, fontFamily: "SoraBold", fontSize: 22 },

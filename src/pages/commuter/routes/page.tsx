@@ -92,8 +92,6 @@ export default function RoutesScreen() {
     destName?: string;
   }>();
   const transitRoutes = useTransitRoutes();
-  // Leaving Routes clears the selection; only a route passed in (e.g. from
-  // Home's destination search) starts selected.
   const startRouteId = params.routeId ?? null;
   const initialRoute = findRoute(startRouteId);
   const destination = useMemo(() => {
@@ -222,7 +220,6 @@ export default function RoutesScreen() {
         ? [{ id: "destination", ...destination, label: destinationName }]
         : [],
       focus: null,
-      // Re-center frames the selected route, as when it first loads.
       fit:
         routeId && path?.length
           ? {
@@ -252,7 +249,6 @@ export default function RoutesScreen() {
     option.name.toLowerCase().includes(query.trim().toLowerCase()),
   );
 
-  // A restored route's name may only be known once the route list loads.
   const searchText = !query && !pickerOpen && route ? route.name : query;
 
   const selectRoute = (id: string) => {
