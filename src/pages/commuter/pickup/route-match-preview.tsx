@@ -75,7 +75,7 @@ export function RouteMatchPreview({
   return (
     <View style={styles.wrap}>
       <View style={styles.map}>
-        <TransitMap state={state} />
+        <TransitMap state={state} controls />
       </View>
       {moved && (
         <Text style={styles.note}>

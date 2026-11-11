@@ -11,6 +11,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { SvgXml } from "react-native-svg";
 
+import { MapControls } from "@/components/map-controls";
 import {
   occupancyPinColors,
   type TransitMapProps,
@@ -221,13 +222,36 @@ function WaitingAreaMarker({
   );
 }
 
+// Frames the fit points (re-center goes back to this view).
+function fitTo(
+  view: Camera,
+  fit: NonNullable<TransitMapProps["state"]["fit"]>,
+  padTop: number,
+  padBottom: number,
+  durationMs: number,
+) {
+  if (!fit.points.length) return;
+  if (fit.points.length === 1) {
+    view.setCamera({
+      centerCoordinate: toPosition(fit.points[0]),
+      zoomLevel: pointZoom,
+      animationDuration: durationMs,
+    });
+  } else {
+    const { ne, sw } = boundsOf(fit.points.map(toPosition), minFitSpanDegrees);
+    view.fitBounds(ne, sw, [padTop, 40, padBottom, 40], durationMs);
+  }
+}
+
 export function TransitMap({
   state,
   onDrag,
   onCenterChange,
   onVehiclePress,
+  controls = false,
 }: TransitMapProps) {
   const camera = useRef<Camera>(null);
+  const zoom = useRef(14);
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
   const [openWaitingId, setOpenWaitingId] = useState<string | null>(null);
@@ -301,19 +325,7 @@ export function TransitMap({
 
     const fit = state.fit;
     if (fit && fit.key !== applied.current.fit && fit.points.length) {
-      if (fit.points.length === 1) {
-        view.setCamera({
-          centerCoordinate: toPosition(fit.points[0]),
-          zoomLevel: pointZoom,
-          animationDuration: 0,
-        });
-      } else {
-        const { ne, sw } = boundsOf(
-          fit.points.map(toPosition),
-          minFitSpanDegrees,
-        );
-        view.fitBounds(ne, sw, [state.padTop, 40, state.padBottom, 40], 0);
-      }
+      fitTo(view, fit, state.padTop, state.padBottom, 0);
     }
     applied.current.fit = fit?.key ?? null;
 
@@ -337,6 +349,11 @@ export function TransitMap({
     state.padTop,
     state.padBottom,
   ]);
+
+  const zoomBy = (delta: number) => {
+    zoom.current = Math.max(3, Math.min(20, zoom.current + delta));
+    camera.current?.zoomTo(zoom.current, 250);
+  };
 
   if (!mapboxToken) {
     return (
@@ -374,6 +391,7 @@ export function TransitMap({
         onMapLoadingError={() => setFailed(true)}
         onPress={() => setOpenWaitingId(null)}
         onCameraChanged={(map) => {
+          zoom.current = map.properties.zoom;
           if (map.gestures.isGestureActive && !gesturing.current) {
             gesturing.current = true;
             onDrag?.();
@@ -514,6 +532,18 @@ export function TransitMap({
           />
         ) : null}
       </MapView>
+
+      {controls && loaded ? (
+        <MapControls
+          onZoomIn={() => zoomBy(1)}
+          onZoomOut={() => zoomBy(-1)}
+          onRecenter={() => {
+            if (camera.current && state.fit) {
+              fitTo(camera.current, state.fit, state.padTop, state.padBottom, 400);
+            }
+          }}
+        />
+      ) : null}
 
       {failed && !loaded ? (
         <View style={styles.message}>

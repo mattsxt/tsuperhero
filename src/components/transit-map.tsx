@@ -2,6 +2,7 @@ import { createElement, useEffect, useRef, useState } from "react";
 import { Platform, StyleSheet, View } from "react-native";
 import { WebView } from "react-native-webview";
 
+import { MapControls } from "@/components/map-controls";
 import { occupancyPinColors } from "@/components/transit-map-types";
 import { mapboxToken } from "@/constants/mapbox";
 import { waitingAreaPinColors } from "@/constants/waiting-area";
@@ -126,6 +127,30 @@ const mapHtml = `<!DOCTYPE html>
   var reportCenter = false;
   var meMarker = null;
   var lastFitKey = null;
+  var lastFit = null;
+
+  // Frames the fit points (re-center goes back to this view).
+  function fitTo(fit, animate) {
+    if (fit.points.length === 1) {
+      if (animate) map.easeTo({ center: lngLat(fit.points[0]), zoom: 16 });
+      else map.jumpTo({ center: lngLat(fit.points[0]), zoom: 16 });
+      return;
+    }
+    var fitBounds = new mapboxgl.LngLatBounds();
+    fit.points.forEach(function (point) { fitBounds.extend(lngLat(point)); });
+    map.fitBounds(fitBounds, {
+      padding: { top: fit.padTop, bottom: fit.padBottom, left: 40, right: 40 },
+      maxZoom: 16,
+      animate: animate
+    });
+  }
+
+  // Zoom / re-center buttons drawn by the app over the map.
+  function mapCommand(command) {
+    if (!map) return;
+    if (command.type === "zoom") map.easeTo({ zoom: map.getZoom() + command.delta, duration: 250 });
+    else if (command.type === "recenter" && lastFit) fitTo(lastFit, true);
+  }
   var COUNTED_PIN_SVG = '<svg width="38" height="38" viewBox="0 0 24 24" fill="#c81e1e" stroke="#c81e1e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="5.2" fill="#ffffff" stroke="none"/></svg>';
   var EMPTY = { type: "FeatureCollection", features: [] };
 
@@ -188,19 +213,10 @@ const mapHtml = `<!DOCTYPE html>
     applyPickups(state);
     applyUserLocation(state);
 
-    if (state.fit && state.fit.key !== lastFitKey && state.fit.points.length) {
-      if (state.fit.points.length === 1) {
-        map.jumpTo({ center: lngLat(state.fit.points[0]), zoom: 16 });
-      } else {
-        var fitBounds = new mapboxgl.LngLatBounds();
-        state.fit.points.forEach(function (point) { fitBounds.extend(lngLat(point)); });
-        map.fitBounds(fitBounds, {
-          padding: { top: state.padTop, bottom: state.padBottom, left: 40, right: 40 },
-          maxZoom: 16,
-          animate: false
-        });
-      }
-    }
+    lastFit = state.fit && state.fit.points.length
+      ? { points: state.fit.points, padTop: state.padTop, padBottom: state.padBottom }
+      : null;
+    if (state.fit && state.fit.key !== lastFitKey && lastFit) fitTo(lastFit, false);
     lastFitKey = state.fit ? state.fit.key : null;
 
     if (state.focus && state.focus.key !== lastFocusKey) {
@@ -425,10 +441,12 @@ const mapHtml = `<!DOCTYPE html>
   }
 
   window.applyState = applyState;
+  window.mapCommand = mapCommand;
   window.addEventListener("message", function (event) {
     try {
       var message = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
       if (message && message.type === "state") applyState(message.state);
+      else if (message && message.type === "command") mapCommand(message.command);
     } catch (error) {}
   });
 
@@ -464,6 +482,7 @@ export function TransitMap({
   onDrag,
   onCenterChange,
   onVehiclePress,
+  controls = false,
 }: TransitMapProps) {
   const [ready, setReady] = useState(false);
   const onDragRef = useRef(onDrag);
@@ -549,6 +568,28 @@ export function TransitMap({
     return () => target.removeEventListener("message", listener);
   }, []);
 
+  const command = (
+    value: { type: "zoom"; delta: number } | { type: "recenter" },
+  ) => {
+    const json = JSON.stringify(value);
+    if (Platform.OS === "web") {
+      frameRef.current?.contentWindow?.postMessage(
+        `{"type":"command","command":${json}}`,
+        "*",
+      );
+    } else {
+      webViewRef.current?.injectJavaScript(`window.mapCommand(${json}); true;`);
+    }
+  };
+  const mapControls =
+    controls && ready ? (
+      <MapControls
+        onZoomIn={() => command({ type: "zoom", delta: 1 })}
+        onZoomOut={() => command({ type: "zoom", delta: -1 })}
+        onRecenter={() => command({ type: "recenter" })}
+      />
+    ) : null;
+
   if (Platform.OS === "web") {
     return (
       <View style={StyleSheet.absoluteFill}>
@@ -558,20 +599,24 @@ export function TransitMap({
           title: "Routes map",
           style: { border: 0, width: "100%", height: "100%" },
         })}
+        {mapControls}
       </View>
     );
   }
 
   return (
-    <WebView
-      ref={webViewRef}
-      style={StyleSheet.absoluteFill}
-      originWhitelist={["*"]}
-      source={{ html: mapHtml, baseUrl: "https://localhost" }}
-      onMessage={(event) => handleMessage(event.nativeEvent.data)}
-      javaScriptEnabled
-      domStorageEnabled
-      setSupportMultipleWindows={false}
-    />
+    <View style={StyleSheet.absoluteFill}>
+      <WebView
+        ref={webViewRef}
+        style={StyleSheet.absoluteFill}
+        originWhitelist={["*"]}
+        source={{ html: mapHtml, baseUrl: "https://localhost" }}
+        onMessage={(event) => handleMessage(event.nativeEvent.data)}
+        javaScriptEnabled
+        domStorageEnabled
+        setSupportMultipleWindows={false}
+      />
+      {mapControls}
+    </View>
   );
 }

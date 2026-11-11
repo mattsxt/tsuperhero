@@ -61,4 +61,6 @@ export type TransitMapProps = {
   onDrag?: () => void;
   onCenterChange?: (center: MapCenter) => void;
   onVehiclePress?: (id: string) => void;
+  /** Show zoom in / zoom out / re-center buttons. Re-center returns to `state.fit`. */
+  controls?: boolean;
 };
