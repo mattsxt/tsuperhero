@@ -85,7 +85,7 @@ const mapHtml = `<!DOCTYPE html>
     background: #e3ecfb; color: #193caf; font: bold 9px sans-serif;
   }
   .waiting.hub .waiting-icon { border-radius: 6px; }
-  .pickup { position: relative; line-height: 0; filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.35)); }
+  .pickup { line-height: 0; filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.35)); }
   .pickup.muted { filter: none; }
   .muted-dot {
     display: block; width: 10px; height: 10px; border-radius: 50%;
@@ -181,9 +181,9 @@ const mapHtml = `<!DOCTYPE html>
     if (source) source.setData({ type: "FeatureCollection", features: lines.map(line) });
   }
 
-  function markerAt(content, lat, lng, zIndex) {
+  function markerAt(content, lat, lng, zIndex, anchor) {
     content.style.zIndex = String(zIndex || 0);
-    return new mapboxgl.Marker({ element: content, anchor: "bottom" }).setLngLat([lng, lat]).addTo(map);
+    return new mapboxgl.Marker({ element: content, anchor: anchor || "bottom" }).setLngLat([lng, lat]).addTo(map);
   }
 
   function applyState(state) {
@@ -261,7 +261,9 @@ const mapHtml = `<!DOCTYPE html>
           label.textContent = pickup.label;
           content.appendChild(label);
         }
-        pickupMarkers.push(markerAt(content, pickup.lat, pickup.lng, 800));
+        pickupMarkers.push(
+          markerAt(content, pickup.lat, pickup.lng, pickup.muted ? 700 : 800, pickup.muted ? "center" : "bottom"),
+        );
       });
     }
     var lineKey = JSON.stringify([state.pickupLine || null, state.extraLines || null]);
