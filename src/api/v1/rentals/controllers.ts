@@ -206,13 +206,6 @@ export function loadRentalRequests(): Promise<Result<Rental[]>> {
   });
 }
 
-export function respondToRental(
-  id: string,
-  accept: boolean,
-): Promise<Result<unknown>> {
-  return attempt(() => unwrap(rentalRoutes.respond(id, accept)));
-}
-
 export function loadJobBoard(): Promise<Result<Rental[]>> {
   return attempt(async () => {
     const rows: RentalRow[] =

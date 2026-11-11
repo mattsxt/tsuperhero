@@ -1,5 +1,4 @@
 import type { LocationObjectCoords } from "expo-location";
-import { useSyncExternalStore } from "react";
 
 import { isConnectionError, readCache, writeCache } from "@/api/v1/cache";
 import { toUserMessage } from "@/api/v1/errors";
@@ -39,7 +38,6 @@ let outbox: Outbox = { ...emptyOutbox, ...readCache<Outbox>(storageKey) };
 let flushing: Promise<void> | null = null;
 let stopWatching: (() => void) | null = null;
 let retryTimer: ReturnType<typeof setInterval> | null = null;
-const listeners = new Set<() => void>();
 
 const pendingCount = () =>
   (outbox.tripState ? 1 : 0) +
@@ -50,7 +48,6 @@ const pendingCount = () =>
 function save(next: Outbox) {
   outbox = next;
   writeCache(storageKey, outbox);
-  listeners.forEach((listener) => listener());
   if (pendingCount() > 0) startRetrying();
   else stopRetrying();
 }
@@ -218,17 +215,6 @@ export const hasPendingTripEnd = () => !!outbox.tripEnd;
 
 export function clearOutbox() {
   save(emptyOutbox);
-}
-
-function subscribe(listener: () => void) {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-}
-
-export function usePendingSync() {
-  return useSyncExternalStore(subscribe, pendingCount, pendingCount);
 }
 
 if (pendingCount() > 0) startRetrying();

@@ -11,7 +11,7 @@ import type { WaitingArea } from "@/api/v1/waiting-areas/controllers";
 import { TransitMap, type TransitMapState } from "@/components/transit-map";
 import { waitingAreaPinColors } from "@/constants/waiting-area";
 import { palette } from "@/constants/colors";
-import { getDistanceMeters } from "@/utils/geo";
+import { createPositionThrottle, getDistanceMeters } from "@/utils/geo";
 
 type Coordinates = { lat: number; lng: number };
 
@@ -49,8 +49,10 @@ export function WaitingAreaDirectionsMap({
   useEffect(() => {
     let active = true;
     let subscription: { remove: () => void } | null = null;
-    watchLocation(({ coords }) => {
+    const allow = createPositionThrottle();
+    watchLocation(({ coords, timestamp }) => {
       const next = { lat: coords.latitude, lng: coords.longitude };
+      if (!allow({ ...next, at: timestamp })) return;
       setLocation(next);
       setFitOrigin((current) => current ?? next);
     }).then((result) => {

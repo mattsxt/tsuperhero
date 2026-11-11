@@ -104,12 +104,6 @@ export const rentalRoutes = {
   dismissJob: (requestId: string) =>
     rpc().rpc("dismiss_rental_job", { p_request_id: requestId }),
 
-  respond: (requestId: string, accept: boolean) =>
-    rpc().rpc("respond_to_rental", {
-      p_request_id: requestId,
-      p_accept: accept,
-    }),
-
   complete: (requestId: string) =>
     rpc().rpc("complete_rental", { p_request_id: requestId }),
 };

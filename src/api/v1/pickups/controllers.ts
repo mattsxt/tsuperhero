@@ -63,7 +63,6 @@ export type PickupRequest = {
 export const isRideActive = (status: RequestStatus) => status === "riding";
 
 export const minPickupPassengers = 1;
-export const maxPickupPassengers = 10;
 
 export const pickupVehicleCapacity: Record<PickupVehicle, number> = {
   jeep: 10,

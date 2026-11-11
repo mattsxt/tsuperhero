@@ -379,3 +379,13 @@ export function shouldRefreshPosition(
     getDistanceMeters(previous, next) >= minMeters
   );
 }
+
+
+export function createPositionThrottle(minMeters = 3, maxAgeMs = 5_000) {
+  let shown: TimedPosition | null = null;
+  return (next: TimedPosition) => {
+    if (!shouldRefreshPosition(shown, next, minMeters, maxAgeMs)) return false;
+    shown = next;
+    return true;
+  };
+}

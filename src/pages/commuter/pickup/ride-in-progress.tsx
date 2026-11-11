@@ -31,6 +31,7 @@ import { useNow } from "@/hooks/use-now";
 import { usePolling } from "@/hooks/use-polling";
 import {
   choosePathFor,
+  createPositionThrottle,
   dropoffArrivalMeters,
   reachedDropoff,
   rideStats,
@@ -100,9 +101,11 @@ export function RideInProgress({
   useEffect(() => {
     let active = true;
     let subscription: { remove: () => void } | null = null;
-    watchLocation(({ coords }) =>
-      setMe({ lat: coords.latitude, lng: coords.longitude }),
-    ).then((result) => {
+    const allow = createPositionThrottle();
+    watchLocation(({ coords, timestamp }) => {
+      const next = { lat: coords.latitude, lng: coords.longitude };
+      if (allow({ ...next, at: timestamp })) setMe(next);
+    }).then((result) => {
       if (!result.ok) return;
       if (active) subscription = result.data;
       else result.data.remove();

@@ -32,7 +32,7 @@ import { VehicleIcon } from "@/components/module-icons";
 import { ModuleHeader } from "@/components/module-ui";
 import { TransitMap, type TransitMapState } from "@/components/transit-map";
 import { usePolling } from "@/hooks/use-polling";
-import { getDistanceMeters } from "@/utils/geo";
+import { createPositionThrottle, getDistanceMeters } from "@/utils/geo";
 import { BrandLogo } from "@/components/brand-logo";
 import { LoadingLogo } from "@/components/LoadingLogo";
 import type { WaitingArea } from "@/api/v1/waiting-areas/controllers";
@@ -147,9 +147,11 @@ export function ActivePickup({
     if (request.vehicle === "jeep" || !matched) return;
     let active = true;
     let subscription: { remove: () => void } | null = null;
-    watchLocation(({ coords }) =>
-      setMe({ lat: coords.latitude, lng: coords.longitude }),
-    ).then((result) => {
+    const allow = createPositionThrottle();
+    watchLocation(({ coords, timestamp }) => {
+      const next = { lat: coords.latitude, lng: coords.longitude };
+      if (allow({ ...next, at: timestamp })) setMe(next);
+    }).then((result) => {
       if (!result.ok) return;
       if (active) subscription = result.data;
       else result.data.remove();

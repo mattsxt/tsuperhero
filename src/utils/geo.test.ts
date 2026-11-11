@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   choosePathFor,
+  createPositionThrottle,
   nearestServedPoint,
   pickRouteChoices,
   matchRoutes,
@@ -341,4 +342,13 @@ test('shouldRefreshPosition skips GPS jitter but refreshes on movement or age', 
   assert.equal(shouldRefreshPosition(prev, { lat: 14.60001, lng: 121.0, at: 1000 }), false);
   assert.equal(shouldRefreshPosition(prev, { lat: 14.60004, lng: 121.0, at: 1000 }), true);
   assert.equal(shouldRefreshPosition(prev, { lat: 14.6, lng: 121.0, at: 5000 }), true);
+});
+
+test('createPositionThrottle lets through movement and stale updates only', () => {
+  const allow = createPositionThrottle();
+  assert.equal(allow({ lat: 14.6, lng: 121.0, at: 0 }), true);
+  assert.equal(allow({ lat: 14.60001, lng: 121.0, at: 1000 }), false);
+  assert.equal(allow({ lat: 14.60004, lng: 121.0, at: 2000 }), true);
+  assert.equal(allow({ lat: 14.60004, lng: 121.0, at: 3000 }), false);
+  assert.equal(allow({ lat: 14.60004, lng: 121.0, at: 7000 }), true);
 });
