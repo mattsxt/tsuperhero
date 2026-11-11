@@ -30,6 +30,18 @@ const toneColors: Record<Tone, { background: string; color: string }> = {
 function describe(status: NonNullable<PickupStatus>) {
   if (status.kind === "own") {
     const { request } = status;
+    if (request.status === "riding") {
+      return {
+        eyebrow: "YOUR RIDE",
+        label: request.dropoff?.name
+          ? `On the way to ${request.dropoff.name}`
+          : "On the way",
+        tone: "matched" as Tone,
+        hint: "Tap to follow your trip.",
+        place: request.dropoff?.name ?? request.pickupName,
+        passengers: request.passengers,
+      };
+    }
     if (request.status === "accepted") {
       return {
         eyebrow: "YOUR PICKUP",
@@ -84,13 +96,17 @@ function describe(status: NonNullable<PickupStatus>) {
     "waiting-confirmation": ["Waiting for confirmation", "walk"],
     "waiting-driver": ["Waiting for a driver", "waiting"],
     "driver-on-the-way": ["Driver on the way", "matched"],
+    riding: ["On the way", "matched"],
   } as const;
   const [label, tone] = labels[ride.stage];
   return {
     eyebrow: `SHARED RIDE WITH ${ride.owner.name.toUpperCase()}`,
     label,
     tone: tone as Tone,
-    hint: "Tap to see the route to the pickup point.",
+    hint:
+      ride.stage === "riding"
+        ? "Tap to follow your trip."
+        : "Tap to see the route to the pickup point.",
     place: ride.pickupName,
     passengers: ride.passengers,
   };

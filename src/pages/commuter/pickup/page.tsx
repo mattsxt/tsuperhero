@@ -442,11 +442,33 @@ export default function PickupScreen() {
   );
 
   const [boarded, setBoarded] = useState<PickupRequest | null>(null);
+  const lastSharedRide = useRef<SharedRide | null>(getKnownSharedRide());
 
   usePolling(
     async () => {
       const result = await loadMySharedRide();
-      if (result.ok) setSharedRide(result.data);
+      if (!result.ok) return;
+      // A companion's ride ended (owner dropped off or driver ended the trip).
+      const previous = lastSharedRide.current;
+      // Companions can't read the owner's request, but a riding shared ride
+      // only disappears once it is completed.
+      if (previous?.stage === "riding" && !result.data) {
+        setBoarded({
+          id: previous.requestId,
+          pickupName: previous.pickupName,
+          vehicle: previous.vehicle,
+          lat: previous.lat,
+          lng: previous.lng,
+          passengers: previous.passengers,
+          status: "completed",
+          arrived: true,
+          arrivedAt: null,
+          dropoff: null,
+          routeId: null,
+        });
+      }
+      lastSharedRide.current = result.data;
+      setSharedRide(result.data);
     },
     4_000,
     sharedRideLoaded && !active && !draftRequestId,
@@ -708,6 +730,24 @@ export default function PickupScreen() {
             params: { tab: "pickup", open: id },
           });
         }}
+      />
+    );
+  }
+
+  if (sharedRide && !active && sharedRide.stage === "riding") {
+    return (
+      <RideInProgress
+        isCompanion
+        request={{
+          id: sharedRide.requestId,
+          lat: sharedRide.lat,
+          lng: sharedRide.lng,
+          vehicle: sharedRide.vehicle,
+          dropoff: null,
+          routeId: null,
+        }}
+        onBack={goBack}
+        onArrived={() => {}}
       />
     );
   }

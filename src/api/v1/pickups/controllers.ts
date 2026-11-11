@@ -524,11 +524,12 @@ export async function cancelActivePickupBeforeSignOut(): Promise<Result<void>> {
   const ride = shared.data;
   if (!request && !ride) return success(undefined);
   return attempt(async () => {
-    if (request) {
+    // A ride already under way isn't cancelled; it ends at drop-off.
+    if (request && !isRideActive(request.status)) {
       await deletePickupRequest(request.id);
       knownActivePickup = null;
     }
-    if (ride) {
+    if (ride && ride.stage !== "riding") {
       await unwrap(pickupRoutes.leaveSharedRide(ride.requestId));
       knownSharedRide = null;
     }
@@ -541,6 +542,9 @@ export async function describePickupBeforeSignOut(): Promise<string | null> {
     fetchMySharedRide(),
   ]);
   if (request.ok && request.data) {
+    if (isRideActive(request.data.status)) {
+      return "You're on a ride. Signing out won't end it: it finishes when you're dropped off or the driver ends the trip.";
+    }
     return request.data.status === "accepted"
       ? "A driver is already on the way to you. Signing out will cancel your pickup request."
       : "You have a pickup request in progress. Signing out will cancel it.";
@@ -824,7 +828,11 @@ export type SharedRide = {
   lng: number;
   passengers: number;
   vehicle: PickupVehicle;
-  stage: "waiting-confirmation" | "waiting-driver" | "driver-on-the-way";
+  stage:
+    | "waiting-confirmation"
+    | "waiting-driver"
+    | "driver-on-the-way"
+    | "riding";
   plateNumber: string | null;
   ownerArrived: boolean;
   meArrived: boolean;
@@ -858,9 +866,11 @@ function fetchMySharedRide(): Promise<Result<SharedRide | null>> {
       vehicle: row.vehicle_type === "Tricycle" ? "tricy" : "jeep",
       stage: row.is_draft
         ? "waiting-confirmation"
-        : row.request_status === "accepted"
-          ? "driver-on-the-way"
-          : "waiting-driver",
+        : row.request_status === "riding"
+          ? "riding"
+          : row.request_status === "accepted"
+            ? "driver-on-the-way"
+            : "waiting-driver",
       plateNumber: row.plate_number,
       ownerArrived: row.owner_arrived ?? true,
       meArrived: !!row.me_arrived,

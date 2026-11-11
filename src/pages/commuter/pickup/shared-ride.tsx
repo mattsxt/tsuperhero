@@ -54,6 +54,11 @@ const stages: Record<
         ? "Drivers nearby can see the pickup. Head to the pickup point."
         : `The pickup is confirmed. Drivers will see it once ${ride.owner.name} reaches the pickup point.`,
   },
+  riding: {
+    label: "On the way",
+    tone: "live",
+    message: () => "You're on board. Enjoy the ride!",
+  },
   "driver-on-the-way": {
     label: "Driver on the way",
     tone: "accepted",
