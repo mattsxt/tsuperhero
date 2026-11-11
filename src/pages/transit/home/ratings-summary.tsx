@@ -107,6 +107,9 @@ export function RatingsSummary({ refreshKey = 0 }: { refreshKey?: number }) {
         </View>
       </View>
 
+      {summary.recent.length > 0 && (
+        <Text style={styles.sectionLabel}>RECENT REVIEWS</Text>
+      )}
       {summary.recent.slice(0, visibleReviews).map((review) => (
         <ReviewCard key={review.id} review={review} />
       ))}
@@ -115,22 +118,41 @@ export function RatingsSummary({ refreshKey = 0 }: { refreshKey?: number }) {
 }
 
 function ReviewCard({ review }: { review: Review }) {
+  const name = review.commuterName?.trim() || "A commuter";
+  const trip = [
+    review.kind === "rental" ? "Rental" : "Pickup",
+    review.destination,
+  ]
+    .filter(Boolean)
+    .join(" · ");
   return (
-    <View style={styles.review}>
+    <View
+      style={styles.review}
+      accessible
+      accessibilityLabel={`${name} rated ${review.score} out of 5 for a ${trip}`}
+    >
       <View style={styles.reviewTop}>
-        <StarRow score={review.score} size={12} />
-        <Text style={styles.reviewDate}>
-          {formatReviewDate(review.ratedAt)}
-        </Text>
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>{name.charAt(0).toUpperCase()}</Text>
+        </View>
+        <View style={styles.reviewWho}>
+          <Text style={styles.reviewName} numberOfLines={1}>
+            {name}
+          </Text>
+          <Text style={styles.reviewTrip} numberOfLines={1}>
+            {trip}
+          </Text>
+        </View>
+        <View style={styles.reviewScore}>
+          <StarRow score={review.score} size={15} />
+          <Text style={styles.reviewDate}>
+            {formatReviewDate(review.ratedAt)}
+          </Text>
+        </View>
       </View>
       {!!review.feedback && (
-        <Text style={styles.reviewText}>&ldquo;{review.feedback}&rdquo;</Text>
+        <Text style={styles.reviewText}>“{review.feedback}”</Text>
       )}
-      <Text style={styles.reviewMeta} numberOfLines={1}>
-        {review.commuterName ?? "A commuter"} ·{" "}
-        {review.kind === "rental" ? "Rental" : "Pickup"}
-        {review.destination ? ` to ${review.destination}` : ""}
-      </Text>
     </View>
   );
 }
@@ -178,24 +200,45 @@ const styles = StyleSheet.create({
     fontSize: 10,
     textAlign: "right",
   },
+  sectionLabel: {
+    marginTop: 6,
+    marginLeft: 2,
+    color: mutedText,
+    fontFamily: "SoraBold",
+    fontSize: 11,
+    letterSpacing: 0.6,
+  },
   review: {
-    gap: 6,
-    padding: 12,
+    gap: 10,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 14,
+    backgroundColor: "#ffffff",
+  },
+  reviewTop: { flexDirection: "row", alignItems: "center", gap: 12 },
+  avatar: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 20,
+    backgroundColor: "#e0e7ff",
+  },
+  avatarText: { color: brandBlue, fontFamily: "SoraBold", fontSize: 16 },
+  reviewWho: { flex: 1, gap: 2 },
+  reviewName: { color: "#111111", fontFamily: "SoraBold", fontSize: 14 },
+  reviewTrip: { color: mutedText, fontFamily: "Sora", fontSize: 12 },
+  reviewScore: { alignItems: "flex-end", gap: 4 },
+  reviewDate: { color: mutedText, fontFamily: "Sora", fontSize: 11 },
+  reviewText: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     borderRadius: 10,
     backgroundColor: "#f5f7fb",
-  },
-  reviewTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  reviewDate: { color: mutedText, fontFamily: "Sora", fontSize: 10 },
-  reviewText: {
     color: "#111111",
     fontFamily: "Sora",
-    fontSize: 11,
-    lineHeight: 16,
-    fontStyle: "italic",
+    fontSize: 13,
+    lineHeight: 19,
   },
-  reviewMeta: { color: mutedText, fontFamily: "Sora", fontSize: 10 },
 });
