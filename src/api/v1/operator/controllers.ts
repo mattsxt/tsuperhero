@@ -245,6 +245,37 @@ export function loadNearbyPickups(): Promise<Result<NearbyPickup[]>> {
   });
 }
 
+export type VehicleRider = {
+  id: string;
+  passengers: number;
+  dropoffName: string;
+  dropoff: { lat: number; lng: number } | null;
+};
+
+type VehicleRiderRow = {
+  request_id: string;
+  passengers: number;
+  dropoff_name: string | null;
+  dropoff_lat: number | null;
+  dropoff_lng: number | null;
+};
+
+export function loadVehicleRiders(): Promise<Result<VehicleRider[]>> {
+  return attempt(async () => {
+    const rows: VehicleRiderRow[] =
+      (await unwrap(operatorRoutes.findVehicleRiders())) ?? [];
+    return rows.map((row) => ({
+      id: row.request_id,
+      passengers: row.passengers,
+      dropoffName: row.dropoff_name ?? "Drop-off point",
+      dropoff:
+        row.dropoff_lat != null && row.dropoff_lng != null
+          ? { lat: row.dropoff_lat, lng: row.dropoff_lng }
+          : null,
+    }));
+  });
+}
+
 export function acceptPickup(requestId: string): Promise<Result<number>> {
   return attempt(() => unwrap(operatorRoutes.acceptPickup(requestId)));
 }

@@ -18,9 +18,12 @@ export type WaitingArea = {
   lng: number;
   routeId: string | null;
   vicinity: string | null;
+  requestRadiusMeters?: number;
 };
 
 const onRouteMeters = 40;
+
+export const defaultRequestRadiusMeters = 100;
 
 let knownWaitingAreas: WaitingArea[] = [];
 export const getKnownWaitingAreas = () => knownWaitingAreas;
@@ -38,6 +41,7 @@ export async function loadWaitingAreas(): Promise<Result<WaitingArea[]>> {
       lng: row.area_longitude,
       routeId: row.route_id ?? null,
       vicinity: row.vicinity?.trim() || null,
+      requestRadiusMeters: row.request_radius_m ?? defaultRequestRadiusMeters,
     }));
   });
   if (result.ok) knownWaitingAreas = result.data;

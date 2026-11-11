@@ -244,6 +244,7 @@ type PickupPoint = {
   lat: number;
   lng: number;
   waitingAreaType?: WaitingAreaType;
+  waitingAreaId?: string;
 };
 
 type PickupForm = {
@@ -319,6 +320,7 @@ export async function requestPickup(
         dropoffPoint.name,
         dropoffPoint.lat,
         dropoffPoint.lng,
+        location.waitingAreaId ?? null,
       ),
     );
     await unwrap(pickupRoutes.publishPickupDraft(requestId));
@@ -471,6 +473,7 @@ export function savePickupPoint(
   routeId: string | null,
   pickup: Coordinates,
   dropoff: DropoffPoint,
+  waitingAreaId: string | null = null,
 ): Promise<Result<void>> {
   return attempt(async () => {
     await unwrap(
@@ -482,6 +485,22 @@ export function savePickupPoint(
         dropoff.name,
         dropoff.lat,
         dropoff.lng,
+        waitingAreaId,
+      ),
+    );
+  });
+}
+
+export function reportRideEmergency(
+  requestId: string,
+  location: Coordinates | null,
+): Promise<Result<void>> {
+  return attempt(async () => {
+    await unwrap(
+      pickupRoutes.reportRideEmergency(
+        requestId,
+        location?.lat ?? null,
+        location?.lng ?? null,
       ),
     );
   });
@@ -661,6 +680,9 @@ export type Booking = {
   drivers: BookingDriver[];
   riders: (Rider & { isOwner: boolean; isMe: boolean })[];
   sharedBy: string | null;
+  pickedUpAt: Date | null;
+  droppedOffAt: Date | null;
+  dropoffName: string | null;
 };
 
 export function loadBookings(): Promise<Result<Booking[]>> {
@@ -678,6 +700,9 @@ export function loadBookings(): Promise<Result<Booking[]>> {
       plateNumber: row.plate_number,
       vehicleType: row.vehicle_type,
       driverName: row.driver_name,
+      pickedUpAt: row.boarded_at ? new Date(row.boarded_at) : null,
+      droppedOffAt: row.dropped_at ? new Date(row.dropped_at) : null,
+      dropoffName: row.dropoff_name ?? null,
       rating:
         row.rating_score === null
           ? null

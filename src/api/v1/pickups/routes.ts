@@ -62,6 +62,7 @@ export const pickupRoutes = {
     dropoffName: string,
     dropoffLat: number,
     dropoffLng: number,
+    waitingAreaId: string | null = null,
   ) =>
     getSupabaseClient().rpc("set_pickup_route", {
       p_request_id: requestId,
@@ -71,6 +72,14 @@ export const pickupRoutes = {
       p_dropoff_name: dropoffName,
       p_dropoff_lat: dropoffLat,
       p_dropoff_lng: dropoffLng,
+      p_waiting_area_id: waitingAreaId,
+    }),
+
+  reportRideEmergency: (requestId: string, latitude: number | null, longitude: number | null) =>
+    getSupabaseClient().rpc("report_ride_emergency", {
+      p_request_id: requestId,
+      p_latitude: latitude,
+      p_longitude: longitude,
     }),
 
   completeMyRide: (requestId: string) =>

@@ -71,6 +71,9 @@ export type BookingRow = {
     score: number | null;
   })[];
   shared_by: string | null;
+  boarded_at?: string | null;
+  dropped_at?: string | null;
+  dropoff_name?: string | null;
 };
 
 export type RiderRow = {

@@ -67,6 +67,7 @@ export const operatorRoutes = {
   recordTrail: (points: TrailPoint[]) =>
     getSupabaseClient().rpc("record_vehicle_trail", { p_points: points }),
   findNearbyPickups: () => getSupabaseClient().rpc("get_my_nearby_pickups"),
+  findVehicleRiders: () => getSupabaseClient().rpc("get_my_vehicle_riders"),
   acceptPickup: (requestId: string) =>
     getSupabaseClient().rpc("accept_pickup_request", {
       p_request_id: requestId,

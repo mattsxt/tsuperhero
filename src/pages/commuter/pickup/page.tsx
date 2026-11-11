@@ -65,6 +65,7 @@ import {
   findWaitingAreasOnRoute,
   getKnownWaitingAreas,
   loadWaitingAreas,
+  defaultRequestRadiusMeters,
   type WaitingArea,
   type WaitingAreaRecommendation,
   type WaitingAreaType,
@@ -120,7 +121,10 @@ import { RentalInProgress } from "./rental-in-progress";
 import { RideInProgress } from "./ride-in-progress";
 import { RouteMatchPreview } from "./route-match-preview";
 import { SharedRideScreen } from "./shared-ride";
-import { WaitingAreaDirectionsMap } from "./waiting-area-directions-map";
+import {
+  WaitingAreaDirectionsMap,
+  waitingAreaArrivalMeters,
+} from "./waiting-area-directions-map";
 
 const { brandBlue, softBlue, mutedText, text, error } = moduleColors;
 
@@ -417,6 +421,7 @@ export default function PickupScreen() {
             lat: recommendedWaitingArea.lat,
             lng: recommendedWaitingArea.lng,
             waitingAreaType: recommendedWaitingArea.type,
+            waitingAreaId: recommendedWaitingArea.id,
           }
         : place,
     [useWaitingArea, recommendedWaitingArea, place],
@@ -447,6 +452,10 @@ export default function PickupScreen() {
     !routeMatches.length;
 
   const selectedLocationMode = !!place && requestLocation === place;
+  const goWaitingAreaId =
+    !selectedLocationMode && useWaitingArea && recommendedWaitingArea
+      ? recommendedWaitingArea.id
+      : null;
   const pickupTarget = useMemo(() => {
     if (!place) return null;
     if (!usesRoute) return place;
@@ -462,6 +471,11 @@ export default function PickupScreen() {
       ? { ...place, ...snap.point }
       : place;
   }, [place, usesRoute, selectedMatch, nearestRoute]);
+  const goTarget = selectedLocationMode ? pickupTarget : requestLocation;
+  const goRadius = selectedLocationMode
+    ? waitingAreaArrivalMeters
+    : (recommendedWaitingArea?.requestRadiusMeters ??
+      defaultRequestRadiusMeters);
 
   useEffect(() => {
     if (!draftRequestId || !requestLocation || !requestLocationKey) return;
@@ -591,6 +605,7 @@ export default function PickupScreen() {
       lat: number;
       lng: number;
       waitingAreaType?: WaitingAreaType;
+      waitingAreaId?: string;
     } | null,
     requestedVehicle: PickupVehicle,
     requestedPassengers: number,
@@ -747,18 +762,19 @@ export default function PickupScreen() {
       showProblem("Drop-off point", "Choose the route you’ll ride.");
       return;
     }
-    if (selectedLocationMode && pickupTarget) {
+    if (goTarget) {
       if (draftRequestId) {
         setBusy(true);
         const saved = await savePickupPoint(
           draftRequestId,
           usesRoute ? (selectedMatch?.routeId ?? null) : null,
-          pickupTarget,
+          goTarget,
           {
             name: dropoffPlace.name,
             lat: dropoffPlace.lat,
             lng: dropoffPlace.lng,
           },
+          goWaitingAreaId,
         );
         setBusy(false);
         if (!saved.ok) return showPickupProblem(saved.error);
@@ -924,10 +940,11 @@ export default function PickupScreen() {
     );
   }
 
-  if (goToPickup && pickupTarget) {
+  if (goToPickup && goTarget) {
     return (
       <GoToPickup
-        target={pickupTarget}
+        target={goTarget}
+        radiusMeters={goRadius}
         routeName={usesRoute ? (selectedMatch?.route.name ?? null) : null}
         riders={riders}
         busy={busy}
@@ -1094,7 +1111,7 @@ export default function PickupScreen() {
                   </Text>
                   <Text style={styles.locationChoiceDescription}>
                     {recommendedWaitingArea
-                      ? recommendedWaitingArea.name
+                      ? `${recommendedWaitingArea.name} · your request is sent once you’re within ${recommendedWaitingArea.requestRadiusMeters ?? defaultRequestRadiusMeters} m`
                       : waitingAreasLoaded
                         ? "No matching waiting area was found."
                         : "Finding a nearby waiting area…"}

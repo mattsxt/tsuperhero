@@ -7,4 +7,5 @@ export type WaitingAreaRow = {
   area_type?: string | null;
   vicinity?: string | null;
   is_active: boolean;
+  request_radius_m?: number | null;
 };

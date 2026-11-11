@@ -17,10 +17,7 @@ import { ModuleButton, moduleColors } from "@/components/module-ui";
 import { palette } from "@/constants/colors";
 import { getDistanceMeters, type Coordinates } from "@/utils/geo";
 
-import {
-  WaitingAreaDirectionsMap,
-  waitingAreaArrivalMeters,
-} from "./waiting-area-directions-map";
+import { WaitingAreaDirectionsMap } from "./waiting-area-directions-map";
 
 const { brandBlue, mutedText, softBlue, text } = moduleColors;
 const walkingMetersPerMinute = 5000 / 60;
@@ -29,6 +26,7 @@ const isPlusCode = (name: string) => /^[23456789CFGHJMPQRVWX]{2,8}\+/i.test(name
 
 export function GoToPickup({
   target,
+  radiusMeters,
   routeName,
   riders,
   busy,
@@ -37,6 +35,7 @@ export function GoToPickup({
   onBack,
 }: {
   target: { name: string; lat: number; lng: number };
+  radiusMeters: number;
   routeName: string | null;
   riders: Rider[];
   busy: boolean;
@@ -67,7 +66,7 @@ export function GoToPickup({
   );
 
   const distance = me ? getDistanceMeters(me, target) : null;
-  const here = distance !== null && distance <= waitingAreaArrivalMeters;
+  const here = distance !== null && distance <= radiusMeters;
   const companions = riders.filter((rider) => rider.inviteStatus === "accepted");
   const notArrived = companions
     .filter((rider) => !rider.arrived)
