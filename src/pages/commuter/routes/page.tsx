@@ -254,8 +254,16 @@ export default function RoutesScreen() {
     option.name.toLowerCase().includes(query.trim().toLowerCase()),
   );
 
+  // Remember the selected route however it was chosen (from the list here or
+  // passed in from Home's destination search), so reopening Routes restores it.
+  useEffect(() => {
+    rememberRoute(routeId);
+  }, [routeId]);
+
+  // A restored route's name may only be known once the route list loads.
+  const searchText = !query && !pickerOpen && route ? route.name : query;
+
   const selectRoute = (id: string) => {
-    rememberRoute(id);
     setRouteId(id);
     setPath(null);
     setLoadingRoute(true);
@@ -265,7 +273,6 @@ export default function RoutesScreen() {
   };
 
   const clearRoute = () => {
-    rememberRoute(null);
     setRouteId(null);
     setPath(null);
     setLoadingRoute(false);
@@ -441,7 +448,7 @@ export default function RoutesScreen() {
           <View style={styles.searchPill}>
             <Search color={mutedText} size={18} strokeWidth={2} />
             <TextInput
-              value={query}
+              value={searchText}
               onChangeText={(value) => {
                 setQuery(value);
                 setPickerOpen(true);
