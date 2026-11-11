@@ -9,7 +9,6 @@ import LocateFixed from "lucide-react-native/icons/locate-fixed";
 import MapPin from "lucide-react-native/icons/map-pin";
 import Minus from "lucide-react-native/icons/minus";
 import Plus from "lucide-react-native/icons/plus";
-import Flag from "lucide-react-native/icons/flag";
 import Users from "lucide-react-native/icons/users";
 import X from "lucide-react-native/icons/x";
 import type { LocationObject, LocationObjectCoords } from "expo-location";
@@ -855,19 +854,6 @@ function Trip({
     ],
     [pickups, accepted, riders],
   );
-  const nextDropoff = useMemo(() => {
-    if (!coords) return null;
-    const here = { lat: coords.latitude, lng: coords.longitude };
-    return (
-      riders
-        .filter((rider) => rider.dropoff)
-        .map((rider) => ({
-          rider,
-          meters: getDistanceMeters(here, rider.dropoff!),
-        }))
-        .sort((a, b) => a.meters - b.meters)[0] ?? null
-    );
-  }, [riders, coords]);
   const mapState = useMemo<TransitMapState>(
     () => ({
       routeId: route?.id ?? null,
@@ -1146,18 +1132,6 @@ function Trip({
           </Text>
         </View>
 
-        {onTrip && nextDropoff && (
-          <View style={styles.nextDropoff}>
-            <Flag color="#fcc419" size={18} strokeWidth={2.4} />
-            <Text style={styles.nextDropoffText} numberOfLines={1}>
-              Next drop-off · {nextDropoff.rider.dropoffName} ·{" "}
-              {nextDropoff.meters < 1000
-                ? `${Math.round(nextDropoff.meters / 10) * 10} m`
-                : `${(nextDropoff.meters / 1000).toFixed(1)} km`}
-              {riders.length > 1 ? ` · +${riders.length - 1} more` : ""}
-            </Text>
-          </View>
-        )}
 
         {!onTrip && cooldown && (
           <View style={styles.cooldown}>
@@ -1749,22 +1723,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   actions: { flexDirection: "row", gap: 10, marginTop: 12 },
-  nextDropoff: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginTop: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 14,
-    backgroundColor: "rgba(252, 196, 25, 0.14)",
-  },
-  nextDropoffText: {
-    flex: 1,
-    color: "#ffffff",
-    fontFamily: "SoraBold",
-    fontSize: 14,
-  },
   tripButton: {
     height: 56,
     alignItems: "center",
