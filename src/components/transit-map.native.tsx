@@ -395,6 +395,12 @@ export function TransitMap({
       view.setCamera({
         centerCoordinate: [focus.lng, focus.lat],
         zoomLevel: focus.zoom,
+        padding: {
+          paddingTop: state.padTop,
+          paddingBottom: state.padBottom,
+          paddingLeft: 0,
+          paddingRight: 0,
+        },
         animationDuration: 500,
         animationMode: "easeTo",
       });

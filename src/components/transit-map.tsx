@@ -228,7 +228,8 @@ const mapHtml = `<!DOCTYPE html>
     if (state.focus && state.focus.key !== lastFocusKey) {
       map.easeTo({
         center: [state.focus.lng, state.focus.lat],
-        zoom: state.focus.zoom || map.getZoom()
+        zoom: state.focus.zoom || map.getZoom(),
+        padding: { top: state.padTop || 0, bottom: state.padBottom || 0, left: 0, right: 0 }
       });
     }
     lastFocusKey = state.focus ? state.focus.key : null;
