@@ -11,7 +11,7 @@ import {
 } from "@/api/v1/transit-routes/controllers";
 import { moduleColors } from "@/components/module-ui";
 import { TransitMap, type TransitMapState } from "@/components/transit-map";
-import type { Coordinates } from "@/utils/geo";
+import { dropoffOnRouteMeters, type Coordinates } from "@/utils/geo";
 
 const { brandBlue, mutedText, text } = moduleColors;
 
@@ -80,11 +80,11 @@ export function RouteMatchPreview({
   const shown = selected;
   const pickupMoved = !!shown && shown.walkMeters > pickupOnRouteMeters;
   const dropoffMoved =
-    !!shown && shown.dropoff.distanceMeters > pickupOnRouteMeters;
+    !!shown && shown.dropoff.distanceMeters > dropoffOnRouteMeters;
   // Before a route is picked, warn when no route passes the drop-off pin.
   const dropoffOffEveryRoute =
     !shown &&
-    matches.every((match) => match.dropoff.distanceMeters > pickupOnRouteMeters);
+    matches.every((match) => match.dropoff.distanceMeters > dropoffOnRouteMeters);
 
   const pickupWalk = useWalkingLine(
     pickupMoved ? original : null,
@@ -165,7 +165,7 @@ export function RouteMatchPreview({
           {matches.map((match) => {
             const checked = selected?.routeId === match.routeId;
             const dropoffAway =
-              match.dropoff.distanceMeters > pickupOnRouteMeters;
+              match.dropoff.distanceMeters > dropoffOnRouteMeters;
             return (
               <Pressable
                 key={match.routeId}

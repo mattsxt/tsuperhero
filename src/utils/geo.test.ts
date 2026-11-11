@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   choosePathFor,
   nearestServedPoint,
+  pickRouteChoices,
   matchRoutes,
   nearestPointOnPath,
   pathLengthMeters,
@@ -13,6 +14,7 @@ import {
   sliceAlong,
   snapToPaths,
   type LatLngPair,
+  type RouteMatch,
 } from "./geo.ts";
 
 const P: LatLngPair[] = [
@@ -316,4 +318,24 @@ test('matchRoutes ranks by trip time: walking costs more than riding', () => {
     { routeId: 'short-walk', paths: [shortWalk] },
   ]);
   assert.deepEqual(matches.map((m) => m.routeId), ['short-walk', 'long-walk']);
+});
+
+const fakeMatch = (routeId: string, dropoffMeters: number) =>
+  ({ routeId, dropoff: { distanceMeters: dropoffMeters } }) as unknown as RouteMatch;
+
+test('pickRouteChoices offers up to 3 routes that pass the drop-off pin', () => {
+  const choices = pickRouteChoices([
+    fakeMatch('a', 0),
+    fakeMatch('far', 700),
+    fakeMatch('b', 30),
+    fakeMatch('c', 50),
+    fakeMatch('d', 10),
+  ]);
+  assert.deepEqual(choices.map((m) => m.routeId), ['a', 'b', 'c']);
+});
+
+test('pickRouteChoices offers only the best route when none passes the drop-off', () => {
+  const choices = pickRouteChoices([fakeMatch('best', 400), fakeMatch('next', 300)]);
+  assert.deepEqual(choices.map((m) => m.routeId), ['best']);
+  assert.deepEqual(pickRouteChoices([]), []);
 });

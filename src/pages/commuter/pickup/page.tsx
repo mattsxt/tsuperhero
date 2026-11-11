@@ -100,7 +100,12 @@ import {
   getNotifications,
   markNotificationsRead,
 } from "@/api/v1/notifications/controllers";
-import { getDistanceMeters, snapToPaths, type Coordinates } from "@/utils/geo";
+import {
+  getDistanceMeters,
+  pickRouteChoices,
+  snapToPaths,
+  type Coordinates,
+} from "@/utils/geo";
 import { goBackOr } from "@/utils/navigation";
 
 import { ErrorAlert, ErrorMark, ErrorOutline } from "@/components/error-alert";
@@ -124,9 +129,6 @@ function formatDistance(meters: number) {
     ? `${Math.round(meters / 10) * 10} m`
     : `${(meters / 1000).toFixed(1)} km`;
 }
-
-/** How many matching routes the commuter can choose from. */
-const maxRouteChoices = 3;
 
 export const noRouteMessage = "No registered route connects these points";
 
@@ -430,15 +432,12 @@ export default function PickupScreen() {
   // Jeepneys run fixed routes, so A and B must sit on one; tricycles pick up
   // and drop off anywhere.
   const usesRoute = vehicle === "jeep";
-  // The best routes (least walking, closest drop-off) that pass pickup A, with
-  // A and B snapped onto them. Only the top few are offered as choices.
+  // Routes that pass pickup A, best first, with A and B snapped onto them: up
+  // to 3 that pass the drop-off pin, otherwise just the best one.
   const routeMatches = useMemo<PickupRouteMatch[]>(
     () =>
       usesRoute && requestLocation && dropoffPlace
-        ? matchPickupRoutes(requestLocation, dropoffPlace).slice(
-            0,
-            maxRouteChoices,
-          )
+        ? pickRouteChoices(matchPickupRoutes(requestLocation, dropoffPlace))
         : [],
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [usesRoute, requestLocationKey, dropoffPlace, routes],

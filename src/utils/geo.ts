@@ -380,3 +380,19 @@ export function snapToPaths(
       .sort((a, b) => a.distanceMeters - b.distanceMeters)[0] ?? null
   );
 }
+
+/** A drop-off pin within this distance of a route counts as on that route. */
+export const dropoffOnRouteMeters = 50;
+
+// Route choices for the commuter, from matches ranked best first: up to `max`
+// routes that pass the drop-off pin, or just the best route when none does
+// (its drop-off point is then moved onto it).
+export function pickRouteChoices<T extends Pick<RouteMatch, "dropoff">>(
+  matches: T[],
+  max = 3,
+): T[] {
+  const passing = matches.filter(
+    (match) => match.dropoff.distanceMeters <= dropoffOnRouteMeters,
+  );
+  return passing.length ? passing.slice(0, max) : matches.slice(0, 1);
+}
