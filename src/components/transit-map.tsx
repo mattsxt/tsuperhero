@@ -220,13 +220,13 @@ const mapHtml = `<!DOCTYPE html>
       pickupMarkers = [];
       (state.pickups || []).forEach(function (pickup) {
         var content = document.createElement("div");
-        var counted = typeof pickup.passengers === "number";
+        var counted = !!pickup.badge || typeof pickup.passengers === "number";
         content.className = "pickup" + (counted ? " counted" : "");
         content.innerHTML = counted ? COUNTED_PIN_SVG : MAP_PIN_SVG;
         if (counted) {
           var count = document.createElement("span");
           count.className = "pickup-count";
-          count.textContent = String(pickup.passengers);
+          count.textContent = pickup.badge || String(pickup.passengers);
           content.appendChild(count);
         }
         if (pickup.label) {

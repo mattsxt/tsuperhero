@@ -262,9 +262,10 @@ export function TransitMap({
         id: pickup.id,
         properties: {
           count:
-            typeof pickup.passengers === "number"
+            pickup.badge ??
+            (typeof pickup.passengers === "number"
               ? String(pickup.passengers)
-              : "",
+              : ""),
           label: pickup.label?.trim() ?? "",
         },
         geometry: {

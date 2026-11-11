@@ -44,6 +44,8 @@ export type TransitMapState = {
     lat: number;
     lng: number;
     passengers?: number;
+    /** Short text drawn inside the pin (e.g. "A"), shown instead of passengers. */
+    badge?: string;
     label?: string;
   }[];
   pickupLine?: [number, number][] | null;

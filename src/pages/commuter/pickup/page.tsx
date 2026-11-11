@@ -20,6 +20,7 @@ import {
   getKnownActivePickup,
   loadActivePickup,
   getKnownSharedRide,
+  isRouteSnapError,
   leaveSharedRide,
   loadMyPickupDraft,
   loadMySharedRide,
@@ -50,6 +51,8 @@ import {
   findNearestRoute,
   getTransitRoutes,
   loadTransitRoutes,
+  matchPickupRoutes,
+  type PickupRouteMatch,
   type TransitRoute,
 } from "@/api/v1/transit-routes/controllers";
 import {
@@ -98,10 +101,12 @@ import { goBackOr } from "@/utils/navigation";
 import { ErrorAlert, ErrorMark, ErrorOutline } from "@/components/error-alert";
 import { ActivePickup } from "./active-pickup";
 import { BoardedScreen } from "./boarded-screen";
+import { DropoffStep } from "./dropoff-step";
 import { PinLocationPicker } from "./pin-location-picker";
 import { ShareRideField } from "./share-ride-field";
 import { LocationPrimer } from "./location-primer";
 import { RentalInProgress } from "./rental-in-progress";
+import { RouteMatchPreview } from "./route-match-preview";
 import { SharedRideScreen } from "./shared-ride";
 import { WaitingAreaDirectionsMap } from "./waiting-area-directions-map";
 
@@ -113,7 +118,11 @@ function formatDistance(meters: number) {
     : `${(meters / 1000).toFixed(1)} km`;
 }
 
+export const noRouteMessage = "No registered route connects these points";
+
 function pickupProblemSource(message: string) {
+  if (/drop-off|route connects|on the route|route you/i.test(message))
+    return "Drop-off point";
   if (/waiting area|route/i.test(message)) return "Waiting area";
   if (/location|pin/i.test(message)) return "Pickup location";
   if (/passenger/i.test(message)) return "Passenger count";
@@ -136,6 +145,8 @@ export default function PickupScreen() {
     useState<WaitingArea[]>(getKnownWaitingAreas);
   const [waitingAreasLoaded, setWaitingAreasLoaded] = useState(false);
   const [place, setPlace] = useState<Place | null>(null);
+  const [dropoffPlace, setDropoffPlace] = useState<Place | null>(null);
+  const [chosenRouteId, setChosenRouteId] = useState<string | null>(null);
   const [priorityWaitingAreaId, setPriorityWaitingAreaId] = useState<
     string | null
   >(null);
@@ -378,6 +389,23 @@ export default function PickupScreen() {
     ? `${requestLocation.lat}:${requestLocation.lng}:${requestLocation.name}`
     : null;
 
+  // Routes that pass both pickup A and drop-off B; A and B snapped onto them.
+  const routeMatches = useMemo<PickupRouteMatch[]>(
+    () =>
+      requestLocation && dropoffPlace
+        ? matchPickupRoutes(requestLocation, dropoffPlace)
+        : [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [requestLocationKey, dropoffPlace, routes],
+  );
+  const selectedMatch =
+    routeMatches.length === 1
+      ? routeMatches[0]
+      : (routeMatches.find((match) => match.routeId === chosenRouteId) ??
+        null);
+  const noRouteMatch =
+    !!requestLocation && !!dropoffPlace && routesLoaded && !routeMatches.length;
+
   useEffect(() => {
     if (!draftRequestId || !requestLocation || !requestLocationKey) return;
     if (requestLocationKey === savedLocationKey.current) return;
@@ -472,6 +500,8 @@ export default function PickupScreen() {
     requestedPassengers: number,
     requestedRiders: Rider[],
     requestDraftId: string | null,
+    requestedDropoff: Place | null,
+    requestedMatch: PickupRouteMatch | null,
   ) => {
     if (busy) return;
     setBusy(true);
@@ -489,9 +519,23 @@ export default function PickupScreen() {
       location,
       riders: requestedRiders,
       draftRequestId: requestDraftId,
+      dropoff: requestedDropoff
+        ? {
+            name: requestedDropoff.name,
+            lat: requestedDropoff.lat,
+            lng: requestedDropoff.lng,
+          }
+        : null,
+      match: requestedMatch,
     });
     setBusy(false);
-    if (!result.ok) return showPickupProblem(result.error);
+    if (!result.ok) {
+      // The route changed under us: make the commuter pick the route again.
+      if (isRouteSnapError(result.error)) setChosenRouteId(null);
+      return showPickupProblem(result.error);
+    }
+    setDropoffPlace(null);
+    setChosenRouteId(null);
     ridersRef.current = [];
     setRiders([]);
     setDraftRequestId(null);
@@ -567,12 +611,30 @@ export default function PickupScreen() {
       );
       return;
     }
+    if (!dropoffPlace) {
+      showProblem("Drop-off point", "Select where you want to be dropped off.");
+      return;
+    }
+    if (!routesLoaded) {
+      showProblem("Drop-off point", "Routes are still loading. Try again in a moment.");
+      return;
+    }
+    if (!routeMatches.length) {
+      showProblem("Drop-off point", noRouteMessage);
+      return;
+    }
+    if (!selectedMatch) {
+      showProblem("Drop-off point", "Choose the route you’ll ride.");
+      return;
+    }
     await sendPickupRequest(
       requestLocation,
       vehicle,
       passengers,
       riders,
       draftRequestId,
+      dropoffPlace,
+      selectedMatch,
     );
   };
 
@@ -590,6 +652,8 @@ export default function PickupScreen() {
   const resetForm = () => {
     clearProblem();
     setPlace(null);
+    setDropoffPlace(null);
+    setChosenRouteId(null);
     setPriorityWaitingAreaId(null);
     setVehicle("jeep");
     setUseWaitingArea(true);
@@ -914,6 +978,33 @@ export default function PickupScreen() {
             />
           )}
 
+          <DropoffStep
+            key={`dropoff-${formKey}`}
+            value={dropoffPlace}
+            routes={routes}
+            invalid={problemSource === "Drop-off point"}
+            onProblem={(message) => showProblem("Drop-off point", message)}
+            onChange={(next) => {
+              clearProblem();
+              setChosenRouteId(null);
+              setDropoffPlace(next);
+            }}
+          />
+          {noRouteMatch && (
+            <Text style={styles.routeProblem}>{noRouteMessage}</Text>
+          )}
+          {requestLocation && routeMatches.length > 0 && (
+            <RouteMatchPreview
+              original={requestLocation}
+              matches={routeMatches}
+              selected={selectedMatch}
+              onSelect={(routeId) => {
+                clearProblem();
+                setChosenRouteId(routeId);
+              }}
+            />
+          )}
+
           <SectionTitle
             icon={<UsersRound color="#ffffff" size={18} strokeWidth={2} />}
             title="Choose which vehicle to ride!"
@@ -1012,7 +1103,11 @@ export default function PickupScreen() {
                 : undefined
             }
             disabled={
-              busy || companionOperations > 0 || !online || hasPendingCompanions
+              busy ||
+              companionOperations > 0 ||
+              !online ||
+              hasPendingCompanions ||
+              noRouteMatch
             }
             onPress={confirm}
           />
@@ -1113,6 +1208,13 @@ const styles = StyleSheet.create({
     lineHeight: 13,
   },
   invalidOutline: { borderWidth: 1.5, borderColor: error },
+  routeProblem: {
+    marginTop: 8,
+    marginHorizontal: 4,
+    color: error,
+    fontFamily: "SoraBold",
+    fontSize: 11,
+  },
   passengerLabelRow: {
     flexDirection: "row",
     alignItems: "center",

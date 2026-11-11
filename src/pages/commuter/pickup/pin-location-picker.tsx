@@ -43,7 +43,11 @@ export function PinLocationPicker({
   routes,
   onPick,
   onClose,
+  title = "Pin your pickup location",
+  subtitle = "Drag the map to place the pin where you want to be picked up.",
 }: {
+  title?: string;
+  subtitle?: string;
   initial: MapCenter | null;
   waitingAreas: WaitingArea[];
   routes: TransitRoute[];
@@ -309,10 +313,8 @@ export function PinLocationPicker({
             <ArrowLeft color="#ffffff" size={22} strokeWidth={2.5} />
           </Pressable>
           <View style={styles.flex}>
-            <Text style={styles.title}>Pin your pickup location</Text>
-            <Text style={styles.subtitle}>
-              Drag the map to place the pin where you want to be picked up.
-            </Text>
+            <Text style={styles.title}>{title}</Text>
+            <Text style={styles.subtitle}>{subtitle}</Text>
           </View>
         </View>
 
