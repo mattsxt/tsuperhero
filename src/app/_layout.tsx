@@ -48,8 +48,14 @@ export default function RootLayout() {
                 name="offline/index"
                 options={{ gestureEnabled: false }}
               />
-              <Stack.Screen name="auth/login/index" />
-              <Stack.Screen name="auth/register/index" />
+              <Stack.Screen
+                name="auth/login/index"
+                options={{ animation: "fade" }}
+              />
+              <Stack.Screen
+                name="auth/register/index"
+                options={{ animation: "fade" }}
+              />
               <Stack.Screen
                 name="auth/setup/index"
                 options={{ gestureEnabled: false }}
