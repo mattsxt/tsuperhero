@@ -132,6 +132,8 @@ const { brandBlue } = moduleColors;
 const chipBlue = "#a8dcf7";
 const declineRed = palette.danger;
 const maxPickupCards = 3;
+const stackPeek = 10;
+const stackInset = 12;
 
 const toastMs = 4_000;
 const stationaryMs = 5_000;
@@ -812,6 +814,23 @@ function Trip({
   };
 
   const coords = fix?.coords ?? null;
+  const sortedPickups = useMemo(
+    () =>
+      pickups
+        .map((pickup) => ({
+          pickup,
+          meters: coords
+            ? getDistanceMeters(
+                { lat: coords.latitude, lng: coords.longitude },
+                pickup,
+              )
+            : pickup.distanceMeters,
+        }))
+        .sort((a, b) => a.meters - b.meters),
+    [pickups, coords],
+  );
+  const frontPickup = sortedPickups[0] ?? null;
+  const behindCount = Math.min(sortedPickups.length, maxPickupCards) - 1;
   const mapPickups = useMemo(
     () => [
       ...[...pickups, ...accepted].map(({ id, lat, lng, passengers }) => ({
@@ -978,30 +997,46 @@ function Trip({
             )}
           </Animated.View>
         )}
-        {pickups.slice(0, maxPickupCards).map((pickup) => (
+        {frontPickup && (
           <Animated.View
-            key={pickup.id}
+            layout={overlayLayout}
             entering={overlayEnter}
             exiting={overlayExit}
-            layout={overlayLayout}
+            style={{ paddingTop: stackPeek * behindCount }}
           >
-            <PickupCard
-              pickup={pickup}
-              distanceMeters={
-                coords
-                  ? getDistanceMeters(
-                      { lat: coords.latitude, lng: coords.longitude },
-                      pickup,
-                    )
-                  : pickup.distanceMeters
-              }
-              fits={pickup.passengers <= seatsLeft}
-              busy={acceptingId === pickup.id}
-              onAccept={() => acceptRequest(pickup)}
-              onDecline={() => declineRequest(pickup)}
-            />
+            {Array.from({ length: behindCount }, (_, index) => (
+              <View
+                key={index}
+                pointerEvents="none"
+                style={[
+                  styles.stackGhost,
+                  {
+                    top: stackPeek * (behindCount - 1 - index),
+                    left: stackInset * (index + 1),
+                    right: stackInset * (index + 1),
+                    opacity: index === 0 ? 0.85 : 0.6,
+                    elevation: 4 - index,
+                  },
+                ]}
+              />
+            ))}
+            <Animated.View
+              key={frontPickup.pickup.id}
+              entering={overlayEnter}
+              exiting={overlayExit}
+            >
+              <PickupCard
+                pickup={frontPickup.pickup}
+                distanceMeters={frontPickup.meters}
+                queued={sortedPickups.length - 1}
+                fits={frontPickup.pickup.passengers <= seatsLeft}
+                busy={acceptingId === frontPickup.pickup.id}
+                onAccept={() => acceptRequest(frontPickup.pickup)}
+                onDecline={() => declineRequest(frontPickup.pickup)}
+              />
+            </Animated.View>
           </Animated.View>
-        ))}
+        )}
       </View>
 
       <Pressable
@@ -1191,6 +1226,7 @@ function Trip({
 function PickupCard({
   pickup,
   distanceMeters,
+  queued,
   fits,
   busy,
   onAccept,
@@ -1198,12 +1234,13 @@ function PickupCard({
 }: {
   pickup: NearbyPickup;
   distanceMeters: number;
+  queued: number;
   fits: boolean;
   busy: boolean;
   onAccept: () => void;
   onDecline: () => void;
 }) {
-  const people = `${pickup.passengers} ${pickup.passengers === 1 ? "person" : "people"}`;
+  const title = `${pickup.passengers} waiting nearby`;
   const distance =
     distanceMeters < 1000
       ? `${Math.max(10, Math.round(distanceMeters / 10) * 10)} m away`
@@ -1211,7 +1248,7 @@ function PickupCard({
   return (
     <View
       style={styles.pickupCard}
-      accessibilityLabel={`Passenger waiting, ${people}, ${distance}`}
+      accessibilityLabel={`${title}, ${distance}${queued ? `, ${queued} more requests` : ""}`}
     >
       <View style={styles.pickupInfo}>
         <View style={styles.pickupIcon}>
@@ -1219,11 +1256,21 @@ function PickupCard({
           <Text style={styles.pickupCount}>{pickup.passengers}</Text>
         </View>
         <View style={styles.pickupText}>
-          <Text style={styles.pickupTitle}>Passenger waiting</Text>
-          <Text style={[styles.pickupMeta, !fits && styles.pickupWarn]}>
-            {fits ? `${people} · ${distance}` : `${people} · not enough seats`}
+          <Text style={styles.pickupTitle} numberOfLines={1}>
+            {title}
           </Text>
+          <Text style={styles.pickupMeta}>{distance}</Text>
+          {!fits && (
+            <Text style={[styles.pickupMeta, styles.pickupWarn]}>
+              Not enough seats
+            </Text>
+          )}
         </View>
+        {queued > 0 && (
+          <View style={styles.queueBadge}>
+            <Text style={styles.queueText}>+{queued} more</Text>
+          </View>
+        )}
       </View>
       <View style={styles.pickupActions}>
         <Pressable
@@ -1507,6 +1554,24 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
   },
   pickupInfo: { flexDirection: "row", alignItems: "center", gap: 12 },
+  stackGhost: {
+    position: "absolute",
+    bottom: 0,
+    borderRadius: 18,
+    backgroundColor: "#ffffff",
+    shadowColor: "#000000",
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+  },
+  queueBadge: {
+    alignSelf: "flex-start",
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    backgroundColor: "#fef3c7",
+  },
+  queueText: { color: "#92400e", fontFamily: "SoraBold", fontSize: 12 },
   pickupIcon: {
     width: 52,
     height: 52,
