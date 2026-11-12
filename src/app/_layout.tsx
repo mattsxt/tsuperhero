@@ -16,6 +16,12 @@ import { RideUpdateModal } from "@/components/ride-update-modal";
 import { ShareInviteModal } from "@/components/share-invite-modal";
 import { UnfinishedTripPrompt } from "@/components/unfinished-trip-prompt";
 import { AppFonts } from "@/constants/fonts";
+import { isSimulation } from "@/simulation/flag";
+
+const simulationUi = isSimulation()
+  ? // eslint-disable-next-line @typescript-eslint/no-require-imports
+    (require("@/simulation/ui/overlay") as typeof import("@/simulation/ui/overlay"))
+  : null;
 
 SplashScreen.preventAutoHideAsync();
 
@@ -93,6 +99,7 @@ export default function RootLayout() {
             <RideUpdateModal />
             <BoardedModal />
             <UnfinishedTripPrompt />
+            {simulationUi && <simulationUi.SimulationOverlay />}
           </ThemeProvider>
         </HeroUINativeProvider>
       </KeyboardProvider>

@@ -135,7 +135,6 @@ const mapHtml = `<!DOCTYPE html>
   var lastFitKey = null;
   var lastFit = null;
 
-  // Frames the fit points (re-center goes back to this view).
   function fitTo(fit, animate) {
     if (fit.points.length === 1) {
       if (animate) map.easeTo({ center: lngLat(fit.points[0]), zoom: 16 });
@@ -151,7 +150,6 @@ const mapHtml = `<!DOCTYPE html>
     });
   }
 
-  // Zoom / re-center buttons drawn by the app over the map.
   function mapCommand(command) {
     if (!map) return;
     if (command.type === "zoom") map.easeTo({ zoom: map.getZoom() + command.delta, duration: 250 });

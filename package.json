@@ -50,11 +50,15 @@
   },
   "scripts": {
     "start": "expo start",
-    "android": "expo run:android",
+    "android": "node scripts/variant.mjs real android",
     "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "test": "node --experimental-strip-types --test src/**/*.test.ts"
+    "test": "node --experimental-strip-types --import ./scripts/test-loader.mjs --test \"src/**/*.test.ts\" \"scripts/*.test.ts\"",
+    "start:simulation": "node scripts/variant.mjs simulation start",
+    "android:simulation": "node scripts/variant.mjs simulation android",
+    "apk:simulation": "node scripts/variant.mjs simulation apk",
+    "apk": "node scripts/variant.mjs real apk"
   },
   "private": true
 }

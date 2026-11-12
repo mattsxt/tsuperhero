@@ -12,6 +12,16 @@
       },
       "autoIncrement": true
     },
+    "simulation": {
+      "distribution": "internal",
+      "environment": "preview",
+      "env": {
+        "APP_VARIANT": "simulation"
+      },
+      "android": {
+        "buildType": "apk"
+      }
+    },
     "production": {
       "environment": "production",
       "autoIncrement": true

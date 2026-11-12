@@ -15,6 +15,7 @@ import {
 import { ErrorAlert } from "@/components/error-alert";
 import { ModuleButton, moduleColors } from "@/components/module-ui";
 import { palette } from "@/constants/colors";
+import { useSimulatedWalk } from "@/simulation/use-simulated-walk";
 import { getDistanceMeters, type Coordinates } from "@/utils/geo";
 
 import { WaitingAreaDirectionsMap } from "./waiting-area-directions-map";
@@ -47,6 +48,7 @@ export function GoToPickup({
   const [me, setMe] = useState<Coordinates | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [cardHeight, setCardHeight] = useState(260);
+  useSimulatedWalk(target);
 
   const area = useMemo<WaitingArea>(
     () => ({

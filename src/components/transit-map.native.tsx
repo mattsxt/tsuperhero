@@ -19,6 +19,7 @@ import {
 import { mapStyleUrl, mapboxToken } from "@/constants/mapbox";
 import { waitingAreaPinColors } from "@/constants/waiting-area";
 import { vehicleIconUris } from "@/constants/vehicle-icon-uris";
+import { isSimulation } from "@/simulation/flag";
 
 export type {
   MapCenter,
@@ -34,7 +35,7 @@ const brandBlue = "#193caf";
 const routeBlue = "#1034A6";
 const pinRed = "#c81e1e";
 const defaultCenter: Position = [123.1948, 13.6218];
-const glideMs = 900;
+const glideMs = isSimulation() ? 1_000 : 900;
 const glideFrameMs = 66;
 
 const vehicleBox = { width: 36, height: 31, pin: 31 };
@@ -101,7 +102,11 @@ function useGlide(lat: number, lng: number) {
         return;
       }
       lastDrawn = time;
-      const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+      const eased = isSimulation()
+        ? t
+        : t < 0.5
+          ? 2 * t * t
+          : 1 - Math.pow(-2 * t + 2, 2) / 2;
       const next = {
         lat: from.lat + (lat - from.lat) * eased,
         lng: from.lng + (lng - from.lng) * eased,

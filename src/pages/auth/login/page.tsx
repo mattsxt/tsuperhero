@@ -24,10 +24,17 @@ import { LoadingLogo } from "@/components/LoadingLogo";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { Routes } from "@/constants/routes";
 import { palette } from "@/constants/colors";
+import { isSimulation } from "@/simulation/flag";
 
 const brandBlue = palette.brand;
 const errorRed = palette.danger;
 const welcomeMs = 1200;
+
+const RoleButtons = isSimulation()
+  ? // eslint-disable-next-line @typescript-eslint/no-require-imports
+    (require("@/simulation/ui/role-buttons") as typeof import("@/simulation/ui/role-buttons"))
+      .RoleButtons
+  : null;
 
 export default function LoginScreen() {
   const [emailLoginVisible, setEmailLoginVisible] = useState(false);
@@ -92,6 +99,8 @@ export default function LoginScreen() {
       error={loginError ? { title: "Sign in", message: loginError } : undefined}
     >
       <BrandHeader variant="badge" compact={keyboardVisible} />
+
+      {RoleButtons && !keyboardVisible && <RoleButtons />}
 
       <Reanimated.Text
         style={[

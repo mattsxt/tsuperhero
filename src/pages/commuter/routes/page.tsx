@@ -48,12 +48,13 @@ import { usePolling } from "@/hooks/use-polling";
 import { useTransitRoutes } from "@/hooks/use-transit-routes";
 import { isNearPath } from "@/utils/geo";
 import { goBackOr } from "@/utils/navigation";
+import { isSimulation } from "@/simulation/flag";
 import { LoadingLogo } from "@/components/LoadingLogo";
 
 const { brandBlue, headerBlue, mutedText, softBlue, text } = moduleColors;
 const cardNavy = "#0f2a5c";
 const lightBlue = "#a8dcf7";
-const livePollMs = 3_000;
+const livePollMs = isSimulation() ? 1_000 : 3_000;
 const onRouteMeters = 60;
 const panelPadding = 20;
 const vehicleCardGap = 10;

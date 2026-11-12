@@ -48,12 +48,14 @@ import { formatDistance } from "@/api/v1/waiting-areas/controllers";
 import { LocationSettingsButton } from "@/components/location-settings-button";
 import { useNow } from "@/hooks/use-now";
 import { palette } from "@/constants/colors";
+import { useSimulatedWalk } from "@/simulation/use-simulated-walk";
+import { isSimulation } from "@/simulation/flag";
 
 const panelNavy = palette.navy;
 const routeCyan = palette.cyan;
 const cancelRed = palette.danger;
 
-const driverPollMs = 3_000;
+const driverPollMs = isSimulation() ? 1_000 : 3_000;
 const rerouteMeters = 40;
 const rerouteMs = 30_000;
 const arrivingMeters = 30;
@@ -114,6 +116,7 @@ export function ActivePickup({
     () => ({ lat: request.lat, lng: request.lng }),
     [request.lat, request.lng],
   );
+  useSimulatedWalk(pickupPoint);
   const driverLocation = matched ? (driver?.location ?? null) : null;
   const handleLocation = useCallback(
     (location: Coordinates | null) => {

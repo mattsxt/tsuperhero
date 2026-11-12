@@ -10,6 +10,7 @@ import {
 import { sendLocation } from "@/api/v1/operator/outbox";
 import { addTripPoint } from "@/api/v1/operator/trip-distance";
 import { palette } from "@/constants/colors";
+import { isSimulation } from "@/simulation/flag";
 
 type TaskManagerModule = typeof import("expo-task-manager");
 
@@ -98,6 +99,7 @@ function stopNoticeTimer() {
 }
 
 export async function startLocationSharing(): Promise<SharingStart> {
+  if (isSimulation()) return { mode: "foreground", backgroundDenied: false };
   const current = ++generation;
   stopNoticeTimer();
   const background = await startBackgroundUpdates();
@@ -119,6 +121,7 @@ export async function startLocationSharing(): Promise<SharingStart> {
 }
 
 export async function stopLocationSharing() {
+  if (isSimulation()) return;
   generation += 1;
   stopNoticeTimer();
   await hideLocationSharingNotice();

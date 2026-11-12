@@ -15,6 +15,7 @@ export function ConfirmModal({
   confirmLabel,
   cancelLabel = "Keep",
   destructive = false,
+  hideCancel = false,
   icon,
   onConfirm,
   onCancel,
@@ -25,6 +26,7 @@ export function ConfirmModal({
   confirmLabel: string;
   cancelLabel?: string;
   destructive?: boolean;
+  hideCancel?: boolean;
   icon?: ReactNode;
   onConfirm: () => void;
   onCancel: () => void;
@@ -63,17 +65,21 @@ export function ConfirmModal({
                 {confirmLabel.toUpperCase()}
               </Text>
             </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              onPress={onCancel}
-              style={({ pressed }) => [
-                styles.button,
-                styles.cancel,
-                pressed && styles.pressed,
-              ]}
-            >
-              <Text style={styles.cancelText}>{cancelLabel.toUpperCase()}</Text>
-            </Pressable>
+            {!hideCancel && (
+              <Pressable
+                accessibilityRole="button"
+                onPress={onCancel}
+                style={({ pressed }) => [
+                  styles.button,
+                  styles.cancel,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text style={styles.cancelText}>
+                  {cancelLabel.toUpperCase()}
+                </Text>
+              </Pressable>
+            )}
           </View>
         </View>
       </View>

@@ -1,6 +1,8 @@
 import * as Network from "expo-network";
 import { useSyncExternalStore } from "react";
 
+import { isSimulation } from "@/simulation/flag";
+
 type NetworkState = Awaited<ReturnType<typeof Network.getNetworkStateAsync>>;
 
 let online = true;
@@ -19,13 +21,14 @@ function update(next: boolean) {
 function start() {
   if (started) return;
   started = true;
+  if (isSimulation()) return;
   Network.getNetworkStateAsync()
     .then((state) => update(isOnlineState(state)))
     .catch(() => {});
   Network.addNetworkStateListener((state) => update(isOnlineState(state)));
 }
 
-export const isOnline = () => online;
+export const isOnline = () => (isSimulation() ? true : online);
 
 export function subscribeToOnline(listener: () => void) {
   start();
@@ -40,6 +43,7 @@ export function useOnline() {
 }
 
 export async function checkOnline() {
+  if (isSimulation()) return true;
   start();
   const state = await Network.getNetworkStateAsync().catch(() => null);
   if (state) update(isOnlineState(state));

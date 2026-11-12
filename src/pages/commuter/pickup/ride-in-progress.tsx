@@ -25,6 +25,7 @@ import {
 } from "@/api/v1/transit-routes/controllers";
 import { ConfirmModal } from "@/components/confirm-modal";
 import { ErrorAlert } from "@/components/error-alert";
+import { isSimulation } from "@/simulation/flag";
 import { moduleColors } from "@/components/module-ui";
 import { TransitMap, type TransitMapState } from "@/components/transit-map";
 import { useNow } from "@/hooks/use-now";
@@ -83,6 +84,7 @@ export function RideInProgress({
   const [me, setMe] = useState<Coordinates | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [sosOpen, setSosOpen] = useState(false);
+  const [sosNoticeOpen, setSosNoticeOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState("");
   const [cardHeight, setCardHeight] = useState(260);
@@ -418,9 +420,20 @@ export function RideInProgress({
         onCancel={() => setSosOpen(false)}
         onConfirm={() => {
           setSosOpen(false);
-          void Linking.openURL("tel:911");
+          if (isSimulation()) setTimeout(() => setSosNoticeOpen(true), 0);
+          else void Linking.openURL("tel:911");
           void reportRideEmergency(request.id, position);
         }}
+      />
+      <ConfirmModal
+        visible={sosNoticeOpen}
+        title="Simulation"
+        message="Simulation: 911 would be called here. TsuperHero admins were still alerted."
+        confirmLabel="OK"
+        cancelLabel="OK"
+        hideCancel
+        onCancel={() => setSosNoticeOpen(false)}
+        onConfirm={() => setSosNoticeOpen(false)}
       />
       <ConfirmModal
         visible={confirmOpen}

@@ -128,7 +128,7 @@ export function nearestPointOnPath(
   return best!;
 }
 
-function pointAtAlong(path: LatLngPair[], along: number): LatLngPair {
+export function pointAtAlong(path: LatLngPair[], along: number): LatLngPair {
   let segmentStartAlong = 0;
   for (let index = 0; index < path.length - 1; index++) {
     const segmentLength = getPairDistanceMeters(path[index], path[index + 1]);

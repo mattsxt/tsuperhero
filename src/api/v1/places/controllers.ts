@@ -5,6 +5,11 @@ import { readCache, writeCache } from "@/api/v1/cache";
 import { getErrorMessage } from "@/api/v1/client";
 import { placesApi } from "@/api/v1/places/routes";
 import { attempt, failure, success, type Result } from "@/api/v1/result";
+import { isSimulation } from "@/simulation/flag";
+
+const simulatedGps = () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require("@/simulation/gps") as typeof import("@/simulation/gps");
 
 export type Place = {
   id: string;
@@ -140,6 +145,10 @@ export function openAppSettings() {
 
 export async function getCurrentPlace(): Promise<Result<Place>> {
   try {
+    if (isSimulation()) {
+      const { lat, lng } = simulatedGps().currentSimulatedPoint();
+      return success(await describePoint(lat, lng, "Current location"));
+    }
     const permission = await Location.requestForegroundPermissionsAsync();
     if (!permission.granted) {
       return failure(
@@ -194,6 +203,7 @@ export async function getLastKnownPoint(): Promise<{
   lat: number;
   lng: number;
 } | null> {
+  if (isSimulation()) return simulatedGps().currentSimulatedPoint();
   const permission = await Location.getForegroundPermissionsAsync().catch(
     () => null,
   );
@@ -219,6 +229,12 @@ function rememberPosition(lat: number, lng: number) {
 export async function watchLocation(
   onFix: (location: Location.LocationObject) => void,
 ): Promise<Result<Location.LocationSubscription>> {
+  if (isSimulation()) {
+    const subscription = simulatedGps().watchSimulatedLocation((location) =>
+      onFix(location as Location.LocationObject),
+    );
+    return success(subscription as Location.LocationSubscription);
+  }
   const permission = await Location.requestForegroundPermissionsAsync().catch(
     () => null,
   );

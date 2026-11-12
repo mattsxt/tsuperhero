@@ -5,11 +5,20 @@ import { AppState, Platform } from "react-native";
 
 import { toUserMessage } from "@/api/v1/errors";
 import { isOnline, subscribeToOnline } from "@/hooks/use-online";
+import { isSimulation } from "@/simulation/flag";
 
 let client: SupabaseClient | undefined;
 
 export function getSupabaseClient() {
   if (client) {
+    return client;
+  }
+
+  if (isSimulation()) {
+    const { createMockClient } =
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      require("@/simulation/client") as typeof import("@/simulation/client");
+    client = createMockClient();
     return client;
   }
 
