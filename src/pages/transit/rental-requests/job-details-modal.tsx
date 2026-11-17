@@ -7,7 +7,6 @@ import Phone from "lucide-react-native/icons/phone";
 import Repeat from "lucide-react-native/icons/repeat";
 import Sparkles from "lucide-react-native/icons/sparkles";
 import Users from "lucide-react-native/icons/users";
-import X from "lucide-react-native/icons/x";
 import { useState, type ReactNode } from "react";
 import {
   Linking,
@@ -22,6 +21,7 @@ import {
 import { formatRentalTime, type Rental } from "@/api/v1/rentals/controllers";
 import { palette } from "@/constants/colors";
 import { useNow } from "@/hooks/use-now";
+import { initialsOf } from "@/utils/initials";
 
 function statusOf(job: Rental) {
   if (job.status === "completed")
@@ -97,18 +97,9 @@ export function JobDetailsModal({
                 {job.destination}
               </Text>
             </View>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Close"
-              hitSlop={10}
-              onPress={onClose}
-              style={styles.close}
-            >
-              <X color="#ffffff" size={18} strokeWidth={2.5} />
-            </Pressable>
           </View>
 
-          <ScrollView contentContainerStyle={styles.body}>
+          <ScrollView style={styles.scroll} contentContainerStyle={styles.body}>
             <Detail
               icon={<MapPin color={palette.brand} size={15} strokeWidth={2} />}
             >
@@ -187,7 +178,7 @@ export function JobDetailsModal({
             <View style={styles.commuter}>
               <View style={styles.avatar}>
                 <Text style={styles.avatarText}>
-                  {(job.commuterName ?? "C").charAt(0).toUpperCase()}
+                  {initialsOf(job.commuterName, "C")}
                 </Text>
               </View>
               <Text style={styles.commuterName} numberOfLines={1}>
@@ -253,7 +244,9 @@ export function JobDetailsModal({
                 </Pressable>
               </View>
             )}
+          </ScrollView>
 
+          <View style={styles.footer}>
             <Pressable
               accessibilityRole="button"
               onPress={close}
@@ -261,7 +254,7 @@ export function JobDetailsModal({
             >
               <Text style={styles.doneText}>DONE</Text>
             </Pressable>
-          </ScrollView>
+          </View>
         </View>
       </View>
     </Modal>
@@ -338,7 +331,16 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   close: { alignSelf: "flex-start" },
-  body: { gap: 10, padding: 18 },
+  scroll: { flexGrow: 0, flexShrink: 1 },
+  body: { gap: 10, padding: 18, paddingBottom: 20 },
+  footer: {
+    paddingHorizontal: 18,
+    paddingTop: 12,
+    paddingBottom: 18,
+    borderTopWidth: 1,
+    borderTopColor: "#e5eaf3",
+    backgroundColor: "#ffffff",
+  },
   section: {
     marginTop: 6,
     color: "#6b6b6b",
@@ -387,7 +389,6 @@ const styles = StyleSheet.create({
     height: 50,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 6,
     borderRadius: 14,
     backgroundColor: palette.brand,
   },

@@ -1,5 +1,8 @@
 import Route from "lucide-react-native/icons/route";
+import Settings from "lucide-react-native/icons/settings";
+import Sparkles from "lucide-react-native/icons/sparkles";
 import X from "lucide-react-native/icons/x";
+import { useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 
 import type {
@@ -9,6 +12,17 @@ import type {
 import { VehicleIcon } from "@/components/module-icons";
 import { moduleColors } from "@/components/module-ui";
 import { palette } from "@/constants/colors";
+import { isSimulation } from "@/simulation/flag";
+import {
+  generatedVehicleSettings,
+  updateGeneratedVehicle,
+} from "@/simulation/generated-vehicles";
+import {
+  FooterButtons,
+  SettingsCard,
+  VehicleSettingsFields,
+  type VehicleSettingsValue,
+} from "@/simulation/ui/vehicle-settings";
 
 const { brandBlue, headerBlue, mutedText, softBlue, text } = moduleColors;
 
@@ -23,10 +37,12 @@ export function VehicleCard({
   vehicle,
   width,
   onPress,
+  mine = false,
 }: {
   vehicle: LiveVehicle;
   width: number;
   onPress: () => void;
+  mine?: boolean;
 }) {
   const fill = vehicle.isFull
     ? 1
@@ -35,11 +51,12 @@ export function VehicleCard({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${vehicle.plateNumber}, ${vehicle.occupancy}. Show details`}
+      accessibilityLabel={`${mine ? "Your ride, " : ""}${vehicle.plateNumber}${vehicle.generated ? ", generated" : ""}, ${vehicle.occupancy}. Show details`}
       onPress={onPress}
       style={({ pressed }) => [
         cardStyles.card,
         { width },
+        mine && cardStyles.mine,
         vehicle.stale && cardStyles.stale,
         pressed && cardStyles.pressed,
       ]}
@@ -54,6 +71,7 @@ export function VehicleCard({
           </Text>
           <Text style={cardStyles.type}>{vehicle.typeLabel}</Text>
         </View>
+        {vehicle.generated && <GeneratedTag compact />}
         <View style={cardStyles.status}>
           <Text style={cardStyles.statusText} numberOfLines={1}>
             {vehicle.stale
@@ -63,11 +81,18 @@ export function VehicleCard({
         </View>
       </View>
 
-      <View style={cardStyles.route}>
-        <Route color={brandBlue} size={12} strokeWidth={2.2} />
-        <Text style={cardStyles.routeText} numberOfLines={1}>
-          {vehicle.routeName ?? "No route assigned"}
-        </Text>
+      <View style={cardStyles.routeLine}>
+        <View style={cardStyles.route}>
+          <Route color={brandBlue} size={12} strokeWidth={2.2} />
+          <Text style={cardStyles.routeText} numberOfLines={1}>
+            {vehicle.routeName ?? (mine ? "Coming to pick you up" : "No route assigned")}
+          </Text>
+        </View>
+        {mine && (
+          <View style={cardStyles.mineTag}>
+            <Text style={cardStyles.mineTagText}>YOUR RIDE</Text>
+          </View>
+        )}
       </View>
 
       <View style={cardStyles.capacityRow}>
@@ -103,6 +128,15 @@ export function VehicleDetailsModal({
       : Math.min(vehicle.currentCapacity / Math.max(vehicle.maxCapacity, 1), 1)
     : 0;
   const occupancyColor = vehicle ? occupancyColors[vehicle.occupancy] : text;
+  const [controlsFor, setControlsFor] = useState<string | null>(null);
+  const controls = !!vehicle && controlsFor === vehicle.id;
+  const setControls = (open: boolean) =>
+    setControlsFor(open && vehicle ? vehicle.id : null);
+  const close = () => {
+    setControls(false);
+    onClose();
+  };
+  const canControl = isSimulation() && !!vehicle?.generated;
 
   return (
     <Modal
@@ -110,15 +144,22 @@ export function VehicleDetailsModal({
       transparent
       animationType="fade"
       statusBarTranslucent
-      onRequestClose={onClose}
+      onRequestClose={controls ? () => setControls(false) : close}
     >
       <View style={styles.root}>
         <Pressable
           accessibilityLabel="Close vehicle details"
           style={StyleSheet.absoluteFill}
-          onPress={onClose}
+          onPress={close}
         />
-        {vehicle && (
+        {vehicle && controls && canControl && (
+          <VehicleControls
+            vehicleId={vehicle.id}
+            plate={vehicle.plateNumber}
+            onDone={() => setControls(false)}
+          />
+        )}
+        {vehicle && !controls && (
           <View style={styles.card}>
             <View style={styles.header}>
               <View style={styles.headerIcon}>
@@ -130,11 +171,12 @@ export function VehicleDetailsModal({
                 </Text>
                 <Text style={styles.type}>{vehicle.typeLabel}</Text>
               </View>
+              {vehicle.generated && <GeneratedTag />}
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Close vehicle details"
                 hitSlop={10}
-                onPress={onClose}
+                onPress={close}
                 style={styles.close}
               >
                 <X color="#ffffff" size={18} strokeWidth={2.5} />
@@ -183,11 +225,100 @@ export function VehicleDetailsModal({
                   <Text style={styles.label}>Max: {vehicle.maxCapacity}</Text>
                 </View>
               </View>
+
+              {canControl && (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Vehicle controls"
+                  accessibilityHint="Change this generated vehicle's status and occupancy"
+                  onPress={() => setControls(true)}
+                  style={({ pressed }) => [
+                    styles.controlsButton,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Settings color={brandBlue} size={18} strokeWidth={2.2} />
+                  <Text style={styles.controlsText}>CONTROLS</Text>
+                </Pressable>
+              )}
             </View>
           </View>
         )}
       </View>
     </Modal>
+  );
+}
+
+function GeneratedTag({ compact = false }: { compact?: boolean }) {
+  return (
+    <View
+      accessible
+      accessibilityLabel="Generated for the demo"
+      style={[styles.generatedTag, compact && styles.generatedTagCompact]}
+    >
+      <Sparkles color={palette.warning} size={compact ? 10 : 12} strokeWidth={2.4} />
+      {!compact && <Text style={styles.generatedText}>GENERATED</Text>}
+    </View>
+  );
+}
+
+function VehicleControls({
+  vehicleId,
+  plate,
+  onDone,
+}: {
+  vehicleId: string;
+  plate: string;
+  onDone: () => void;
+}) {
+  const [current] = useState(() => generatedVehicleSettings(vehicleId));
+  const [value, setValue] = useState<VehicleSettingsValue | null>(
+    current
+      ? {
+          status: current.status,
+          dynamic: current.dynamic,
+          occupancy: current.occupancy,
+        }
+      : null,
+  );
+  const [error, setError] = useState("");
+
+  const save = () => {
+    if (!value) return onDone();
+    const result = updateGeneratedVehicle(vehicleId, value);
+    if (!result.ok) {
+      setError(result.message);
+      return;
+    }
+    onDone();
+  };
+
+  return (
+    <SettingsCard
+      title="Vehicle controls"
+      subtitle={plate}
+      onClose={onDone}
+      footer={
+        <FooterButtons
+          confirmLabel="SAVE"
+          disabled={!value}
+          onCancel={onDone}
+          onConfirm={save}
+        />
+      }
+    >
+      {current && value ? (
+        <VehicleSettingsFields
+          type={current.type}
+          value={value}
+          onChange={setValue}
+          showStatus
+        />
+      ) : (
+        <Text style={styles.label}>This vehicle is no longer in the demo.</Text>
+      )}
+      {!!error && <Text style={styles.controlsError}>{error}</Text>}
+    </SettingsCard>
   );
 }
 
@@ -283,6 +414,46 @@ const styles = StyleSheet.create({
     backgroundColor: "#e5e7eb",
   },
   barFill: { height: "100%", borderRadius: 4 },
+  generatedTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: palette.warningSoft,
+  },
+  generatedTagCompact: { paddingHorizontal: 5, paddingVertical: 5 },
+  generatedText: {
+    color: palette.warning,
+    fontFamily: "SoraBold",
+    fontSize: 9,
+    letterSpacing: 0.5,
+  },
+  controlsButton: {
+    height: 48,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: brandBlue,
+    backgroundColor: "#ffffff",
+  },
+  controlsText: {
+    color: brandBlue,
+    fontFamily: "SoraBold",
+    fontSize: 13,
+    letterSpacing: 1,
+  },
+  controlsError: {
+    color: palette.danger,
+    fontFamily: "SoraBold",
+    fontSize: 12,
+    textAlign: "center",
+  },
+  pressed: { opacity: 0.8 },
   capacityFooter: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -292,6 +463,25 @@ const styles = StyleSheet.create({
 
 const cardStyles = StyleSheet.create({
   stale: { opacity: 0.6 },
+  mine: { borderWidth: 2, borderColor: "#1e9e45" },
+  routeLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 6,
+  },
+  mineTag: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: palette.successSoft,
+  },
+  mineTagText: {
+    color: palette.success,
+    fontFamily: "SoraBold",
+    fontSize: 9,
+    letterSpacing: 0.5,
+  },
   card: {
     gap: 9,
     padding: 12,
@@ -319,6 +509,7 @@ const cardStyles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+    flexShrink: 1,
     alignSelf: "flex-start",
     maxWidth: "100%",
     paddingHorizontal: 8,

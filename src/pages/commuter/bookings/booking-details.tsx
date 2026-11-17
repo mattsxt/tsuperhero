@@ -25,6 +25,7 @@ import type {
 } from "@/api/v1/pickups/controllers";
 import { SteeringWheelIcon } from "@/components/steering-wheel-icon";
 import { palette } from "@/constants/colors";
+import { initialsOf } from "@/utils/initials";
 
 const avatarSize = 26;
 const maxShown = 4;
@@ -130,7 +131,7 @@ export function BookingDetailsModal({
             {
               userId: `driver-${booking.id}`,
               name: booking.driverName,
-              initials: booking.driverName.charAt(0).toUpperCase(),
+              initials: initialsOf(booking.driverName),
               picture: null,
               vehicleType: booking.vehicleType,
               plateNumber: booking.plateNumber,
@@ -161,17 +162,19 @@ export function BookingDetailsModal({
               </Text>
               <Text style={styles.headerStatus}>Completed</Text>
             </View>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Close"
-              hitSlop={10}
-              onPress={onClose}
-            >
-              <X color="#ffffff" size={18} strokeWidth={2.5} />
-            </Pressable>
+            {rental && booking.driversToRate > 0 && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Close"
+                hitSlop={10}
+                onPress={onClose}
+              >
+                <X color="#ffffff" size={18} strokeWidth={2.5} />
+              </Pressable>
+            )}
           </View>
 
-          <ScrollView contentContainerStyle={styles.body}>
+          <ScrollView style={styles.scroll} contentContainerStyle={styles.body}>
             <Text style={styles.section}>DETAILS</Text>
             <Detail
               icon={
@@ -182,7 +185,9 @@ export function BookingDetailsModal({
             </Detail>
             {rental && (
               <Detail
-                icon={<MapPin color={palette.brand} size={15} strokeWidth={2} />}
+                icon={
+                  <MapPin color={palette.brand} size={15} strokeWidth={2} />
+                }
               >
                 {booking.destination}
               </Detail>
@@ -308,7 +313,9 @@ export function BookingDetailsModal({
                 ))
               )}
             </View>
+          </ScrollView>
 
+          <View style={styles.footer}>
             {rental && booking.driversToRate > 0 ? (
               <Pressable
                 accessibilityRole="button"
@@ -339,7 +346,7 @@ export function BookingDetailsModal({
                 <Text style={styles.primaryText}>DONE</Text>
               </Pressable>
             )}
-          </ScrollView>
+          </View>
         </View>
       </View>
     </Modal>
@@ -353,7 +360,8 @@ const genericPlaces: Record<string, string> = {
 
 function friendlyPlace(name: string | null | undefined, fallback: string) {
   const trimmed = name?.trim();
-  if (!trimmed || /^[23456789CFGHJMPQRVWX]{2,8}\+/i.test(trimmed)) return fallback;
+  if (!trimmed || /^[23456789CFGHJMPQRVWX]{2,8}\+/i.test(trimmed))
+    return fallback;
   return genericPlaces[trimmed.toLowerCase()] ?? trimmed;
 }
 
@@ -470,7 +478,16 @@ const styles = StyleSheet.create({
     fontSize: 17,
     lineHeight: 22,
   },
-  body: { gap: 10, padding: 18 },
+  scroll: { flexGrow: 0, flexShrink: 1 },
+  body: { gap: 10, padding: 18, paddingBottom: 20 },
+  footer: {
+    paddingHorizontal: 18,
+    paddingTop: 12,
+    paddingBottom: 18,
+    borderTopWidth: 1,
+    borderTopColor: "#e5eaf3",
+    backgroundColor: "#ffffff",
+  },
   detail: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
   detailText: {
     flex: 1,
@@ -492,7 +509,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
   },
   stepDotDone: { backgroundColor: palette.brand },
-  stepLine: { flex: 1, width: 2, marginVertical: 2, backgroundColor: "#cbd5e1" },
+  stepLine: {
+    flex: 1,
+    width: 2,
+    marginVertical: 2,
+    backgroundColor: "#cbd5e1",
+  },
   stepBody: { paddingBottom: 14 },
   stepTitle: { color: "#111111", fontFamily: "SoraBold", fontSize: 12 },
   stepDetail: {
@@ -531,7 +553,6 @@ const styles = StyleSheet.create({
     height: 50,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 6,
     borderRadius: 14,
   },
   primary: { backgroundColor: palette.brand },

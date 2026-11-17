@@ -4,11 +4,13 @@ import { afterEach, beforeEach, mock, test } from "node:test";
 import { signInAs, signOutAll } from "@/simulation/auth";
 import { db, type Row } from "@/simulation/db";
 import * as engine from "@/simulation/engine";
-import { currentSimulatedPoint, simulateWalkTo, watchSimulatedLocation } from "@/simulation/gps";
+import { currentSimulatedPoint, setDeviceLocationSource, simulateWalkTo, watchSimulatedLocation } from "@/simulation/gps";
+import { generateNotification } from "@/simulation/notifications-sim";
+import { postRentalRequestNow } from "@/simulation/rentals-sim";
 import { advance, type Mover } from "@/simulation/movement";
 import { handlers } from "@/simulation/rpc";
 import { acceptPickupEffect } from "@/simulation/rpc/operator";
-import { driverId, homePoints, userId, vehicleId } from "@/simulation/seed/people";
+import { commuterId, driverId, homePoints, userId, vehicleId } from "@/simulation/seed/people";
 import { getDistanceMeters } from "@/utils/geo";
 
 const call = (name: string, args: unknown = {}) => handlers[name](args) as any;
@@ -49,14 +51,19 @@ const lastVehiclePoint = (vehicle: string) => {
   return { get: () => last!, stop };
 };
 
-const requestPickup = (from: Row, to: Row, routeId: unknown = marioRoute().route_id) => {
+const requestPickup = (
+  from: Row,
+  to: Row,
+  routeId: unknown = marioRoute().route_id,
+  vehicleType = "Jeepney",
+) => {
   const id = call("save_pickup_draft", {
     p_request_id: null,
     p_latitude: from.area_latitude,
     p_longitude: from.area_longitude,
     p_destination: String(from.area_name),
     p_passengers: 1,
-    p_vehicle_type: "Jeepney",
+    p_vehicle_type: vehicleType,
   });
   call("set_pickup_route", {
     p_request_id: id,
@@ -152,6 +159,67 @@ test("commuter counterpart accepts within 5 s, boards at A and completes at B", 
     ),
     ["pickup_accepted", "pickup_boarded", "pickup_completed"],
   );
+});
+
+test("with a road router, a tricycle drives the routed road path to the pickup and to the drop-off", async () => {
+  const from = area("SAFE Gas");
+  const to = area("E-Mall");
+  const pickup: [number, number] = [Number(from.area_latitude), Number(from.area_longitude)];
+  const dropoff: [number, number] = [Number(to.area_latitude), Number(to.area_longitude)];
+  const calls: [number, number][][] = [];
+  engine.setRoadRouter(async (a, b) => {
+    calls.push([a, b]);
+    return [a, [a[0], b[1]], b];
+  });
+  const flush = () => new Promise<void>((resolve) => setImmediate(resolve));
+  try {
+    const id = requestPickup(from, to, null, "Tricycle");
+    const trike = lastVehiclePoint(vehicleId("pedro"));
+    engine.setSpeed(1);
+    engine.start();
+    assert.ok(tickUntil(() => requestOf(id).request_status === "accepted", 20));
+    assert.equal(pickupOf(id).vehicle_id, vehicleId("pedro"));
+    await flush();
+    assert.equal(calls.length, 1, "approach leg asks the router");
+    assert.deepEqual(calls[0][1], pickup);
+    const corner = { lat: calls[0][0][0], lng: pickup[1] };
+    let passedCorner = false;
+    engine.setSpeed(10);
+    assert.ok(
+      tickUntil(() => {
+        if (getDistanceMeters(trike.get(), corner) < 30) passedCorner = true;
+        return requestOf(id).request_status === "riding";
+      }),
+    );
+    assert.ok(passedCorner, "tricycle followed the routed road, not a straight line");
+    await flush();
+    assert.equal(calls.length, 2, "drop-off leg asks the router");
+    assert.deepEqual(calls[1], [pickup, dropoff], "same query the ride screen draws");
+    assert.ok(tickUntil(() => requestOf(id).request_status === "completed"));
+    assert.ok(getDistanceMeters(trike.get(), pointOf(to)) < 5);
+    trike.stop();
+  } finally {
+    engine.setRoadRouter(null);
+  }
+});
+
+test("a failed road route falls back to the built-in path", async () => {
+  engine.setRoadRouter(async () => null);
+  try {
+    const id = requestPickup(area("SAFE Gas"), area("E-Mall"), null, "Tricycle");
+    engine.setSpeed(1);
+    engine.start();
+    assert.ok(tickUntil(() => requestOf(id).request_status === "accepted", 20));
+    const flush = () => new Promise<void>((resolve) => setImmediate(resolve));
+    await flush();
+    engine.setSpeed(10);
+    assert.ok(tickUntil(() => requestOf(id).request_status === "riding"));
+    await flush();
+    assert.ok(tickUntil(() => requestOf(id).request_status === "completed"));
+    assert.ok(getDistanceMeters(currentSimulatedPoint(), pointOf(area("E-Mall"))) < 5);
+  } finally {
+    engine.setRoadRouter(null);
+  }
 });
 
 test("switching to the driver mid-job keeps the counterpart job running to completion", () => {
@@ -307,6 +375,7 @@ test("tricycles drive their town circuits and show as live vehicles", () => {
 });
 
 test("mock pickup requests for the driver rotate through many commuters", () => {
+  withClock();
   asMario();
   call("start_my_trip", { p_distance_total_km: 8 });
   engine.setSpeed(10);
@@ -320,6 +389,7 @@ test("mock pickup requests for the driver rotate through many commuters", () => 
         request.request_status = "cancelled";
       }
     engine.sendPickupRequest();
+    mock.timers.setTime(Date.now() + 4_000);
   }
   assert.ok(riders.size >= 5, String(riders.size));
 });
@@ -343,7 +413,8 @@ test("driver trip spawns mock pickups ahead that the driver can accept, board an
   assert.equal(pickupOf(first.request_id).route_id, marioRoute().route_id);
   assert.equal(engine.sendPickupRequest(), true);
   assert.equal(engine.sendPickupRequest(), true);
-  assert.equal(engine.sendPickupRequest(), false);
+  assert.equal(engine.sendPickupRequest(), true);
+  assert.equal(engine.sendPickupRequest(), false, "a fourth send within 10 seconds is rate limited");
   let nearby: Row[] = [];
   assert.ok(
     tickUntil(() => {
@@ -368,7 +439,7 @@ test("driver trip spawns mock pickups ahead that the driver can accept, board an
   assert.ok(pickupOf(target).dropped_at);
 });
 
-test("an invited companion accepts after about 3 s and walks to the pickup point", () => {
+test("an invited companion waits for the presenter, then walks to the pickup point", () => {
   const from = area("SAFE Gas");
   const to = area("E-Mall");
   const id = call("save_pickup_draft", {
@@ -383,9 +454,9 @@ test("an invited companion accepts after about 3 s and walks to the pickup point
   const companion = () => db.tables.pickup_companion.find((c) => c.request_id === id)!;
   engine.setSpeed(1);
   engine.start();
-  mock.timers.tick(2000);
+  mock.timers.tick(5000);
   assert.equal(companion().companion_status, "pending");
-  mock.timers.tick(1000);
+  assert.equal(engine.answerCompanionInvite(engine.pendingCompanionInvites()[0].key, true), true);
   assert.equal(companion().companion_status, "accepted");
   call("set_pickup_route", {
     p_request_id: id,
@@ -444,6 +515,7 @@ test("a pickup on another route is served by a vehicle on that route, never by M
 });
 
 test("spawned pickups the driver passes expire so spawning resumes and the trip keeps going", () => {
+  withClock();
   asMario();
   call("start_my_trip", { p_distance_total_km: 8 });
   engine.setSpeed(10);
@@ -451,11 +523,12 @@ test("spawned pickups the driver passes expire so spawning resumes and the trip 
   mock.timers.tick(1000);
   engine.sendPickupRequest();
   engine.sendPickupRequest();
+  engine.sendPickupRequest();
+  assert.equal(engine.sendPickupRequest(), false, "rate limited after 3 sends");
   const firstBatch = db.tables.request
     .filter((r) => r.request_type === "Pickup" && r.request_status === "pending")
     .map((r) => r.request_id);
-  assert.equal(firstBatch.length, 3);
-  assert.equal(engine.sendPickupRequest(), false);
+  assert.equal(firstBatch.length, 4);
   assert.ok(
     tickUntil(() => firstBatch.every((id) => !db.tables.request.some((r) => r.request_id === id))),
   );
@@ -541,4 +614,324 @@ test("the dwell fallback at one stop never skips accepted pickups further ahead"
   assert.ok(tickUntil(() => requestOf(second)?.request_status === "riding"));
   const point = { lat: Number(pickupOf(second).pickup_lat), lng: Number(pickupOf(second).pickup_lng) };
   assert.ok(getDistanceMeters(here(), point) <= 100);
+});
+
+test("send pickup request works on every jeepney route", () => {
+  const failures: string[] = [];
+  for (const route of engine.demoJeepneyRoutes()) {
+    engine.reset();
+    db.reset();
+    asMario();
+    assert.equal(engine.chooseDemoRoute(route.routeId), true);
+    call("start_my_trip", { p_distance_total_km: 5 });
+    engine.start();
+    for (let i = 0; i < 5; i++) mock.timers.tick(1000);
+    const before = new Set(db.tables.request.map((r) => r.request_id));
+    if (!tickUntil(() => engine.sendPickupRequest(), 60)) {
+      failures.push(`${route.code}: send returned false (${engine.sendPickupRequestReason()})`);
+      continue;
+    }
+    const created = db.tables.request.filter((r) => !before.has(r.request_id)).map((r) => r.request_id);
+    const seen = tickUntil(
+      () => (call("get_my_nearby_pickups") as Row[]).some((p) => created.includes(p.request_id)),
+      10,
+    );
+    if (!seen) failures.push(`${route.code}: sent request not visible to the driver within 10 s`);
+  }
+  assert.deepEqual(failures, []);
+});
+
+test("send pickup request explains why it can't send", () => {
+  asMario();
+  assert.equal(engine.sendPickupRequest(), false);
+  assert.equal(engine.sendPickupRequestReason(), "Start a trip first");
+  call("start_my_trip", { p_distance_total_km: 5 });
+  engine.start();
+  mock.timers.tick(1000);
+  assert.equal(engine.sendPickupRequestReason(), null);
+});
+
+const withClock = () => {
+  mock.timers.reset();
+  mock.timers.enable({ apis: ["setInterval", "setTimeout", "Date"], now: Date.now() });
+};
+
+const openDemoRequests = () =>
+  db.tables.request.filter(
+    (r) => r.request_type === "Pickup" && r.request_status === "pending" && r.commuter_id !== commuterId("juan"),
+  );
+
+const startMarioTrip = () => {
+  asMario();
+  call("start_my_trip", { p_distance_total_km: 5 });
+  engine.start();
+  mock.timers.tick(1000);
+};
+
+test("sending pickup requests is limited to 3 every 10 seconds", () => {
+  withClock();
+  startMarioTrip();
+  for (let i = 0; i < 3; i++) assert.equal(engine.sendPickupRequest(), true, `send ${i + 1}`);
+  assert.equal(engine.sendPickupRequest(), false);
+  assert.match(engine.sendPickupRequestReason()!, /^Max 3 per 10s · wait \d+s$/);
+  mock.timers.tick(10_000);
+  assert.equal(engine.sendPickupRequest(), true, "the window reopens after 10 seconds");
+});
+
+test("at most 5 pickup requests can be open at once", () => {
+  withClock();
+  startMarioTrip();
+  let sent = 0;
+  for (let round = 0; round < 4 && sent < 10; round++) {
+    while (engine.sendPickupRequest()) sent++;
+    mock.timers.tick(10_000);
+  }
+  assert.equal(openDemoRequests().length, 5);
+  assert.equal(
+    engine.sendPickupRequestReason(),
+    "5 requests open · accept or skip one",
+  );
+});
+
+test("skipping or accepting a request frees a slot to send another", () => {
+  withClock();
+  startMarioTrip();
+  for (let round = 0; round < 4; round++) {
+    while (engine.sendPickupRequest());
+    mock.timers.tick(10_000);
+  }
+  assert.equal(engine.sendPickupRequest(), false, "5 are open");
+
+  const [skip] = openDemoRequests();
+  assert.equal(engine.dismissPickupRequest(String(skip.request_id)), true);
+  assert.ok(!db.tables.request.some((r) => r.request_id === skip.request_id), "a skipped request is closed");
+  assert.equal(engine.sendPickupRequest(), true, "skipping frees a slot");
+  mock.timers.tick(10_000);
+
+  const accept = openDemoRequests().find((r) => {
+    const nearby = call("get_my_nearby_pickups") as Row[];
+    return nearby.some((p) => p.request_id === r.request_id);
+  });
+  assert.ok(accept, "one request is near enough to accept");
+  call("accept_pickup_request", { p_request_id: accept!.request_id });
+  assert.equal(engine.sendPickupRequest(), true, "accepting frees a slot");
+  assert.equal(engine.dismissPickupRequest(String(accept!.request_id)), false, "accepted requests aren't closed by a skip");
+});
+
+const near = (a: { lat: number; lng: number }, b: { lat: number; lng: number }, m = 1) =>
+  getDistanceMeters(a, b) < m;
+
+test("device fix becomes the commuter position", () => {
+  engine.setDeviceFix(userId("juan"), { lat: 13.625, lng: 123.19 });
+  assert.ok(near(currentSimulatedPoint(), { lat: 13.625, lng: 123.19 }));
+});
+
+test("device fix anywhere, even outside Naga, becomes the commuter position", () => {
+  engine.setDeviceFix(userId("juan"), { lat: 14.6, lng: 121.0 });
+  assert.ok(near(currentSimulatedPoint(), { lat: 14.6, lng: 121.0 }));
+});
+
+test("losing the device fix falls back to the home point", () => {
+  const home = { lat: homePoints.juan[0], lng: homePoints.juan[1] };
+  engine.setDeviceFix(userId("juan"), { lat: 13.625, lng: 123.19 });
+  engine.setDeviceFix(userId("juan"), null);
+  assert.ok(near(currentSimulatedPoint(), home));
+  engine.setDeviceFix(userId("juan"), { lat: Number.NaN, lng: 123.19 });
+  assert.ok(near(currentSimulatedPoint(), home));
+});
+
+test("walking overrides the device fix until the phone really moves", () => {
+  const device = { lat: 13.625, lng: 123.19 };
+  engine.setDeviceFix(userId("juan"), device);
+  const target = pointOf(area("E-Mall"));
+  simulateWalkTo(target);
+  engine.start();
+  mock.timers.tick(1000);
+  assert.ok(!near(currentSimulatedPoint(), device, 0.5), "walk moved away from the device fix");
+  assert.equal(engine.arriveNow(), true);
+  assert.ok(near(currentSimulatedPoint(), target));
+  engine.setDeviceFix(userId("juan"), { lat: device.lat + 0.00005, lng: device.lng });
+  assert.ok(near(currentSimulatedPoint(), target), "GPS jitter keeps the commuter at the pickup point");
+  const moved = { lat: device.lat + 0.0005, lng: device.lng };
+  engine.setDeviceFix(userId("juan"), moved);
+  assert.ok(near(currentSimulatedPoint(), moved), "a real move hands control back to GPS");
+});
+
+test("drivers ignore device fixes", () => {
+  asMario();
+  const before = currentSimulatedPoint();
+  engine.setDeviceFix(userId("mario"), { lat: 13.625, lng: 123.19 });
+  assert.ok(near(currentSimulatedPoint(), before));
+});
+
+test("watchSimulatedLocation forwards source fixes for commuters", () => {
+  let push: (p: { lat: number; lng: number }) => void = () => {};
+  let unsubscribed = false;
+  setDeviceLocationSource((onFix) => {
+    push = onFix;
+    return () => {
+      unsubscribed = true;
+    };
+  });
+  const fixes: { coords: { latitude: number; longitude: number } }[] = [];
+  const sub = watchSimulatedLocation((fix) => fixes.push(fix));
+  push({ lat: 13.625, lng: 123.19 });
+  mock.timers.tick(1000);
+  const last = fixes[fixes.length - 1].coords;
+  assert.ok(near({ lat: last.latitude, lng: last.longitude }, { lat: 13.625, lng: 123.19 }));
+  sub.remove();
+  assert.equal(unsubscribed, false, "device GPS keeps running without a map watcher");
+  setDeviceLocationSource(null);
+  assert.equal(unsubscribed, true);
+});
+
+test("device GPS feeds one-shot location reads without any watcher", () => {
+  let push: (p: { lat: number; lng: number }) => void = () => {};
+  setDeviceLocationSource((onFix) => {
+    push = onFix;
+    return () => {};
+  });
+  push({ lat: 14.6, lng: 121.0 });
+  assert.ok(near(currentSimulatedPoint(), { lat: 14.6, lng: 121.0 }));
+  setDeviceLocationSource(null);
+});
+
+test("a device fix received before login applies once a commuter signs in", () => {
+  let push: (p: { lat: number; lng: number }) => void = () => {};
+  setDeviceLocationSource((onFix) => {
+    push = onFix;
+    return () => {};
+  });
+  asMario();
+  push({ lat: 13.625, lng: 123.19 });
+  asJuan();
+  assert.ok(near(currentSimulatedPoint(), { lat: 13.625, lng: 123.19 }));
+  setDeviceLocationSource(null);
+});
+
+test("reset demo clears all new simulated state", () => {
+  const counts = {
+    charter_rental: db.tables.charter_rental.length,
+    pickup_companion: db.tables.pickup_companion.length,
+    request: db.tables.request.length,
+  };
+  const mario = db.tables.vehicle.find((v) => v.vehicle_id === vehicleId("mario"))!;
+  const seededRoute = mario.route_id;
+  const bus = db.tables.vehicle.find((v) => v.plate_number === "DEMO 103")!;
+  const seededCapacity = bus.current_capacity;
+
+  asMario();
+  assert.ok(postRentalRequestNow());
+  asJuan();
+  assert.deepEqual(generateNotification(), { ok: true, type: "pickup_shared" });
+  engine.setDeviceFix(userId("juan"), { lat: 13.625, lng: 123.19 });
+
+  asMario();
+  const route = db.tables.route.find((r) => r.route_code === "SFE-FRA-CEN")!;
+  assert.equal(engine.chooseDemoRoute(String(route.route_id)), true);
+  engine.start();
+  mock.timers.tick(60_000);
+  assert.notEqual(bus.current_capacity, seededCapacity);
+
+  db.reset();
+  engine.reset();
+  asJuan();
+  assert.equal(db.tables.charter_rental.length, counts.charter_rental);
+  assert.equal(db.tables.pickup_companion.length, counts.pickup_companion);
+  assert.equal(db.tables.request.length, counts.request);
+  assert.equal(db.tables.vehicle.find((v) => v.vehicle_id === vehicleId("mario"))!.route_id, seededRoute);
+  assert.equal(db.tables.vehicle.find((v) => v.plate_number === "DEMO 103")!.current_capacity, seededCapacity);
+  assert.ok(near(currentSimulatedPoint(), { lat: homePoints.juan[0], lng: homePoints.juan[1] }));
+  assert.equal(engine.getSpeed(), 1);
+});
+
+test("pause freezes the simulation until resume, even if a screen calls start", () => {
+  engine.start();
+  const target = pointOf(area("SAFE Gas"));
+  simulateWalkTo(target);
+  mock.timers.tick(1000);
+  engine.pause();
+  assert.equal(engine.isPaused(), true);
+  const frozen = currentSimulatedPoint();
+  engine.start();
+  mock.timers.tick(5000);
+  assert.ok(near(currentSimulatedPoint(), frozen, 0.01), "nothing moves while paused");
+  engine.resume();
+  mock.timers.tick(5000);
+  assert.ok(!near(currentSimulatedPoint(), frozen, 1), "the walk continues after resume");
+  engine.pause();
+  engine.reset();
+  assert.equal(engine.isPaused(), false, "reset clears the pause");
+});
+
+const asPedro = () => signInAs(userId("pedro"), "pedro@demo.tsuperhero");
+
+test("a tricycle driver's demo trip drives, gets requests, accepts, boards and drops off", () => {
+  withClock();
+  asPedro();
+  call("start_my_trip", { p_distance_total_km: 3 });
+  engine.start();
+  mock.timers.tick(1000);
+  const start = { ...locationOf(vehicleId("pedro"))! };
+  mock.timers.tick(10_000);
+  const moved = locationOf(vehicleId("pedro"))!;
+  assert.ok(
+    getDistanceMeters(
+      { lat: Number(start.records_latitude), lng: Number(start.records_longitude) },
+      { lat: Number(moved.records_latitude), lng: Number(moved.records_longitude) },
+    ) > 20,
+    "the tricycle drives its circuit",
+  );
+
+  assert.equal(engine.sendPickupRequestReason(), null);
+  assert.equal(engine.sendPickupRequest(), true);
+  const sent = db.tables.request.filter(
+    (r) => r.request_type === "Pickup" && r.request_status === "pending",
+  );
+  assert.ok(sent.length >= 1);
+  assert.ok(
+    sent.every((r) => pickupOf(r.request_id)?.requested_vehicle_type === "Tricycle"),
+    "requests are for a tricycle",
+  );
+
+  let nearby: Row[] = [];
+  assert.ok(
+    tickUntil(() => {
+      nearby = call("get_my_nearby_pickups");
+      return nearby.length > 0;
+    }),
+  );
+  const target = nearby[0].request_id;
+  call("accept_pickup_request", { p_request_id: target });
+  assert.ok(
+    tickUntil(() => {
+      try {
+        call("board_pickup", { p_request_id: target });
+      } catch {
+        return false;
+      }
+      return true;
+    }),
+  );
+  assert.equal(requestOf(target).request_status, "riding");
+  assert.ok(tickUntil(() => requestOf(target).request_status === "completed", 2000));
+  assert.equal(engine.arriveNow(), true, "arrive now skips to the next stop");
+});
+
+test("a tricycle trip also spawns requests on its own", () => {
+  asPedro();
+  call("start_my_trip", { p_distance_total_km: 3 });
+  engine.start();
+  assert.ok(
+    tickUntil(
+      () =>
+        db.tables.request.some(
+          (r) =>
+            r.request_type === "Pickup" &&
+            r.request_status === "pending" &&
+            pickupOf(r.request_id)?.requested_vehicle_type === "Tricycle",
+        ),
+      120,
+    ),
+  );
 });

@@ -43,6 +43,7 @@ import {
 } from "./waiting-area-directions-map";
 import { ConfirmModal } from "@/components/confirm-modal";
 import { CompanionAvatars } from "./companion-avatars";
+import { partyPins, useShareRideLocation } from "./ride-party";
 import { ErrorAlert } from "@/components/error-alert";
 import { formatDistance } from "@/api/v1/waiting-areas/controllers";
 import { LocationSettingsButton } from "@/components/location-settings-button";
@@ -255,6 +256,36 @@ export function ActivePickup({
     return formatEta(seconds);
   }, [driverLocation, pickupPoint, eta]);
 
+  useShareRideLocation(request.id, me, companions.length > 0);
+  const companionPins = useMemo(() => partyPins(companions), [companions]);
+  const driverVehicles = useMemo(
+    () =>
+      driverLocation && driver
+        ? [
+            {
+              id: "pickup-driver",
+              lat: driverLocation.lat,
+              lng: driverLocation.lng,
+              type: driver.vehicleType,
+              label: driver.plateNumber,
+              occupancy: driver.occupancy,
+              highlight: true,
+            },
+          ]
+        : [],
+    [driverLocation, driver],
+  );
+  const driverLine = useMemo<[number, number][] | null>(
+    () =>
+      driverLocation
+        ? (eta?.path ?? [
+            [driverLocation.lat, driverLocation.lng],
+            [pickupPoint.lat, pickupPoint.lng],
+          ])
+        : null,
+    [driverLocation, eta, pickupPoint],
+  );
+
   const mapState = useMemo<TransitMapState>(() => {
     const points: [number, number][] = [[pickupPoint.lat, pickupPoint.lng]];
     if (me) points.push([me.lat, me.lng]);
@@ -262,24 +293,9 @@ export function ActivePickup({
     return {
       routeId: null,
       route: null,
-      vehicles:
-        driverLocation && driver
-          ? [
-              {
-                id: "pickup-driver",
-                lat: driverLocation.lat,
-                lng: driverLocation.lng,
-                type: driver.vehicleType,
-              },
-            ]
-          : [],
-      pickups: [{ id: "pickup-point", ...pickupPoint }],
-      pickupLine: driverLocation
-        ? (eta?.path ?? [
-            [driverLocation.lat, driverLocation.lng],
-            [pickupPoint.lat, pickupPoint.lng],
-          ])
-        : null,
+      vehicles: driverVehicles,
+      pickups: [{ id: "pickup-point", ...pickupPoint }, ...companionPins],
+      pickupLine: driverLine,
       userLocation: me,
       focus:
         recenters > 0 && me
@@ -296,9 +312,10 @@ export function ActivePickup({
     request.id,
     pickupPoint,
     me,
-    driver,
     driverLocation,
-    eta,
+    driverVehicles,
+    driverLine,
+    companionPins,
     headerHeight,
     cardHeight,
     recenters,
@@ -315,6 +332,9 @@ export function ActivePickup({
           locateTop={headerHeight + 12}
           padTop={headerHeight + 30}
           padBottom={cardHeight + 30}
+          vehicles={driverVehicles}
+          pins={companionPins}
+          driverLine={driverLine}
         />
       ) : (
         <>
@@ -504,7 +524,7 @@ function ArrivalGuide({
       : !located
         ? [
             "Finding your location…",
-            "Drivers will see your request once you’re at the pickup point.",
+            `Drivers will see your request once you’re within ${waitingAreaArrivalMeters} m of the pickup point.`,
           ]
         : withinRange && waitingFor.length > 0
           ? [
@@ -518,7 +538,7 @@ function ArrivalGuide({
               ]
             : [
                 "Head to the pickup point",
-                `You’re ${formatDistance(distance ?? 0)} away. Follow the route on the map. Drivers will see your request once you get there.`,
+                `You’re ${formatDistance(distance ?? 0)} away. Get within ${waitingAreaArrivalMeters} m (the circle on the map) and drivers will see your request.`,
               ];
 
   return (

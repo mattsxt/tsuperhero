@@ -1,10 +1,13 @@
 import { useLocalSearchParams } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import BusFront from "lucide-react-native/icons/bus-front";
 import ChevronsDown from "lucide-react-native/icons/chevrons-down";
 import ChevronsUp from "lucide-react-native/icons/chevrons-up";
 import MapPin from "lucide-react-native/icons/map-pin";
 import MapPinned from "lucide-react-native/icons/map-pinned";
+import Layers from "lucide-react-native/icons/layers";
 import Search from "lucide-react-native/icons/search";
+import Sparkles from "lucide-react-native/icons/sparkles";
 import X from "lucide-react-native/icons/x";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
@@ -23,6 +26,10 @@ import Animated, {
 import { KeyboardStickyView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import {
+  loadPickupDriver,
+  type PickupDriver,
+} from "@/api/v1/pickups/controllers";
 import {
   findRoute,
   loadAlternativeGeometry,
@@ -49,9 +56,62 @@ import { useTransitRoutes } from "@/hooks/use-transit-routes";
 import { isNearPath } from "@/utils/geo";
 import { goBackOr } from "@/utils/navigation";
 import { isSimulation } from "@/simulation/flag";
+import { setViewedRoute } from "@/simulation/generated-vehicles";
 import { LoadingLogo } from "@/components/LoadingLogo";
 
 const { brandBlue, headerBlue, mutedText, softBlue, text } = moduleColors;
+
+type VehicleFilter = "all" | "simulated" | "generated";
+
+const myRidePollMs = 4_000;
+
+const vehicleTypeLabels: Record<PickupDriver["vehicleType"], string> = {
+  jeep: "Jeepney",
+  tricy: "Tricycle",
+};
+
+function rideAsLiveVehicle(
+  ride: PickupDriver,
+  live: LiveVehicle[],
+): LiveVehicle | null {
+  if (!ride.location) return null;
+  const listed = live.find((vehicle) => vehicle.plateNumber === ride.plateNumber);
+  if (listed) return listed;
+  return {
+    id: `my-ride-${ride.requestId}`,
+    type: ride.vehicleType,
+    typeLabel: vehicleTypeLabels[ride.vehicleType],
+    plateNumber: ride.plateNumber,
+    status: ride.status,
+    maxCapacity: ride.maxCapacity,
+    currentCapacity: ride.currentCapacity,
+    isFull: ride.occupancy === "Full",
+    occupancy: ride.occupancy,
+    lat: ride.location.lat,
+    lng: ride.location.lng,
+    routeId: null,
+    routeName: null,
+    stale: false,
+    minutesSinceSeen: 0,
+    generated: false,
+  };
+}
+
+const vehicleFilters: {
+  value: VehicleFilter;
+  label: string;
+  Icon: typeof Layers;
+}[] = [
+  { value: "all", label: "Show all vehicles", Icon: Layers },
+  { value: "simulated", label: "Show simulated vehicles only", Icon: BusFront },
+  { value: "generated", label: "Show generated vehicles only", Icon: Sparkles },
+];
+
+const emptyVehicleText: Record<VehicleFilter, string> = {
+  all: "Nothing to see here yet. Active vehicles on this route will show up here.",
+  simulated: "No simulated vehicles on this route right now.",
+  generated: "No generated vehicles here. Add one from the demo controls.",
+};
 const cardNavy = "#0f2a5c";
 const lightBlue = "#a8dcf7";
 const livePollMs = isSimulation() ? 1_000 : 3_000;
@@ -121,6 +181,12 @@ export default function RoutesScreen() {
     null,
   );
 
+  useEffect(() => {
+    if (!isSimulation()) return;
+    setViewedRoute(routeId);
+    return () => setViewedRoute(null);
+  }, [routeId]);
+
   usePolling(
     async () => {
       const result = await loadLiveVehicles();
@@ -170,14 +236,32 @@ export default function RoutesScreen() {
     [waitingAreas, routeId, path, alternativePaths, route],
   );
 
-  const vehiclesOnRoute = useMemo(
+  const [myRide, setMyRide] = useState<PickupDriver | null>(null);
+  usePolling(
+    async () => {
+      const result = await loadPickupDriver();
+      if (result.ok) setMyRide(result.data);
+    },
+    myRidePollMs,
+    !!routeId,
+  );
+  const myRideVehicle = useMemo(
+    () => (myRide ? rideAsLiveVehicle(myRide, liveVehicles) : null),
+    [myRide, liveVehicles],
+  );
+  const myRideId = myRideVehicle?.id ?? null;
+
+  const routeVehicles = useMemo(
     () =>
       routeId && path
         ? liveVehicles
-            .filter((vehicle) =>
-              [path, ...alternativePaths].some((line) =>
-                isNearPath(vehicle, line, onRouteMeters),
-              ),
+            .filter(
+              (vehicle) =>
+                (vehicle.routeId === null ||
+                  servesRoute(vehicle.routeId, routeId)) &&
+                [path, ...alternativePaths].some((line) =>
+                  isNearPath(vehicle, line, onRouteMeters),
+                ),
             )
             .map((vehicle) =>
               vehicle.routeId !== routeId &&
@@ -188,8 +272,31 @@ export default function RoutesScreen() {
         : [],
     [liveVehicles, routeId, path, alternativePaths, route],
   );
+  const vehiclesOnRoute = useMemo(() => {
+    if (!myRideVehicle || !path) return routeVehicles;
+    const onLine = [path, ...alternativePaths].some((line) =>
+      isNearPath(myRideVehicle, line, onRouteMeters),
+    );
+    if (!onLine) return routeVehicles;
+    return [
+      routeVehicles.find((vehicle) => vehicle.id === myRideVehicle.id) ??
+        myRideVehicle,
+      ...routeVehicles.filter((vehicle) => vehicle.id !== myRideVehicle.id),
+    ];
+  }, [myRideVehicle, routeVehicles, path, alternativePaths]);
   const selectedVehicle =
     vehiclesOnRoute.find((vehicle) => vehicle.id === selectedVehicleId) ?? null;
+  const [vehicleFilter, setVehicleFilter] = useState<VehicleFilter>("all");
+  const filterVehicles = isSimulation() && vehicleFilter !== "all";
+  const listedVehicles = useMemo(
+    () =>
+      filterVehicles
+        ? vehiclesOnRoute.filter(
+            (vehicle) => vehicle.generated === (vehicleFilter === "generated"),
+          )
+        : vehiclesOnRoute,
+    [filterVehicles, vehicleFilter, vehiclesOnRoute],
+  );
 
   const mapState = useMemo<TransitMapState>(
     () => ({
@@ -216,6 +323,8 @@ export default function RoutesScreen() {
         occupancy: vehicle.occupancy,
         isFull: vehicle.isFull,
         stale: vehicle.stale,
+        generated: vehicle.generated,
+        highlight: vehicle.id === myRideId,
       })),
       pickups: destination
         ? [{ id: "destination", ...destination, label: destinationName }]
@@ -233,6 +342,7 @@ export default function RoutesScreen() {
     }),
     [
       vehiclesOnRoute,
+      myRideId,
       destination,
       destinationName,
       routeId,
@@ -398,19 +508,53 @@ export default function RoutesScreen() {
               ]}
             >
               <View style={styles.vehicleSectionHeader}>
-                <Text style={styles.vehicleSectionTitle}>Vehicles in view</Text>
-                {vehiclesOnRoute.length > 0 && (
-                  <View style={styles.vehicleCount}>
-                    <Text style={styles.vehicleCountText}>
-                      {vehiclesOnRoute.length}
-                    </Text>
+                <View style={styles.vehicleTitleRow}>
+                  <Text style={styles.vehicleSectionTitle}>
+                    Vehicles in view
+                  </Text>
+                  {listedVehicles.length > 0 && (
+                    <View style={styles.vehicleCount}>
+                      <Text style={styles.vehicleCountText}>
+                        {listedVehicles.length}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+                {isSimulation() && (
+                  <View
+                    accessibilityRole="radiogroup"
+                    accessibilityLabel="Filter vehicles"
+                    style={styles.vehicleFilter}
+                  >
+                    {vehicleFilters.map(({ value, label, Icon }) => {
+                      const selected = value === vehicleFilter;
+                      return (
+                        <Pressable
+                          key={value}
+                          accessibilityRole="radio"
+                          accessibilityLabel={label}
+                          accessibilityState={{ checked: selected }}
+                          hitSlop={{ top: 8, bottom: 8, left: 2, right: 2 }}
+                          onPress={() => setVehicleFilter(value)}
+                          style={[
+                            styles.vehicleFilterOption,
+                            selected && styles.vehicleFilterSelected,
+                          ]}
+                        >
+                          <Icon
+                            color={selected ? headerBlue : "#ffffff"}
+                            size={15}
+                            strokeWidth={2.2}
+                          />
+                        </Pressable>
+                      );
+                    })}
                   </View>
                 )}
               </View>
-              {vehiclesOnRoute.length === 0 ? (
+              {listedVehicles.length === 0 ? (
                 <Text style={styles.vehicleEmpty}>
-                  Nothing to see here yet. Active vehicles on this route will
-                  show up here.
+                  {emptyVehicleText[filterVehicles ? vehicleFilter : "all"]}
                 </Text>
               ) : (
                 <ScrollView
@@ -421,10 +565,11 @@ export default function RoutesScreen() {
                   decelerationRate="fast"
                   contentContainerStyle={styles.vehicleCarousel}
                 >
-                  {vehiclesOnRoute.map((vehicle) => (
+                  {listedVehicles.map((vehicle) => (
                     <VehicleCard
                       key={vehicle.id}
                       vehicle={vehicle}
+                      mine={vehicle.id === myRideId}
                       width={vehicleCardWidth}
                       onPress={() => setSelectedVehicleId(vehicle.id)}
                     />
@@ -600,6 +745,23 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     paddingHorizontal: panelPadding,
   },
+  vehicleTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  vehicleFilter: {
+    flexDirection: "row",
+    gap: 2,
+    padding: 3,
+    borderRadius: 10,
+    backgroundColor: "rgba(255, 255, 255, 0.14)",
+  },
+  vehicleFilterOption: {
+    width: 34,
+    height: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 7,
+    opacity: 0.7,
+  },
+  vehicleFilterSelected: { opacity: 1, backgroundColor: "#ffffff" },
   vehicleSectionTitle: {
     color: "#ffffff",
     fontFamily: "SoraBold",

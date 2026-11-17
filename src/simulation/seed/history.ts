@@ -156,6 +156,8 @@ export const buildHistory = (now: Date) => {
       tags: [],
     });
   }
+  rentalRequest(9, "nena", "completed", "pedro", "pedro", "Naga City People's Mall", 3, -5, "Tricycle", "completed");
+  rentalRequest(10, "bong", "completed", "pedro", "pedro", "Bicol University Gate", 2, -12, "Tricycle", "completed");
   rentalRequest(2, "nena", "pending", null, null, "Camaligan Boat Ride", 18, 3, "Jeepney", "open");
   rentalRequest(3, "bong", "pending", null, null, "Panicuason Hot Spring", 4, 5, "Tricycle", "open");
 

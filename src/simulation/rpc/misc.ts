@@ -133,6 +133,7 @@ const liveVehicles = (windowMs: number, withSeen: boolean) => () => {
       is_full: vehicle.is_full ?? false,
     };
     if (withSeen) row.recorded_at = location.recorded_at;
+    if (vehicle.generated) row.is_generated = true;
     return [row];
   });
 };

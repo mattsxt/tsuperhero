@@ -1,18 +1,14 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
+  AccessibilityInfo,
+  Animated,
+  Easing,
   StyleSheet,
   View,
   type DimensionValue,
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-import Animated, {
-  Easing,
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withTiming,
-} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { moduleColors } from "@/components/module-ui";
@@ -31,15 +27,37 @@ export function SkeletonBlock({
   radius?: number;
   style?: StyleProp<ViewStyle>;
 }) {
-  const opacity = useSharedValue(1);
+  const [opacity] = useState(() => new Animated.Value(1));
   useEffect(() => {
-    opacity.value = withRepeat(
-      withTiming(0.45, { duration: 800, easing: Easing.inOut(Easing.ease) }),
-      -1,
-      true,
-    );
+    let pulse: Animated.CompositeAnimation | null = null;
+    let cancelled = false;
+    AccessibilityInfo.isReduceMotionEnabled().then((reduceMotion) => {
+      if (cancelled || reduceMotion) return;
+      pulse = Animated.loop(
+        Animated.sequence([
+          Animated.timing(opacity, {
+            toValue: 0.45,
+            duration: 800,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+            isInteraction: false,
+          }),
+          Animated.timing(opacity, {
+            toValue: 1,
+            duration: 800,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+            isInteraction: false,
+          }),
+        ]),
+      );
+      pulse.start();
+    });
+    return () => {
+      cancelled = true;
+      pulse?.stop();
+    };
   }, [opacity]);
-  const pulse = useAnimatedStyle(() => ({ opacity: opacity.value }));
 
   return (
     <Animated.View
@@ -49,8 +67,8 @@ export function SkeletonBlock({
           height,
           borderRadius: radius,
           backgroundColor: placeholderGrey,
+          opacity,
         },
-        pulse,
         style,
       ]}
     />

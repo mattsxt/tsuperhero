@@ -1,3 +1,4 @@
+import { pickupArrivalMeters } from "@/constants/pickup-range";
 import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
@@ -64,8 +65,7 @@ import {
   findNearestWaitingArea,
   findWaitingAreasOnRoute,
   getKnownWaitingAreas,
-  loadWaitingAreas,
-  defaultRequestRadiusMeters,
+  loadWaitingAreas,
   type WaitingArea,
   type WaitingAreaRecommendation,
   type WaitingAreaType,
@@ -122,8 +122,7 @@ import { RideInProgress } from "./ride-in-progress";
 import { RouteMatchPreview } from "./route-match-preview";
 import { SharedRideScreen } from "./shared-ride";
 import {
-  WaitingAreaDirectionsMap,
-  waitingAreaArrivalMeters,
+  WaitingAreaDirectionsMap,
 } from "./waiting-area-directions-map";
 
 const { brandBlue, softBlue, mutedText, text, error } = moduleColors;
@@ -401,7 +400,6 @@ export default function PickupScreen() {
           distanceMeters: getDistanceMeters(place, priorityWaitingArea),
         }
       : nearestWaitingArea;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     routeWaitingAreas,
     priorityWaitingAreaId,
@@ -436,7 +434,6 @@ export default function PickupScreen() {
       usesRoute && requestLocation && dropoffPlace
         ? pickRouteChoices(matchPickupRoutes(requestLocation, dropoffPlace))
         : [],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [usesRoute, requestLocationKey, dropoffPlace, routes],
   );
   const selectedMatch =
@@ -472,10 +469,7 @@ export default function PickupScreen() {
       : place;
   }, [place, usesRoute, selectedMatch, nearestRoute]);
   const goTarget = selectedLocationMode ? pickupTarget : requestLocation;
-  const goRadius = selectedLocationMode
-    ? waitingAreaArrivalMeters
-    : (recommendedWaitingArea?.requestRadiusMeters ??
-      defaultRequestRadiusMeters);
+  const goRadius = pickupArrivalMeters;
 
   useEffect(() => {
     if (!draftRequestId || !requestLocation || !requestLocationKey) return;
@@ -496,7 +490,6 @@ export default function PickupScreen() {
       const statuses = await loadPickupCompanionStatuses(draftRequestId);
       if (statuses.ok) setCompanionList(statuses.data);
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requestLocationKey, draftRequestId, hasAcceptedCompanions]);
 
   usePolling(
@@ -528,8 +521,8 @@ export default function PickupScreen() {
           status: "completed",
           arrived: true,
           arrivedAt: null,
-          dropoff: null,
-          routeId: null,
+          dropoff: previous.dropoff,
+          routeId: previous.routeId,
         });
       }
       lastSharedRide.current = result.data;
@@ -871,8 +864,8 @@ export default function PickupScreen() {
           lat: sharedRide.lat,
           lng: sharedRide.lng,
           vehicle: sharedRide.vehicle,
-          dropoff: null,
-          routeId: null,
+          dropoff: sharedRide.dropoff,
+          routeId: sharedRide.routeId,
         }}
         onBack={goBack}
         onArrived={() => {}}
@@ -1111,7 +1104,7 @@ export default function PickupScreen() {
                   </Text>
                   <Text style={styles.locationChoiceDescription}>
                     {recommendedWaitingArea
-                      ? `${recommendedWaitingArea.name} · your request is sent once you’re within ${recommendedWaitingArea.requestRadiusMeters ?? defaultRequestRadiusMeters} m`
+                      ? `${recommendedWaitingArea.name} · your request is sent once you’re within ${pickupArrivalMeters} m`
                       : waitingAreasLoaded
                         ? "No matching waiting area was found."
                         : "Finding a nearby waiting area…"}

@@ -62,13 +62,11 @@ function getSegmentDistanceMeters(
 export function distanceToPath(point: Coordinates, path: LatLngPair[]) {
   if (path.length === 1)
     return getPairDistanceMeters([point.lat, point.lng], path[0]);
-  return path
-    .slice(1)
-    .reduce(
-      (closest, end, index) =>
-        Math.min(closest, getSegmentDistanceMeters(point, path[index], end)),
-      Infinity,
-    );
+  let closest = Infinity;
+  for (let index = 1; index < path.length; index++) {
+    closest = Math.min(closest, getSegmentDistanceMeters(point, path[index - 1], path[index]));
+  }
+  return closest;
 }
 
 export function isNearPath(
@@ -76,12 +74,10 @@ export function isNearPath(
   path: LatLngPair[],
   maxMeters: number,
 ) {
-  return path
-    .slice(1)
-    .some(
-      (end, index) =>
-        getSegmentDistanceMeters(point, path[index], end) <= maxMeters,
-    );
+  for (let index = 1; index < path.length; index++) {
+    if (getSegmentDistanceMeters(point, path[index - 1], path[index]) <= maxMeters) return true;
+  }
+  return false;
 }
 
 export type PathSnap = {
@@ -91,10 +87,24 @@ export type PathSnap = {
   alongMeters: number;
 };
 
+const cumulativeCache = new WeakMap<LatLngPair[], Float64Array>();
+
+function cumulativeLengths(path: LatLngPair[]): Float64Array {
+  const cached = cumulativeCache.get(path);
+  if (cached && cached.length === path.length) return cached;
+  const cumulative = new Float64Array(path.length);
+  for (let index = 1; index < path.length; index++) {
+    cumulative[index] =
+      cumulative[index - 1] + getPairDistanceMeters(path[index - 1], path[index]);
+  }
+  cumulativeCache.set(path, cumulative);
+  return cumulative;
+}
+
 export function pathLengthMeters(path: LatLngPair[]) {
-  return path
-    .slice(1)
-    .reduce((total, end, index) => total + getPairDistanceMeters(path[index], end), 0);
+  if (path.length < 2) return 0;
+  const cumulative = cumulativeLengths(path);
+  return cumulative[cumulative.length - 1];
 }
 
 export function nearestPointOnPath(
@@ -110,39 +120,40 @@ export function nearestPointOnPath(
       alongMeters: 0,
     };
   }
+  const cumulative = cumulativeLengths(path);
   let best: PathSnap | null = null;
-  let segmentStartAlong = 0;
   for (let index = 0; index < path.length - 1; index++) {
-    const segmentLength = getPairDistanceMeters(path[index], path[index + 1]);
     const projection = projectOntoSegment(point, path[index], path[index + 1]);
     if (!best || projection.distanceMeters < best.distanceMeters) {
+      const segmentLength = cumulative[index + 1] - cumulative[index];
       best = {
         point: projection.point,
         distanceMeters: projection.distanceMeters,
         segmentIndex: index,
-        alongMeters: segmentStartAlong + projection.t * segmentLength,
+        alongMeters: cumulative[index] + projection.t * segmentLength,
       };
     }
-    segmentStartAlong += segmentLength;
   }
   return best!;
 }
 
 export function pointAtAlong(path: LatLngPair[], along: number): LatLngPair {
-  let segmentStartAlong = 0;
-  for (let index = 0; index < path.length - 1; index++) {
-    const segmentLength = getPairDistanceMeters(path[index], path[index + 1]);
-    if (along <= segmentStartAlong + segmentLength || index === path.length - 2) {
-      const t = segmentLength
-        ? Math.max(0, Math.min(1, (along - segmentStartAlong) / segmentLength))
-        : 0;
-      const [startLat, startLng] = path[index];
-      const [endLat, endLng] = path[index + 1];
-      return [startLat + (endLat - startLat) * t, startLng + (endLng - startLng) * t];
-    }
-    segmentStartAlong += segmentLength;
+  if (path.length < 2) return path[0];
+  const cumulative = cumulativeLengths(path);
+  let low = 0;
+  let high = path.length - 2;
+  while (low < high) {
+    const middle = (low + high) >> 1;
+    if (along <= cumulative[middle + 1]) high = middle;
+    else low = middle + 1;
   }
-  return path[0];
+  const segmentLength = cumulative[low + 1] - cumulative[low];
+  const t = segmentLength
+    ? Math.max(0, Math.min(1, (along - cumulative[low]) / segmentLength))
+    : 0;
+  const [startLat, startLng] = path[low];
+  const [endLat, endLng] = path[low + 1];
+  return [startLat + (endLat - startLat) * t, startLng + (endLng - startLng) * t];
 }
 
 export function sliceAlong(
@@ -152,14 +163,13 @@ export function sliceAlong(
 ): LatLngPair[] {
   if (path.length < 2) return [...path];
   if (fromAlong > toAlong) return sliceAlong(path, toAlong, fromAlong).reverse();
-  const total = pathLengthMeters(path);
+  const cumulative = cumulativeLengths(path);
+  const total = cumulative[cumulative.length - 1];
   const from = Math.max(0, Math.min(total, fromAlong));
   const to = Math.max(0, Math.min(total, toAlong));
   const slice: LatLngPair[] = [pointAtAlong(path, from)];
-  let vertexAlong = 0;
   for (let index = 1; index < path.length; index++) {
-    vertexAlong += getPairDistanceMeters(path[index - 1], path[index]);
-    if (vertexAlong > from && vertexAlong < to) slice.push(path[index]);
+    if (cumulative[index] > from && cumulative[index] < to) slice.push(path[index]);
   }
   slice.push(pointAtAlong(path, to));
   return slice;
@@ -388,4 +398,34 @@ export function createPositionThrottle(minMeters = 3, maxAgeMs = 5_000) {
     shown = next;
     return true;
   };
+}
+
+export function circlePath(
+  center: Coordinates,
+  radiusMeters: number,
+  steps = 64,
+): LatLngPair[] {
+  const latRadius = radiusMeters / metersPerLatitude;
+  const lngRadius =
+    radiusMeters /
+    (metersPerLatitude * Math.max(Math.cos(toRadians(center.lat)), 0.01));
+  return Array.from({ length: steps + 1 }, (_, index) => {
+    const angle = (index / steps) * 2 * Math.PI;
+    return [
+      center.lat + latRadius * Math.sin(angle),
+      center.lng + lngRadius * Math.cos(angle),
+    ];
+  });
+}
+
+export function zoomToFitRadius(
+  lat: number,
+  radiusMeters: number,
+  pixels: number,
+  maxZoom: number,
+): number {
+  if (!(pixels > 0) || !(radiusMeters > 0)) return maxZoom;
+  const metersPerPixelAtZoom0 = 156_543.03 * Math.cos(toRadians(lat));
+  const zoom = Math.log2((metersPerPixelAtZoom0 * pixels) / (radiusMeters * 2.4));
+  return Math.min(maxZoom, Math.max(3, zoom));
 }

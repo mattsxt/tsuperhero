@@ -301,3 +301,38 @@ test("tricycle driver can start a trip and users without a vehicle fail", () => 
   );
   assert.equal(call("get_my_vehicle_assignment"), null);
 });
+
+const tripState = (count: number) =>
+  call("set_my_vehicle_trip_state", {
+    p_status: "on-trip",
+    p_current_capacity: count,
+    p_is_full: false,
+  });
+
+test("seats held for an accepted pickup can't be filled by walk-ins", () => {
+  startAt();
+  tripState(19);
+  const id = addRequest({ routeId: route().route_id, passengers: 1 });
+  call("accept_pickup_request", { p_request_id: id });
+  tripState(23);
+  assert.throws(() => tripState(24), /1 seat is held for pickups\. Passengers on board can't go over 23\./);
+
+  call("board_pickup", { p_request_id: id });
+  tripState(24);
+  assert.equal(vehicle().is_full, true, "boarding the reserved rider fills the last seat");
+});
+
+test("accepting counts seats already held for other pickups", () => {
+  startAt();
+  tripState(19);
+  const first = addRequest({ routeId: route().route_id, passengers: 3 });
+  call("accept_pickup_request", { p_request_id: first });
+  const second = addRequest({ routeId: route().route_id, passengers: 3, owner: "liza" });
+  assert.throws(
+    () => call("accept_pickup_request", { p_request_id: second }),
+    /Not enough seats for this request\./,
+    "19 on board + 3 held + 3 more would be 25 in a 24-seater",
+  );
+  const fits = addRequest({ routeId: route().route_id, passengers: 2, owner: "liza" });
+  call("accept_pickup_request", { p_request_id: fits });
+});

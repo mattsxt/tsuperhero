@@ -1,5 +1,5 @@
 import { currentUserId } from "@/simulation/auth";
-import { start, userFix, walkTo } from "@/simulation/engine";
+import { setDeviceFix, start, userFix, walkTo } from "@/simulation/engine";
 
 export type SimulatedLocation = {
   coords: {
@@ -16,13 +16,21 @@ export type SimulatedLocation = {
 
 const FIX_MS = 1_000;
 
+let lastDeviceFix: { lat: number; lng: number } | null = null;
+
+function commuterFix() {
+  const user = currentUserId();
+  if (lastDeviceFix) setDeviceFix(user, lastDeviceFix);
+  return userFix(user);
+}
+
 export function currentSimulatedPoint(): { lat: number; lng: number } {
-  const { lat, lng } = userFix(currentUserId());
+  const { lat, lng } = commuterFix();
   return { lat, lng };
 }
 
 function currentLocation(): SimulatedLocation {
-  const fix = userFix(currentUserId());
+  const fix = commuterFix();
   return {
     coords: {
       latitude: fix.lat,
@@ -35,6 +43,23 @@ function currentLocation(): SimulatedLocation {
     },
     timestamp: Date.now(),
   };
+}
+
+export type DeviceLocationSource = (
+  onFix: (point: { lat: number; lng: number }) => void,
+) => () => void;
+
+let stopDeviceSource: (() => void) | null = null;
+
+export function setDeviceLocationSource(source: DeviceLocationSource | null): void {
+  stopDeviceSource?.();
+  stopDeviceSource = null;
+  lastDeviceFix = null;
+  if (!source) return;
+  stopDeviceSource = source((point) => {
+    lastDeviceFix = point;
+    setDeviceFix(currentUserId(), point);
+  });
 }
 
 export function watchSimulatedLocation(

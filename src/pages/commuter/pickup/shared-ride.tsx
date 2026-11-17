@@ -1,20 +1,26 @@
+import { pickupArrivalMeters } from "@/constants/pickup-range";
 import { Image } from "expo-image";
 import { StatusBar } from "expo-status-bar";
 import BusFront from "lucide-react-native/icons/bus-front";
+import Flag from "lucide-react-native/icons/flag";
 import LogOut from "lucide-react-native/icons/log-out";
 import MapPin from "lucide-react-native/icons/map-pin";
+import RouteIcon from "lucide-react-native/icons/route";
 import Users from "lucide-react-native/icons/users";
 import UsersRound from "lucide-react-native/icons/users-round";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
+  loadPickupDriver,
   loadRideParty,
+  type PickupDriver,
   updateCompanionPresence,
   type Rider,
   type SharedRide,
 } from "@/api/v1/pickups/controllers";
+import { findRoute } from "@/api/v1/transit-routes/controllers";
 import { formatDistance } from "@/api/v1/waiting-areas/controllers";
 import { StatusPill, type PillTone } from "@/components/card-badges";
 import { ConfirmModal } from "@/components/confirm-modal";
@@ -23,17 +29,19 @@ import { LoadingLogo } from "@/components/LoadingLogo";
 import { LocationSettingsButton } from "@/components/location-settings-button";
 import { ModuleHeader, moduleColors } from "@/components/module-ui";
 import { getDistanceMeters } from "@/utils/geo";
+import { isSimulation } from "@/simulation/flag";
 
 import { usePolling } from "@/hooks/use-polling";
 
 import { CompanionAvatars } from "./companion-avatars";
+import { partyPins, useShareRideLocation } from "./ride-party";
 import { WaitingAreaDirectionsMap } from "./waiting-area-directions-map";
 import { palette } from "@/constants/colors";
 
 const { brandBlue, error, mutedText, softBlue, text } = moduleColors;
 
 const presenceIntervalMs = 15_000;
-const arriveMeters = 60;
+const arriveMeters = pickupArrivalMeters;
 const leaveMeters = 150;
 
 const stages: Record<
@@ -85,6 +93,7 @@ export function SharedRideScreen({
   const insets = useSafeAreaInsets();
   const [me, setMe] = useState<{ lat: number; lng: number } | null>(null);
   const stage = stages[ride.stage];
+  const route = findRoute(ride.routeId);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [arrived, setArrived] = useState(ride.meArrived);
   const lastReport = useRef<{ at: number; near: boolean } | null>(null);
@@ -107,14 +116,70 @@ export function SharedRideScreen({
   }, [me, ride]);
 
   const [party, setParty] = useState<Rider[]>([]);
-  usePolling(async () => {
-    const result = await loadRideParty(ride.requestId);
-    if (result.ok) setParty(result.data);
-  }, 5_000);
+  const gathering = ride.stage !== "riding";
+  usePolling(
+    async () => {
+      const result = await loadRideParty(ride.requestId);
+      if (result.ok) setParty(result.data);
+    },
+    5_000,
+    gathering,
+  );
+  useShareRideLocation(ride.requestId, me, gathering);
+
+  const [driver, setDriver] = useState<PickupDriver | null>(null);
+  const matched = ride.stage === "driver-on-the-way";
+  usePolling(
+    async () => {
+      const result = await loadPickupDriver();
+      if (result.ok)
+        setDriver(result.data?.requestId === ride.requestId ? result.data : null);
+    },
+    3_000,
+    matched,
+  );
+  const driverLocation = matched ? (driver?.location ?? null) : null;
+  const driverVehicles = useMemo(
+    () =>
+      driverLocation && driver
+        ? [
+            {
+              id: "pickup-driver",
+              lat: driverLocation.lat,
+              lng: driverLocation.lng,
+              type: driver.vehicleType,
+              label: driver.plateNumber,
+              occupancy: driver.occupancy,
+              highlight: true,
+            },
+          ]
+        : [],
+    [driverLocation, driver],
+  );
+  const driverLine = useMemo(
+    () =>
+      driverLocation
+        ? ([
+            [driverLocation.lat, driverLocation.lng],
+            [ride.lat, ride.lng],
+          ] as [number, number][])
+        : null,
+    [driverLocation, ride.lat, ride.lng],
+  );
+  const pins = useMemo(() => (gathering ? partyPins(party) : []), [gathering, party]);
 
   const trackLocationError = useCallback(
     (message: string | null) => setLocationError(message),
     [],
+  );
+  const trackWalkingRoute = useCallback(
+    (path: [number, number][] | null) => {
+      if (!isSimulation()) return;
+      const { simulateWalkTo } =
+        require("@/simulation/gps") as typeof import("@/simulation/gps");
+      simulateWalkTo({ lat: ride.lat, lng: ride.lng }, path);
+    },
+    [ride.lat, ride.lng],
   );
 
   const [confirmingLeave, setConfirmingLeave] = useState(false);
@@ -134,9 +199,13 @@ export function SharedRideScreen({
         }}
         onLocationChange={setMe}
         onLocationError={trackLocationError}
+        onWalkingRoute={trackWalkingRoute}
+        vehicles={driverVehicles}
+        pins={pins}
+        driverLine={driverLine}
         locateTop={157}
         padTop={145}
-        padBottom={300 + insets.bottom}
+        padBottom={360 + insets.bottom}
       />
 
       <View style={styles.headerWrap}>
@@ -196,6 +265,7 @@ export function SharedRideScreen({
           </View>
         )}
 
+        <Text style={styles.label}>YOUR JOURNEY</Text>
         <View style={styles.detail}>
           <MapPin color={brandBlue} size={15} strokeWidth={2} />
           <Text style={styles.detailText} numberOfLines={2}>
@@ -203,6 +273,22 @@ export function SharedRideScreen({
             {me ? ` · ${formatDistance(getDistanceMeters(me, ride))} away` : ""}
           </Text>
         </View>
+        <View style={styles.detail}>
+          <Flag color={brandBlue} size={15} strokeWidth={2} />
+          <Text style={styles.detailText} numberOfLines={2}>
+            {ride.dropoff
+              ? `Drop-off at ${ride.dropoff.name || "the drop-off point"} · ${formatDistance(getDistanceMeters(ride, ride.dropoff))} ride`
+              : `${ride.owner.name} hasn’t set the drop-off yet.`}
+          </Text>
+        </View>
+        {!!route && (
+          <View style={styles.detail}>
+            <RouteIcon color={brandBlue} size={15} strokeWidth={2} />
+            <Text style={styles.detailText} numberOfLines={1}>
+              {route.name} route
+            </Text>
+          </View>
+        )}
         <View style={styles.detail}>
           {ride.stage === "driver-on-the-way" ? (
             <BusFront color={brandBlue} size={15} strokeWidth={2} />

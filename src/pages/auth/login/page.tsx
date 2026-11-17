@@ -93,6 +93,15 @@ export default function LoginScreen() {
 
   if (signedIn) return <LoadingScreen />;
 
+  if (isSimulation()) {
+    return (
+      <AuthScreen compact={false}>
+        <BrandHeader variant="badge" />
+        {RoleButtons && <RoleButtons />}
+      </AuthScreen>
+    );
+  }
+
   return (
     <AuthScreen
       compact={keyboardVisible}

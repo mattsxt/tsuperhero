@@ -17,7 +17,8 @@ const lower = (v: unknown) => String(v).toLowerCase();
 const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const pad = (n: number) => String(n).padStart(2, "0");
 const whenText = (value: unknown): string => {
-  const d = new Date(timeOf(value) + 8 * HOUR);
+  const ms = typeof value === "number" ? value : timeOf(value);
+  const d = new Date(ms + 8 * HOUR);
   const h = d.getUTCHours();
   return `${months[d.getUTCMonth()]} ${pad(d.getUTCDate())}, ${pad(h % 12 || 12)}:${pad(d.getUTCMinutes())} ${h < 12 ? "AM" : "PM"}`;
 };
@@ -91,7 +92,7 @@ const vehicleBusy = (
     return from - HOUR <= (end ?? start) + HOUR && to + HOUR >= start - HOUR;
   });
 
-const hasActivePickup = (commuterId: unknown): boolean =>
+export const hasActivePickup = (commuterId: unknown): boolean =>
   db.tables.request.some(
     (r) =>
       r.request_type === "Pickup" &&
@@ -111,7 +112,7 @@ const hasActivePickup = (commuterId: unknown): boolean =>
         )),
   );
 
-const hasActiveRental = (commuterId: unknown): boolean =>
+export const hasActiveRental = (commuterId: unknown): boolean =>
   db.tables.request.some((r) => {
     if (r.commuter_id !== commuterId || r.request_type !== "Charter_Rental") return false;
     const rental = rentalOf(r.request_id);
@@ -229,7 +230,13 @@ const postCharterRental = (a: any) => {
     fail(
       `These vehicles seat up to ${seats} passengers. Add another vehicle or choose bigger ones.`,
     );
+  return postRentalEffect(String(commuterId), a);
+};
 
+export const postRentalEffect = (commuterId: string, a: any): string => {
+  const vehicles: string[] = a.p_vehicles ?? [];
+  const count = vehicles.length;
+  const pickup = timeOf(a.p_pickup_time);
   const destination = String(a.p_destination).trim();
   const roundTrip = a.p_trip_type === "round_trip";
   const requestId = db.id();
@@ -421,21 +428,32 @@ const acceptRentalJob = (a: any) => {
   if (vehicleBusy(vehicle.vehicle_id, timeOf(rental.pickup_time), end, unit.request_id))
     fail("You already have a rental on these dates.");
 
+  bookRentalUnitEffect(String(unit.unit_id), String(driver.driver_id), String(vehicle.vehicle_id));
+  return null;
+};
+
+export const bookRentalUnitEffect = (unitId: string, driverId: string, vehicleId: string): void => {
+  const unit = db.tables.charter_rental_unit.find((u) => u.unit_id === unitId);
+  const request = requestOf(unit?.request_id);
+  const rental = rentalOf(unit?.request_id);
+  const vehicle = vehicleOf(vehicleId);
+  if (!unit || !request || !rental || !vehicle) return;
   emit("charter_rental_unit", unit, {
     status: "booked",
-    driver_id: driver.driver_id,
-    vehicle_id: vehicle.vehicle_id,
+    driver_id: driverId,
+    vehicle_id: vehicleId,
     booked_at: iso(),
   });
   const units = unitsOf(unit.request_id);
   const total = units.length;
   const booked = units.filter((u) => u.status !== "open").length;
-  if (request.driver_id == null) request.driver_id = driver.driver_id;
-  if (rental.vehicle_id == null) emit("charter_rental", rental, { vehicle_id: vehicle.vehicle_id });
+  if (request.driver_id == null) request.driver_id = driverId;
+  if (rental.vehicle_id == null) emit("charter_rental", rental, { vehicle_id: vehicleId });
   db.emit({ table: "request", type: "UPDATE", row: request });
   if (booked >= total) setRequestStatus(String(unit.request_id), "accepted");
 
-  const driverName = String(profileOf(uid())?.first_name || "") || "A driver";
+  const driverUser = driverUserId(driverId);
+  const driverName = String(profileOf(driverUser)?.first_name || "") || "A driver";
   const when = whenText(rental.pickup_time);
   notify(
     commuterRow(request.commuter_id)?.user_id,
@@ -449,12 +467,33 @@ const acceptRentalJob = (a: any) => {
     { request_id: unit.request_id },
   );
   notify(
-    uid(),
+    driverUser,
     "rental_job_booked",
     "Job booked",
     `You're booked to drive to ${rental.rental_destination} on ${when}. It's saved in My jobs.`,
     { request_id: unit.request_id },
   );
+};
+
+export const freeRentalDriver = (
+  unitId: string,
+  exceptUserId: string | null,
+): { driverId: string; vehicleId: string } | null => {
+  const unit = db.tables.charter_rental_unit.find((u) => u.unit_id === unitId);
+  const rental = rentalOf(unit?.request_id);
+  if (!unit || !rental?.pickup_time) return null;
+  const taken = new Set(unitsOf(unit.request_id).map((u) => u.driver_id).filter(Boolean));
+  const start = timeOf(rental.pickup_time);
+  const end = rental.return_time ? timeOf(rental.return_time) : null;
+  for (const driver of db.tables.driver) {
+    const vehicle = vehicleOf(driver.vehicle_id);
+    const personnel = db.tables.transit_personnel.find((p) => p.personnel_id === driver.personnel_id);
+    if (!vehicle || !personnel || personnel.user_id === exceptUserId) continue;
+    if ((personnel.employment_status ?? "Active") !== "Active") continue;
+    if (vehicle.vehicle_type !== unit.vehicle_type || taken.has(driver.driver_id)) continue;
+    if (vehicleBusy(vehicle.vehicle_id, start, end, unit.request_id)) continue;
+    return { driverId: String(driver.driver_id), vehicleId: String(vehicle.vehicle_id) };
+  }
   return null;
 };
 
@@ -530,6 +569,14 @@ const completeRental = (a: any) => {
     !unitsOf(request.request_id).some((u) => u.status === "booked")
   )
     return fail("Only rentals with a booked driver can be completed.");
+  completeRentalEffect(String(request.request_id));
+  return null;
+};
+
+export const completeRentalEffect = (requestId: string): void => {
+  const request = requestOf(requestId);
+  const commuter = commuterRow(request?.commuter_id);
+  if (!request || !commuter) return;
   for (const unit of unitsOf(request.request_id)) {
     if (unit.status === "booked") emit("charter_rental_unit", unit, { status: "completed" });
     else if (unit.status === "open") removeRow("charter_rental_unit", unit);
@@ -557,7 +604,6 @@ const completeRental = (a: any) => {
       `The commuter marked the rental to ${destination} as completed. Thanks for driving!`,
       { request_id: request.request_id },
     );
-  return null;
 };
 
 const cancelMyRental = (a: any) => {

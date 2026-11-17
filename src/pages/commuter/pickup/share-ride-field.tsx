@@ -10,11 +10,21 @@ import { useEffect, useRef, useState } from "react";
 import { Keyboard, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 
-import { searchRiders, type Rider } from "@/api/v1/pickups/controllers";
+import {
+  listAvailableRiders,
+  searchRiders,
+  type Rider,
+} from "@/api/v1/pickups/controllers";
 import { LoadingLogo } from "@/components/LoadingLogo";
 import { moduleColors, SoftField } from "@/components/module-ui";
 import { ErrorOutline } from "@/components/error-alert";
 import { palette } from "@/constants/colors";
+import { isSimulation } from "@/simulation/flag";
+
+const simulationDropdown = isSimulation()
+  ? // eslint-disable-next-line @typescript-eslint/no-require-imports
+    (require("@/simulation/ui/companion-dropdown") as typeof import("@/simulation/ui/companion-dropdown"))
+  : null;
 
 const { brandBlue, mutedText, softBlue, text } = moduleColors;
 const searchDelayMs = 300;
@@ -68,6 +78,21 @@ export function ShareRideField({
   const [searchFailed, setSearchFailed] = useState(false);
   const [sending, setSending] = useState(false);
   const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [allRiders, setAllRiders] = useState<Rider[]>([]);
+  const [loadingAll, setLoadingAll] = useState(false);
+
+  const loadAllRiders = async () => {
+    setLoadingAll(true);
+    const result = await listAvailableRiders();
+    setLoadingAll(false);
+    if (result.ok) setAllRiders(result.data);
+  };
+
+  useEffect(() => {
+    if (!simulationDropdown) return;
+    const hide = Keyboard.addListener("keyboardDidHide", () => setOpen(false));
+    return () => hide.remove();
+  }, []);
 
   const trimmed = query.trim();
   const activeRiderCount = riders.filter(
@@ -76,7 +101,7 @@ export function ShareRideField({
   const full = activeRiderCount >= max;
 
   useEffect(() => {
-    if (!open || trimmed.length < minQueryLength) return;
+    if (simulationDropdown || !open || trimmed.length < minQueryLength) return;
     let active = true;
     const timer = setTimeout(async () => {
       const result = await searchRiders(trimmed);
@@ -142,11 +167,13 @@ export function ShareRideField({
             setSelectedRider(null);
             setQuery(next);
             setOpen(true);
-            setSearching(next.trim().length >= minQueryLength);
+            if (!simulationDropdown)
+              setSearching(next.trim().length >= minQueryLength);
           }}
           onFocus={() => {
             if (blurTimer.current) clearTimeout(blurTimer.current);
             setOpen(true);
+            if (simulationDropdown) void loadAllRiders();
           }}
           onBlur={() => {
             blurTimer.current = setTimeout(() => setOpen(false), 200);
@@ -214,7 +241,23 @@ export function ShareRideField({
         />
       </ErrorOutline>
 
-      {open && trimmed.length >= minQueryLength && (
+      {simulationDropdown && open && !full && (
+        <simulationDropdown.CompanionDropdown
+          query={selectedRider ? "" : query}
+          results={allRiders}
+          loading={loadingAll}
+          excludedIds={riders.map((rider) => rider.userId)}
+          selectedId={selectedRider?.userId ?? null}
+          onSelect={(rider) => {
+            setSelectedRider(rider);
+            setQuery(rider.name);
+            setOpen(false);
+            Keyboard.dismiss();
+          }}
+        />
+      )}
+
+      {!simulationDropdown && open && trimmed.length >= minQueryLength && (
         <Animated.View
           entering={FadeIn.duration(150)}
           exiting={FadeOut.duration(100)}

@@ -78,6 +78,24 @@ test("publish rejects a pickup point off the route", () => {
   );
 });
 
+test("jeepney pickup can publish with an off-route pinned drop-off", () => {
+  const { id } = draft();
+  const [lat, lng] = routePath();
+  call("set_pickup_route", {
+    p_request_id: id,
+    p_route_id: route().route_id,
+    p_pickup_lat: lat,
+    p_pickup_lng: lng,
+    p_dropoff_name: "Pinned destination",
+    p_dropoff_lat: 14.5,
+    p_dropoff_lng: 121,
+  });
+  assert.equal(call("publish_pickup_draft", { p_request_id: id }), id);
+  const saved = db.tables.pickup.find((row) => row.request_id === id)!;
+  assert.equal(saved.dropoff_lat, 14.5);
+  assert.equal(saved.dropoff_lng, 121);
+});
+
 test("complete_my_ride", () => {
   const { id } = draft();
   const request = db.tables.request.find((r) => r.request_id === id)!;
@@ -127,4 +145,27 @@ test("share invite accepted shows companion", () => {
   assert.equal(statuses[0].user_id, userId("ana"));
   asAna();
   assert.equal(call("get_my_shared_ride")[0].request_id, id);
+});
+
+test("requests are only accepted within 100 m of the pickup point", () => {
+  const { id, a } = draft();
+  const [lat, lng] = routePath();
+  call("set_pickup_route", {
+    p_request_id: id,
+    p_route_id: route().route_id,
+    p_pickup_lat: lat,
+    p_pickup_lng: lng,
+    p_dropoff_name: "Centro",
+    p_dropoff_lat: lat,
+    p_dropoff_lng: lng,
+    p_waiting_area_id: a.area_id,
+  });
+  call("publish_pickup_draft", { p_request_id: id });
+  const metersNorth = (m: number) => lat + m / 111_320;
+  assert.throws(() =>
+    call("mark_pickup_arrived", { p_request_id: id, p_latitude: metersNorth(110), p_longitude: lng }),
+  );
+  assert.ok(
+    call("mark_pickup_arrived", { p_request_id: id, p_latitude: metersNorth(95), p_longitude: lng }),
+  );
 });

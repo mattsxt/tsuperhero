@@ -16,7 +16,6 @@ export function getSupabaseClient() {
 
   if (isSimulation()) {
     const { createMockClient } =
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       require("@/simulation/client") as typeof import("@/simulation/client");
     client = createMockClient();
     return client;

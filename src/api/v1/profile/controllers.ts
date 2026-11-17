@@ -11,6 +11,7 @@ import { attempt, failure, unwrap, type Result } from "@/api/v1/result";
 import { signedOutOrOffline } from "@/api/v1/session-route";
 import { Routes, type AppRoute } from "@/constants/routes";
 import { checkOnline } from "@/hooks/use-online";
+import { initials } from "@/utils/initials";
 
 export type UserType = MobileUserType;
 
@@ -154,14 +155,8 @@ const userTypeLabels: Record<UserType, string> = {
   transit_personnel: "TRANSIT PERSONNEL",
 };
 
-function getInitials(firstName: string, lastName: string) {
-  return `${firstName} ${lastName}`
-    .split(/[\s-]+/)
-    .filter(Boolean)
-    .map((word) => word[0].toUpperCase())
-    .slice(0, 3)
-    .join("");
-}
+const getInitials = (firstName: string, lastName: string) =>
+  initials(firstName, lastName);
 
 function formatContactNumber(value: string) {
   const match = /^\+63(\d{3})(\d{3})(\d{4})$/.exec(value);

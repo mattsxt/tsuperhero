@@ -1,12 +1,14 @@
 import Mapbox, {
   Camera,
   CircleLayer,
+  FillLayer,
   LineLayer,
   MapView,
   MarkerView,
   ShapeSource,
   SymbolLayer,
 } from "@rnmapbox/maps";
+import Sparkles from "lucide-react-native/icons/sparkles";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { SvgXml } from "react-native-svg";
@@ -18,8 +20,10 @@ import {
 } from "@/components/transit-map-types";
 import { mapStyleUrl, mapboxToken } from "@/constants/mapbox";
 import { waitingAreaPinColors } from "@/constants/waiting-area";
+import { palette } from "@/constants/colors";
 import { vehicleIconUris } from "@/constants/vehicle-icon-uris";
 import { isSimulation } from "@/simulation/flag";
+import { circlePath } from "@/utils/geo";
 
 export type {
   MapCenter,
@@ -38,6 +42,8 @@ const defaultCenter: Position = [123.1948, 13.6218];
 const glideMs = isSimulation() ? 1_000 : 900;
 const glideFrameMs = 66;
 
+const rangeFill = "#4f8ef7";
+const rangeEdge = "#2563eb";
 const vehicleBox = { width: 36, height: 31, pin: 31 };
 const waitingBox = { width: 200, height: 80, icon: 22 };
 
@@ -185,7 +191,11 @@ function VehicleMarker({
         pointerEvents="box-none"
       >
         <Pressable
-          accessibilityLabel={vehicle.label ?? "Vehicle"}
+          accessibilityLabel={
+            vehicle.generated
+              ? `${vehicle.label ?? "Vehicle"}, generated for the demo`
+              : (vehicle.label ?? "Vehicle")
+          }
           onPress={() => onPress?.(vehicle.id)}
           hitSlop={8}
           style={styles.pinArea}
@@ -193,6 +203,7 @@ function VehicleMarker({
           <View
             style={[
               styles.pin,
+              vehicle.highlight && styles.pinHighlight,
               {
                 backgroundColor: vehicle.isFull
                   ? occupancyPinColors.Full
@@ -208,6 +219,11 @@ function VehicleMarker({
               </View>
             ) : null}
           </View>
+          {vehicle.generated && (
+            <View style={styles.generatedBadge}>
+              <Sparkles color="#ffffff" size={8} strokeWidth={3} />
+            </View>
+          )}
         </Pressable>
       </View>
     </MarkerView>
@@ -366,6 +382,32 @@ export function TransitMap({
       ),
     [state.pickupLine],
   );
+  const rangeLat = state.range?.lat;
+  const rangeLng = state.range?.lng;
+  const rangeRadius = state.range?.radiusMeters;
+  const rangeShape = useMemo(
+    () => ({
+      type: "FeatureCollection" as const,
+      features:
+        rangeLat !== undefined && rangeLng !== undefined && rangeRadius
+          ? [
+              {
+                type: "Feature" as const,
+                properties: {},
+                geometry: {
+                  type: "Polygon" as const,
+                  coordinates: [
+                    circlePath({ lat: rangeLat, lng: rangeLng }, rangeRadius).map(
+                      toPosition,
+                    ),
+                  ],
+                },
+              },
+            ]
+          : [],
+    }),
+    [rangeLat, rangeLng, rangeRadius],
+  );
   const extraLineShape = useMemo(
     () =>
       lineCollection(
@@ -479,6 +521,22 @@ export function TransitMap({
           ref={camera}
           defaultSettings={{ centerCoordinate: defaultCenter, zoomLevel: 14 }}
         />
+
+        <ShapeSource id="request-range" shape={rangeShape}>
+          <FillLayer
+            id="request-range-fill"
+            style={{ fillColor: rangeFill, fillOpacity: 0.16 }}
+          />
+          <LineLayer
+            id="request-range-edge"
+            style={{
+              lineColor: rangeEdge,
+              lineWidth: 2,
+              lineOpacity: 0.55,
+              lineDasharray: [2, 1.5],
+            }}
+          />
+        </ShapeSource>
 
         <ShapeSource id="alternative-routes" shape={alternativeShape}>
           <LineLayer
@@ -734,6 +792,24 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   pinIcon: { transform: [{ rotate: "45deg" }] },
+  pinHighlight: {
+    borderWidth: 3,
+    borderColor: "#1e9e45",
+    transform: [{ rotate: "-45deg" }, { scale: 1.18 }],
+  },
+  generatedBadge: {
+    position: "absolute",
+    top: -3,
+    right: 1,
+    width: 14,
+    height: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 7,
+    borderWidth: 1.5,
+    borderColor: "#ffffff",
+    backgroundColor: palette.warning,
+  },
   waitingBox: {
     width: waitingBox.width,
     height: waitingBox.height,

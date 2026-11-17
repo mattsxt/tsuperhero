@@ -108,6 +108,12 @@ export const pickupRoutes = {
   searchCommuters: (query: string) =>
     getSupabaseClient().rpc("search_available_commuters", { p_query: query }),
 
+  listAvailableCommuters: () =>
+    getSupabaseClient().rpc("search_available_commuters", {
+      p_query: "",
+      p_list_all: true,
+    }),
+
   addCompanions: (requestId: string, userIds: string[]) =>
     getSupabaseClient().rpc("add_pickup_companions", {
       p_request_id: requestId,
@@ -142,6 +148,13 @@ export const pickupRoutes = {
     longitude: number,
   ) =>
     getSupabaseClient().rpc("update_companion_presence", {
+      p_request_id: requestId,
+      p_latitude: latitude,
+      p_longitude: longitude,
+    }),
+
+  shareRideLocation: (requestId: string, latitude: number, longitude: number) =>
+    getSupabaseClient().rpc("share_ride_location", {
       p_request_id: requestId,
       p_latitude: latitude,
       p_longitude: longitude,

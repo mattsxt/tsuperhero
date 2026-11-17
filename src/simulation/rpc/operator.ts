@@ -1,3 +1,4 @@
+import { pickupRequestRangeMeters } from "@/constants/pickup-range";
 import { currentUserId } from "@/simulation/auth";
 import { db, type Row, type TableName } from "@/simulation/db";
 import { setRequestStatus } from "@/simulation/rpc/pickups";
@@ -76,6 +77,25 @@ const pickupPoint = (request: Row, pickup: Row): [number, number] => [
   num(pickup.pickup_lng ?? request.device_longitude),
 ];
 
+export const setVehicleLoadEffect = (vehicleId: string, count: number): void => {
+  const vehicle = vehicleOf(vehicleId);
+  if (!vehicle) return;
+  const max = num(vehicle.max_capacity);
+  const next = Math.min(max, Math.max(0, Math.round(count)));
+  emitUpdate("vehicle", vehicle, { current_capacity: next, is_full: next >= max });
+};
+
+export const setVehicleStatusEffect = (vehicleId: string, status: "on-trip" | "loading"): void => {
+  const vehicle = vehicleOf(vehicleId);
+  if (!vehicle || vehicle.vehicle_status === status) return;
+  emitUpdate("vehicle", vehicle, { vehicle_status: status });
+};
+
+let engineDriven: (vehicleId: string) => boolean = () => false;
+export const setEngineDrivenCheck = (check: (vehicleId: string) => boolean): void => {
+  engineDriven = check;
+};
+
 export const setVehiclePosition = (
   vehicleId: string,
   lat: number,
@@ -117,6 +137,16 @@ export const releasePickupEffect = (requestId: string): void => {
   const pickup = pickupOf(requestId);
   if (pickup) emitUpdate("pickup", pickup, { vehicle_id: null });
 };
+
+export const reservedSeats = (vehicleId: unknown): number =>
+  db.tables.pickup
+    .filter(
+      (p) =>
+        p.vehicle_id === vehicleId &&
+        requestOf(p.request_id)?.request_type === "Pickup" &&
+        requestOf(p.request_id)?.request_status === "accepted",
+    )
+    .reduce((total, p) => total + num(p.number_of_passengers ?? 0), 0);
 
 const releaseVehiclePickups = (vehicleId: string) => {
   const mine = db.tables.pickup.filter((p) => p.vehicle_id === vehicleId);
@@ -265,12 +295,16 @@ const setMyVehicleTripState = (a: any) => {
   if (count < 0 || count > capacity)
     fail(`Passenger count must be between 0 and ${capacity}.`);
   const stopped = a.p_status === "idle" || a.p_status === "offline";
+  const held = stopped ? 0 : reservedSeats(target);
+  if (count > capacity - held)
+    fail(`${held} ${held === 1 ? "seat is" : "seats are"} held for pickups. Passengers on board can't go over ${capacity - held}.`);
+  const taken = count + held;
   const values: Row = {
     vehicle_status: a.p_status,
-    current_capacity: count,
+    current_capacity: taken,
   };
   if (a.p_is_full !== undefined)
-    values.is_full = stopped ? false : a.p_is_full === true || count >= capacity;
+    values.is_full = stopped ? false : a.p_is_full === true || taken >= capacity;
   emitUpdate("vehicle", vehicle, values);
   if (stopped) {
     dropLocation(target);
@@ -289,6 +323,7 @@ const shareMyVehicleLocation = (a: any) => {
   const vehicle = vehicleOf(target);
   if (!vehicle || !["on-trip", "loading"].includes(String(vehicle.vehicle_status)))
     fail("Start a trip before sharing your location.", "42501");
+  if (engineDriven(target)) return null;
   setVehiclePosition(target, lat, lng, num(a.p_speed_kmh ?? 0) || 0, num(a.p_heading ?? 0) || 0);
   return null;
 };
@@ -343,7 +378,7 @@ const getMyNearbyPickups = () => {
       continue;
     const [lat, lng] = pickupPoint(request, pickup);
     const distance = meters(lat, lng, here[0], here[1]);
-    if (distance <= 300)
+    if (distance <= pickupRequestRangeMeters)
       out.push({
         request_id: request.request_id,
         latitude: lat,
@@ -423,15 +458,7 @@ export const boardPickupEffect = (requestId: string, target: string): number => 
     db.tables.trip_history.push(history);
     db.emit({ table: "trip_history", type: "INSERT", row: history });
   }
-  const vehicle = vehicleOf(target)!;
-  const passengers = num(pickup.number_of_passengers);
-  emitUpdate("vehicle", vehicle, {
-    current_capacity: Math.min(
-      num(vehicle.max_capacity),
-      num(vehicle.current_capacity ?? 0) + passengers,
-    ),
-  });
-  return passengers;
+  return num(pickup.number_of_passengers);
 };
 
 const boardPickup = (a: any) => {

@@ -351,6 +351,7 @@ export type LiveVehicle = {
   routeName: string | null;
   stale: boolean;
   minutesSinceSeen: number;
+  generated: boolean;
 };
 
 const staleAfterMs = 60_000;
@@ -388,6 +389,7 @@ export function loadLiveVehicles(): Promise<Result<LiveVehicle[]>> {
       lng: row.longitude,
       routeId: row.route_id,
       routeName: row.route_name,
+      generated: row.is_generated === true,
     }));
   });
 }

@@ -64,7 +64,7 @@ test("post, job board, accept, complete, rate, ratings average", () => {
   assert.equal(after.count, before.count + 1);
   assert.ok(Number(after.average) < Number(before.average));
   assert.equal(after.recent[0].feedback, "Late");
-  assert.ok(after.recent[0].commuter_picture);
+  assert.equal(after.recent[0].commuter_picture, null, "demo profiles use the default initials avatar");
   const note = db.tables.notification.filter((n) => n.user_id === userId("mario"));
   assert.ok(note.some((n) => n.notification_type === "rating_received"));
 });

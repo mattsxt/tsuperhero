@@ -8,7 +8,6 @@ import { attempt, failure, success, type Result } from "@/api/v1/result";
 import { isSimulation } from "@/simulation/flag";
 
 const simulatedGps = () =>
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   require("@/simulation/gps") as typeof import("@/simulation/gps");
 
 export type Place = {

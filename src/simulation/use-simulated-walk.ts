@@ -10,14 +10,12 @@ export function useSimulatedWalk(
   useEffect(() => {
     if (!isSimulation()) return;
     const { currentSimulatedPoint, simulateWalkTo } =
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       require("@/simulation/gps") as typeof import("@/simulation/gps");
     if (lat === null || lng === null) {
       simulateWalkTo(null);
       return;
     }
     const { loadWalkingRoute } =
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       require("@/api/v1/transit-routes/controllers") as typeof import("@/api/v1/transit-routes/controllers");
     let active = true;
     const here = currentSimulatedPoint();

@@ -271,12 +271,12 @@ test("commuter scenario: a shared ride with Ana completes for both riders", asyn
   let statuses: Row[] = await rpc("get_pickup_companion_statuses", { p_request_id: requestId });
   assert.equal(statuses[0].companion_status, "pending");
   engine.setSpeed(1);
+  const [invite] = engine.pendingCompanionInvites();
+  assert.equal(engine.answerCompanionInvite(invite.key, true), true);
   assert.ok(
-    tickUntil(() =>
-      db.tables.pickup_companion.some(
-        (c) => c.request_id === requestId && c.companion_status === "accepted",
-      ),
-    10),
+    db.tables.pickup_companion.some(
+      (c) => c.request_id === requestId && c.companion_status === "accepted",
+    ),
   );
   statuses = await rpc("get_pickup_companion_statuses", { p_request_id: requestId });
   assert.equal(statuses[0].companion_status, "accepted");
@@ -397,12 +397,9 @@ test("driver scenario: start trip, accept, board, drop off, end trip, trip histo
   assert.equal(ratings.count, 5);
   assert.equal(ratings.recent.filter((r: Row) => r.feedback).length, 2);
   assert.ok(
-    ratings.recent.every((r: Row) => String(r.commuter_picture).startsWith("data:image/")),
+    ratings.recent.every((r: Row) => r.commuter_picture === null),
+    "demo profiles use the default initials avatar",
   );
-  const url = client.storage
-    .from("profile-pictures")
-    .getPublicUrl(String(ratings.recent[0].commuter_picture)).data.publicUrl;
-  assert.ok(url.startsWith("data:image/"));
 });
 
 const collectRoutes = (dir: string, out: string[] = []): string[] => {
@@ -519,5 +516,5 @@ test("rental scenario: Juan posts, Mario accepts on the job board, Juan complete
   assert.equal(ratings.count, 6);
   assert.equal(ratings.recent[0].commuter_name, "Juan");
   assert.equal(ratings.recent[0].feedback, "Excellent");
-  assert.ok(String(ratings.recent[0].commuter_picture).startsWith("data:image/"));
+  assert.equal(ratings.recent[0].commuter_picture, null);
 });

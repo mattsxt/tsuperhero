@@ -1,5 +1,8 @@
 import { useLocalSearchParams } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import Armchair from "lucide-react-native/icons/armchair";
+import Ban from "lucide-react-native/icons/ban";
+import BookmarkCheck from "lucide-react-native/icons/bookmark-check";
 import CircleAlert from "lucide-react-native/icons/circle-alert";
 import RouteIcon from "lucide-react-native/icons/route";
 import ArrowLeft from "lucide-react-native/icons/arrow-left";
@@ -21,11 +24,14 @@ import {
   type ReactNode,
 } from "react";
 import {
+  Animated as NativeAnimated,
   BackHandler,
+  Easing as NativeEasing,
   Modal,
   Pressable,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from "react-native";
 import Animated, {
@@ -72,6 +78,12 @@ import {
   stopLocationSharing,
 } from "@/api/v1/operator/location-sharing";
 import {
+  clampWalkIns,
+  fitsPickup,
+  seatPlan,
+  type SeatPlan,
+} from "@/utils/seats";
+import {
   clearOutbox,
   hasPendingTripEnd,
   sendLocation,
@@ -89,16 +101,17 @@ import {
 import { ConfirmModal } from "@/components/confirm-modal";
 import { watchLocation } from "@/api/v1/places/controllers";
 import { EmptyState } from "@/components/empty-state";
-import { ErrorAlert } from "@/components/error-alert";
 import { LoadingLogo } from "@/components/LoadingLogo";
 import { ModuleHeader, moduleColors } from "@/components/module-ui";
 import { TransitMap, type TransitMapState } from "@/components/transit-map";
 import { occupancyPinColors } from "@/components/transit-map-types";
 import { Routes } from "@/constants/routes";
+import { pickupRequestRangeMeters } from "@/constants/pickup-range";
 import {
   getDistanceMeters,
   getPairDistanceMeters,
   shouldRefreshPosition,
+  zoomToFitRadius,
   type TimedPosition,
 } from "@/utils/geo";
 import { goBackOr } from "@/utils/navigation";
@@ -112,12 +125,20 @@ import {
 } from "@/api/v1/rentals/controllers";
 import { useNow } from "@/hooks/use-now";
 import { usePolling } from "@/hooks/use-polling";
+import { isSimulation } from "@/simulation/flag";
+
+const simulationTrip = isSimulation()
+  ? {
+      engine: require("@/simulation/engine") as typeof import("@/simulation/engine"),
+      ui: require("@/simulation/ui/route-picker-modal") as typeof import("@/simulation/ui/route-picker-modal"),
+    }
+  : null;
 
 const endedToast = (status: "sent" | "queued") =>
   nextToast(
     status === "queued"
-      ? "Trip ended. It will save when you're back online."
-      : "Trip Ended!",
+      ? "Trip ended · saves when online"
+      : "Trip ended",
     "info",
   );
 
@@ -147,6 +168,7 @@ const overlayEnter = FadeInDown.duration(220);
 const overlayExit = FadeOutDown.duration(180);
 const boardMeters = 40;
 const boardRetryMs = 3_000;
+const pickupDropMeters = 300;
 
 const pathLengthMeters = (path: LatLng[]) =>
   path
@@ -203,6 +225,11 @@ export default function TripScreen() {
     };
   }, []);
 
+  const reloadAssignment = useCallback(async () => {
+    const assignment = await loadOperatorAssignment();
+    if (assignment) setDetails(describeAssignment(assignment));
+  }, []);
+
   if (loading) {
     return (
       <View style={styles.loadingScreen}>
@@ -230,15 +257,23 @@ export default function TripScreen() {
     );
   }
 
-  return <Trip details={details} resumeRequested={params.resume === "1"} />;
+  return (
+    <Trip
+      details={details}
+      resumeRequested={params.resume === "1"}
+      onReloadAssignment={reloadAssignment}
+    />
+  );
 }
 
 function Trip({
   details,
   resumeRequested,
+  onReloadAssignment,
 }: {
   details: AssignmentDetails;
   resumeRequested: boolean;
+  onReloadAssignment: () => Promise<void>;
 }) {
   const insets = useSafeAreaInsets();
   const { assignment, route } = details;
@@ -252,6 +287,7 @@ function Trip({
   const [screenHeight, setScreenHeight] = useState(0);
   const [panelTop, setPanelTop] = useState(0);
   const [routePath, setRoutePath] = useState<LatLng[] | null>(null);
+  const [routePathFor, setRoutePathFor] = useState<string | null>(null);
   const [alternativePaths, setAlternativePaths] = useState<LatLng[][]>([]);
   const [status, setStatus] = useState<TripStatus>("idle");
   const [starting, setStarting] = useState(false);
@@ -272,6 +308,8 @@ function Trip({
   const [count, setCount] = useState(0);
   const [markedFull, setMarkedFull] = useState(false);
   const [toast, setToast] = useState<Toast | null>(null);
+  const [shownToast, setShownToast] = useState<Toast | null>(null);
+  if (toast && toast !== shownToast) setShownToast(toast);
   const [confirmingStop, setConfirmingStop] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
   const [pickups, setPickups] = useState<NearbyPickup[]>([]);
@@ -331,6 +369,7 @@ function Trip({
     ]).then(([geometry, alternatives]) => {
       if (!active) return;
       setRoutePath(geometry);
+      setRoutePathFor(route.id);
       setAlternativePaths(alternatives);
     });
     return () => {
@@ -410,7 +449,7 @@ function Trip({
     const sharing = await startLocationSharing();
     if (!tripActive.current) return;
     setBackgroundSharing(sharing.mode === "background");
-    setToast(nextToast("Trip resumed.", "info"));
+    setToast(nextToast("Trip resumed", "info"));
   }, [capacity]);
 
   useEffect(() => {
@@ -464,7 +503,7 @@ function Trip({
         } else if (tripActive.current && !shareFailing.current) {
           shareFailing.current = true;
           setToast(
-            nextError("Location sharing", "Couldn't share your location."),
+            nextError("Location sharing", "Location not shared"),
           );
         }
       } finally {
@@ -504,7 +543,7 @@ function Trip({
           );
           setToast(
             nextToast(
-              `Pickup request nearby: ${passengers} passenger${passengers === 1 ? "" : "s"}`,
+              `${passengers} incoming ${passengers === 1 ? "passenger" : "passengers"}`,
               "success",
             ),
           );
@@ -540,7 +579,7 @@ function Trip({
           setCount((current) => Math.max(0, current - dropped));
           setToast(
             nextToast(
-              `${dropped} passenger${dropped === 1 ? "" : "s"} dropped off at ${droppedOff[0].dropoffName}`,
+              `${dropped} dropped off`,
               "info",
             ),
           );
@@ -583,7 +622,7 @@ function Trip({
         setCount((current) => Math.min(capacity, current + boarded));
         setToast(
           nextToast(
-            `${boarded} passenger${boarded === 1 ? "" : "s"} boarded`,
+            `${boarded} boarded`,
             "success",
           ),
         );
@@ -606,7 +645,7 @@ function Trip({
         setToast(
           nextError(
             "Trip status",
-            `Couldn't update your trip: ${result.error}`,
+            "Trip not updated",
           ),
         );
     });
@@ -629,7 +668,7 @@ function Trip({
 
   const leave = () => {
     if (onTrip) {
-      setToast(nextError("Trip in progress", "Stop the trip before leaving."));
+      setToast(nextError("Trip in progress", "End the trip first"));
       return;
     }
     goBackOr(Routes.transitHome);
@@ -641,7 +680,7 @@ function Trip({
       () => {
         if (!onTrip) return false;
         setToast(
-          nextError("Trip in progress", "Stop the trip before leaving."),
+          nextError("Trip in progress", "End the trip first"),
         );
         return true;
       },
@@ -650,10 +689,22 @@ function Trip({
   }, [onTrip]);
 
   const addPassenger = () => {
-    if (!onTrip || markedFull || count >= capacity) return;
-    const next = count + 1;
+    if (!onTrip) return;
+    if (!seats.canAddWalkIn) {
+      if (seats.blockedBy === "reserved")
+        setToast(
+          nextError(
+            "Seats reserved",
+            `${seats.reserved} reserved for pickups`,
+          ),
+        );
+      return;
+    }
+    const next = clampWalkIns(seats, count + 1);
     setCount(next);
-    if (next >= capacity) setToast(nextToast("Vehicle is Full!", "danger"));
+    if (next >= capacity) setToast(nextToast("Vehicle full", "danger"));
+    else if (next >= seats.walkInLimit)
+      setToast(nextToast("Only reserved seats left", "info"));
   };
 
   const removePassenger = () => {
@@ -666,7 +717,7 @@ function Trip({
       setToast(
         nextError(
           "Start trip",
-          "Your last trip is still saving. Connect to the internet to finish it, then start again.",
+          "Last trip still saving · go online",
         ),
       );
       return;
@@ -675,13 +726,13 @@ function Trip({
       setToast(
         nextError(
           "Rental pickup",
-          `You have a rental pickup at ${clock(cooldown.at)}. Trips can't start from ${clock(new Date(cooldown.at.getTime() - rentalCooldownMs))} to ${clock(new Date(cooldown.at.getTime() + rentalCooldownMs))}.`,
+          `Rental at ${clock(cooldown.at)} · trips paused`,
         ),
       );
       return;
     }
     if (locationError) {
-      setToast(nextError("Location", "Allow location access to start a trip."));
+      setToast(nextError("Location", "Allow location to start"));
       return;
     }
     setStarting(true);
@@ -717,11 +768,36 @@ function Trip({
     if (sharing.backgroundDenied)
       setToast(
         nextToast(
-          "Allow location access all the time to keep sharing while the app is in the background.",
+          "Allow location all the time",
           "info",
         ),
       );
   };
+
+  const demoRoutePicker = !!simulationTrip && vehicle.vehicle_type === "jeep";
+  const [pickingRoute, setPickingRoute] = useState(false);
+  const pendingRouteStart = useRef<string | null>(null);
+
+  const pickDemoRoute = async (routeId: string) => {
+    setPickingRoute(false);
+    if (!simulationTrip?.engine.chooseDemoRoute(routeId)) {
+      setToast(nextError("Start trip", "Route not switched"));
+      return;
+    }
+    if (routePathFor === routeId && routePath) {
+      void start();
+      return;
+    }
+    pendingRouteStart.current = routeId;
+    await onReloadAssignment();
+  };
+
+  useEffect(() => {
+    if (!pendingRouteStart.current || routePathFor !== pendingRouteStart.current || !routePath)
+      return;
+    pendingRouteStart.current = null;
+    void start();
+  }, [routePathFor, routePath]);
 
   const finalizeTrip = async () => {
     if (finalizing) return;
@@ -749,11 +825,18 @@ function Trip({
     setToast(endedToast(result.status));
   };
 
-  const reserved = accepted.reduce(
-    (total, pickup) => total + pickup.passengers,
-    0,
+  const seats = seatPlan(
+    capacity,
+    count,
+    accepted.reduce((total, pickup) => total + pickup.passengers, 0),
+    markedFull,
   );
-  const seatsLeft = markedFull ? 0 : capacity - count - reserved;
+  const seatsLeft = seats.open;
+
+  const skipRequest = (pickup: NearbyPickup) => {
+    declineRequest(pickup);
+    simulationTrip?.engine.dismissPickupRequest(pickup.id);
+  };
 
   const declineRequest = (pickup: NearbyPickup) => {
     passedPickups.current.add(pickup.id);
@@ -762,13 +845,13 @@ function Trip({
 
   const acceptRequest = async (pickup: NearbyPickup) => {
     if (acceptingId) return;
-    if (pickup.passengers > seatsLeft) {
+    if (!fitsPickup(seats, pickup.passengers)) {
       setToast(
         nextError(
           "Pickup request",
           markedFull
-            ? "You marked the vehicle as full, so you can't accept new passengers."
-            : `This request needs ${pickup.passengers} ${pickup.passengers === 1 ? "seat" : "seats"}, but only ${Math.max(seatsLeft, 0)} ${seatsLeft === 1 ? "is" : "are"} left.`,
+            ? "Marked full"
+            : `Needs ${pickup.passengers} · ${Math.max(seatsLeft, 0)} open`,
         ),
       );
       return;
@@ -786,7 +869,7 @@ function Trip({
     setAccepted((current) => [...current, pickup]);
     setToast(
       nextToast(
-        `Accepted ${waiting} passenger${waiting === 1 ? "" : "s"}. Head to the pickup point.`,
+        `Accepted ${waiting} · head to pickup`,
         "success",
       ),
     );
@@ -798,17 +881,17 @@ function Trip({
       setToast(
         nextError(
           "Vehicle full",
-          "The vehicle is already full. You can't mark it as not full.",
+          "Already full",
         ),
       );
       return;
     }
     if (markedFull) {
       setMarkedFull(false);
-      setToast(nextToast("Accepting Passengers Again", "info"));
+      setToast(nextToast("Taking passengers", "info"));
     } else {
       setMarkedFull(true);
-      setToast(nextToast("Marked as Full!", "danger"));
+      setToast(nextToast("Marked full", "danger"));
     }
   };
 
@@ -825,7 +908,27 @@ function Trip({
   };
 
   const coords = fix?.coords ?? null;
-  const sortedPickups = useMemo(
+  const { width: screenWidth } = useWindowDimensions();
+  const [rangeShownFor, setRangeShownFor] = useState(onTrip);
+  if (rangeShownFor !== onTrip) {
+    setRangeShownFor(onTrip);
+    if (onTrip && fix) {
+      setFollowing(true);
+      setZoomAt(fix.timestamp);
+    }
+  }
+  const visibleMapHeight =
+    (screenHeight || 0) - (headerHeight + 30) - (panelHeight + 30);
+  const vehicleZoom =
+    onTrip && coords
+      ? zoomToFitRadius(
+          coords.latitude,
+          pickupRequestRangeMeters,
+          Math.min(screenWidth - 40, visibleMapHeight),
+          myVehicleZoom,
+        )
+      : myVehicleZoom;
+  const rankedPickups = useMemo(
     () =>
       pickups
         .map((pickup) => ({
@@ -840,6 +943,18 @@ function Trip({
         .sort((a, b) => a.meters - b.meters),
     [pickups, coords],
   );
+  const sortedPickups = useMemo(
+    () => rankedPickups.filter(({ meters }) => meters <= pickupDropMeters),
+    [rankedPickups],
+  );
+  useEffect(() => {
+    rankedPickups.forEach(({ pickup, meters }) => {
+      if (meters <= pickupDropMeters || passedPickups.current.has(pickup.id)) return;
+      passedPickups.current.add(pickup.id);
+      simulationTrip?.engine.dismissPickupRequest(pickup.id);
+    });
+  }, [rankedPickups]);
+
   const frontPickup = sortedPickups[0] ?? null;
   const behindCount = Math.min(sortedPickups.length, maxPickupCards) - 1;
   const mapPickups = useMemo(
@@ -889,10 +1004,18 @@ function Trip({
               key: `${recenters}:${fix.timestamp}`,
               lat: fix.coords.latitude,
               lng: fix.coords.longitude,
-              zoom: fix.timestamp === zoomAt ? myVehicleZoom : undefined,
+              zoom: fix.timestamp === zoomAt ? vehicleZoom : undefined,
             }
           : null,
       pickups: mapPickups,
+      range:
+        onTrip && coords
+          ? {
+              lat: coords.latitude,
+              lng: coords.longitude,
+              radiusMeters: pickupRequestRangeMeters,
+            }
+          : null,
       padTop: headerHeight + 30,
       padBottom: panelHeight + 30,
     }),
@@ -906,6 +1029,8 @@ function Trip({
       following,
       recenters,
       zoomAt,
+      vehicleZoom,
+      onTrip,
       vehicle,
       occupancy,
       full,
@@ -953,55 +1078,6 @@ function Trip({
         pointerEvents="box-none"
         style={[styles.overlayStack, { bottom: overlayBottom }]}
       >
-        {toast?.tone === "error" && (
-          <Animated.View
-            key={toast.id}
-            entering={overlayEnter}
-            exiting={overlayExit}
-            layout={overlayLayout}
-            style={styles.errorToast}
-          >
-            <ErrorAlert title={toast.title ?? "Trip"} message={toast.text} />
-          </Animated.View>
-        )}
-        {toast && toast.tone !== "error" && (
-          <Animated.View
-            key={toast.id}
-            entering={overlayEnter}
-            exiting={overlayExit}
-            layout={overlayLayout}
-            style={[styles.toast, toastTones[toast.tone].container]}
-          >
-            <CircleAlert
-              color={toastTones[toast.tone].color}
-              size={22}
-              strokeWidth={2.4}
-            />
-            <Text
-              style={[
-                styles.toastText,
-                { color: toastTones[toast.tone].color },
-              ]}
-              numberOfLines={3}
-            >
-              {toast.text}
-            </Text>
-            {toast.dismissible && (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Dismiss message"
-                hitSlop={12}
-                onPress={() => setToast(null)}
-              >
-                <X
-                  color={toastTones[toast.tone].color}
-                  size={20}
-                  strokeWidth={2.6}
-                />
-              </Pressable>
-            )}
-          </Animated.View>
-        )}
         {frontPickup && (
           <Animated.View
             layout={overlayLayout}
@@ -1034,10 +1110,10 @@ function Trip({
                 pickup={frontPickup.pickup}
                 distanceMeters={frontPickup.meters}
                 queued={sortedPickups.length - 1}
-                fits={frontPickup.pickup.passengers <= seatsLeft}
+                fits={fitsPickup(seats, frontPickup.pickup.passengers)}
                 busy={acceptingId === frontPickup.pickup.id}
                 onAccept={() => acceptRequest(frontPickup.pickup)}
-                onDecline={() => declineRequest(frontPickup.pickup)}
+                onDecline={() => skipRequest(frontPickup.pickup)}
               />
             </Animated.View>
           </Animated.View>
@@ -1063,6 +1139,22 @@ function Trip({
           style={!following && styles.locateIdle}
         />
       </Pressable>
+
+      <View
+        pointerEvents="box-none"
+        style={[styles.toastLane, { top: insets.top + 16 }]}
+      >
+        {shownToast && (
+          <ToastPill
+            key={shownToast.id}
+            toast={shownToast}
+            leaving={!toast}
+            reduceMotion={reduceMotion}
+            onDismiss={() => setToast(null)}
+            onExited={() => setShownToast(null)}
+          />
+        )}
+      </View>
 
       <View
         style={[styles.panel, { paddingBottom: insets.bottom + 16 }]}
@@ -1126,31 +1218,24 @@ function Trip({
             </View>
             <CounterButton
               variant="plus"
-              label="Add a passenger"
+              label={
+                seats.blockedBy === "reserved"
+                  ? "Add a passenger. The remaining seats are reserved for pickups"
+                  : "Add a passenger"
+              }
               disabled={!onTrip || markedFull || count >= capacity}
+              blocked={seats.blockedBy === "reserved"}
               onPress={addPassenger}
             >
               <Plus color="#ffffff" size={36} strokeWidth={3} />
             </CounterButton>
           </View>
-          <View style={styles.seatTrack}>
-            <View
-              style={[
-                styles.seatFill,
-                {
-                  width: `${Math.min(100, Math.round((count / Math.max(1, capacity)) * 100))}%`,
-                  backgroundColor: occupancyPinColors[occupancy],
-                },
-              ]}
-            />
-          </View>
-          <Text style={styles.seatsLeft}>
-            {markedFull
-              ? "Marked full · not taking passengers"
-              : `${Math.max(0, seatsLeft)} ${seatsLeft === 1 ? "seat" : "seats"} left${reserved ? ` · ${reserved} reserved for pickups` : ""}`}
-          </Text>
+          <SeatMeter
+            seats={seats}
+            onBoardColor={occupancyPinColors[occupancy]}
+            markedFull={markedFull}
+          />
         </View>
-
 
         {!onTrip && cooldown && (
           <View style={styles.cooldown}>
@@ -1185,12 +1270,21 @@ function Trip({
               label={starting ? "STARTING…" : "START TRIP"}
               tone="start"
               disabled={starting || !!cooldown}
-              onPress={start}
+              onPress={demoRoutePicker ? () => setPickingRoute(true) : start}
               style={styles.endButton}
             />
           )}
         </View>
       </View>
+
+      {simulationTrip && demoRoutePicker && (
+        <simulationTrip.ui.RoutePickerModal
+          visible={pickingRoute}
+          routes={simulationTrip.engine.demoJeepneyRoutes()}
+          onPick={(routeId) => void pickDemoRoute(routeId)}
+          onCancel={() => setPickingRoute(false)}
+        />
+      )}
 
       <ConfirmModal
         visible={!!unfinished}
@@ -1386,12 +1480,14 @@ function CounterButton({
   variant,
   label,
   disabled,
+  blocked = false,
   onPress,
   children,
 }: {
   variant: "plus" | "minus";
   label: string;
   disabled: boolean;
+  blocked?: boolean;
   onPress: () => void;
   children: ReactNode;
 }) {
@@ -1399,19 +1495,107 @@ function CounterButton({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
-      accessibilityState={{ disabled }}
+      accessibilityState={{ disabled: disabled || blocked }}
       disabled={disabled}
       onPress={onPress}
       hitSlop={6}
       style={({ pressed }) => [
         styles.circle,
         variant === "plus" ? styles.circlePlus : styles.circleMinus,
-        disabled && styles.circleDisabled,
+        (disabled || blocked) && styles.circleDisabled,
         pressed && styles.pressed,
       ]}
     >
       {children}
     </Pressable>
+  );
+}
+
+const reservedAmber = "#fcc419";
+
+function SeatMeter({
+  seats,
+  onBoardColor,
+  markedFull,
+}: {
+  seats: SeatPlan;
+  onBoardColor: string;
+  markedFull: boolean;
+}) {
+  const total = Math.max(1, seats.capacity);
+  const share = (value: number) => `${(value / total) * 100}%` as const;
+  const summary = markedFull
+    ? `Marked full. ${seats.onBoard} on board.`
+    : `${seats.open} ${seats.open === 1 ? "seat" : "seats"} open, ${seats.reserved} reserved for pickups, ${seats.onBoard} on board.`;
+  return (
+    <View accessible accessibilityLabel={summary}>
+      <View style={styles.seatTrack}>
+        <View
+          style={[
+            styles.seatSegment,
+            { width: share(seats.onBoard), backgroundColor: onBoardColor },
+          ]}
+        />
+        {seats.reserved > 0 && (
+          <View
+            style={[
+              styles.seatSegment,
+              styles.seatReserved,
+              { width: share(seats.reserved) },
+            ]}
+          />
+        )}
+      </View>
+      <View style={styles.seatLegend}>
+        {markedFull ? (
+          <SeatChip
+            icon={<Ban color="#5c3b00" size={13} strokeWidth={2.4} />}
+            label="Full"
+            tone="full"
+          />
+        ) : (
+          <>
+            <SeatChip
+              icon={<Armchair color="#ffffff" size={13} strokeWidth={2.4} />}
+              label={`${seats.open} open`}
+              tone={seats.open === 0 ? "none" : "open"}
+            />
+            {seats.reserved > 0 && (
+              <SeatChip
+                icon={<BookmarkCheck color="#5c3b00" size={13} strokeWidth={2.4} />}
+                label={`${seats.reserved} reserved`}
+                tone="held"
+              />
+            )}
+          </>
+        )}
+      </View>
+    </View>
+  );
+}
+
+const seatChipTones = {
+  open: { backgroundColor: "rgba(255, 255, 255, 0.16)", color: "#ffffff" },
+  none: { backgroundColor: "rgba(239, 68, 68, 0.35)", color: "#ffffff" },
+  held: { backgroundColor: reservedAmber, color: "#5c3b00" },
+  full: { backgroundColor: reservedAmber, color: "#5c3b00" },
+};
+
+function SeatChip({
+  icon,
+  label,
+  tone,
+}: {
+  icon: ReactNode;
+  label: string;
+  tone: keyof typeof seatChipTones;
+}) {
+  const { backgroundColor, color } = seatChipTones[tone];
+  return (
+    <View style={[styles.seatChip, { backgroundColor }]}>
+      {icon}
+      <Text style={[styles.seatChipText, { color }]}>{label}</Text>
+    </View>
   );
 }
 
@@ -1457,9 +1641,88 @@ function TripButton({
   );
 }
 
+function ToastPill({
+  toast,
+  leaving,
+  reduceMotion,
+  onDismiss,
+  onExited,
+}: {
+  toast: Toast;
+  leaving: boolean;
+  reduceMotion: boolean;
+  onDismiss: () => void;
+  onExited: () => void;
+}) {
+  const [progress] = useState(() => new NativeAnimated.Value(0));
+  const exited = useRef(onExited);
+  useEffect(() => {
+    exited.current = onExited;
+  }, [onExited]);
+  useEffect(() => {
+    const animation = NativeAnimated.timing(progress, leaving
+      ? {
+          toValue: 2,
+          duration: reduceMotion ? 120 : 240,
+          easing: NativeEasing.in(NativeEasing.cubic),
+          useNativeDriver: true,
+        }
+      : {
+          toValue: 1,
+          duration: reduceMotion ? 120 : 200,
+          easing: NativeEasing.out(NativeEasing.cubic),
+          useNativeDriver: true,
+        });
+    animation.start(({ finished }) => {
+      if (finished && leaving) exited.current();
+    });
+    return () => animation.stop();
+  }, [progress, leaving, reduceMotion]);
+  const tone = toastTones[toast.tone];
+  const Icon = toast.tone === "error" || toast.tone === "danger" ? CircleAlert : Check;
+  return (
+    <NativeAnimated.View
+      pointerEvents={leaving ? "none" : "auto"}
+      style={{
+        opacity: progress.interpolate({
+          inputRange: [0, 1, 2],
+          outputRange: [0, 1, 0],
+        }),
+        transform: [
+          {
+            translateY: progress.interpolate({
+              inputRange: [0, 1, 2],
+              outputRange: reduceMotion ? [0, 0, 0] : [-8, 0, -28],
+            }),
+          },
+          {
+            scale: progress.interpolate({
+              inputRange: [0, 1, 2],
+              outputRange: reduceMotion ? [1, 1, 1] : [0.98, 1, 0.96],
+            }),
+          },
+        ],
+      }}
+    >
+      <Pressable
+        accessibilityRole="alert"
+        accessibilityLabel={toast.title ? `${toast.title}. ${toast.text}` : toast.text}
+        accessibilityHint="Tap to dismiss"
+        onPress={onDismiss}
+        style={[styles.toast, tone.container]}
+      >
+        <Icon color={tone.color} size={15} strokeWidth={2.6} />
+        <Text style={[styles.toastText, { color: tone.color }]} numberOfLines={2}>
+          {toast.text}
+        </Text>
+      </Pressable>
+    </NativeAnimated.View>
+  );
+}
+
 const toastTones = {
   danger: { container: { backgroundColor: palette.danger }, color: "#ffffff" },
-  error: { container: {}, color: palette.danger },
+  error: { container: { backgroundColor: "#fdecec" }, color: palette.danger },
   success: {
     container: { backgroundColor: "#b5f5b5" },
     color: palette.success,
@@ -1609,22 +1872,29 @@ const styles = StyleSheet.create({
   pickupDeclineText: { color: "#475569" },
   pickupAccept: { flex: 2, backgroundColor: "#16a34a" },
   pickupAcceptBlocked: { backgroundColor: "#94a3b8" },
+  toastLane: {
+    position: "absolute",
+    left: 72,
+    right: 72,
+    alignItems: "center",
+    zIndex: 20,
+    elevation: 20,
+  },
   toast: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 14,
+    gap: 6,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderRadius: 999,
     elevation: 6,
   },
-  errorToast: { alignSelf: "stretch", elevation: 4 },
   locateError: { borderWidth: 1.5, borderColor: palette.danger },
   toastText: {
-    flex: 1,
+    flexShrink: 1,
     fontFamily: "SoraBold",
-    fontSize: 15,
-    lineHeight: 20,
+    fontSize: 12,
+    lineHeight: 16,
   },
   panel: {
     position: "absolute",
@@ -1736,20 +2006,34 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   seatTrack: {
+    flexDirection: "row",
     height: 10,
     marginTop: 12,
     overflow: "hidden",
     borderRadius: 5,
     backgroundColor: "rgba(255, 255, 255, 0.15)",
   },
-  seatFill: { height: 10, borderRadius: 5 },
-  seatsLeft: {
-    marginTop: 6,
-    color: "#ffffff",
-    fontFamily: "Sora",
-    fontSize: 13,
-    textAlign: "center",
+  seatSegment: { height: 10 },
+  seatReserved: {
+    backgroundColor: reservedAmber,
+    borderLeftWidth: 2,
+    borderLeftColor: "rgba(0, 0, 0, 0.25)",
   },
+  seatLegend: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 8,
+  },
+  seatChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+  },
+  seatChipText: { fontFamily: "SoraBold", fontSize: 12 },
   actions: { flexDirection: "row", gap: 10, marginTop: 12 },
   tripButton: {
     height: 56,

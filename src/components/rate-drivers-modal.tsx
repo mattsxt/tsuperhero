@@ -25,6 +25,7 @@ import { ErrorAlert } from "@/components/error-alert";
 import { LoadingLogo } from "@/components/LoadingLogo";
 import { StarInput } from "@/components/star-rating";
 import { palette } from "@/constants/colors";
+import { initialsOf } from "@/utils/initials";
 
 const praise = [
   "On time",
@@ -147,7 +148,7 @@ export function RateDriversModal({
                 {rental.destination}
               </Text>
             </View>
-            {!saving && (
+            {!saving && !done && (
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Close"
@@ -215,64 +216,71 @@ export function RateDriversModal({
               </Pressable>
             </Animated.View>
           ) : reviewing ? (
-            <ScrollView contentContainerStyle={styles.body}>
-              {queue.map((unit, position) => {
-                const item = drafts[position];
-                return (
-                  <View key={unit.id} style={styles.reviewRow}>
-                    <View style={styles.avatar}>
-                      <Text style={styles.avatarText}>
-                        {(unit.driverName ?? "D").charAt(0).toUpperCase()}
-                      </Text>
+            <>
+              <ScrollView
+                style={styles.scroll}
+                contentContainerStyle={styles.body}
+              >
+                {queue.map((unit, position) => {
+                  const item = drafts[position];
+                  return (
+                    <View key={unit.id} style={styles.reviewRow}>
+                      <View style={styles.avatar}>
+                        <Text style={styles.avatarText}>
+                          {initialsOf(unit.driverName, "D")}
+                        </Text>
+                      </View>
+                      <View style={styles.flex}>
+                        <Text style={styles.driverName} numberOfLines={1}>
+                          {unit.driverName ?? "Your driver"}
+                        </Text>
+                        {item.score > 0 ? (
+                          <View style={styles.reviewStars}>
+                            {[1, 2, 3, 4, 5].map((value) => (
+                              <Star
+                                key={value}
+                                size={14}
+                                color={
+                                  value <= item.score ? "#f5b301" : "#d6dbe6"
+                                }
+                                fill={
+                                  value <= item.score
+                                    ? "#f5b301"
+                                    : "transparent"
+                                }
+                              />
+                            ))}
+                          </View>
+                        ) : (
+                          <Text style={styles.reviewNone}>Not rated</Text>
+                        )}
+                      </View>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Edit rating for ${unit.driverName ?? "driver"}`}
+                        disabled={saving}
+                        hitSlop={8}
+                        onPress={() => go(position)}
+                      >
+                        <Text style={styles.editText}>
+                          {item.score > 0 ? "Edit" : "Rate"}
+                        </Text>
+                      </Pressable>
                     </View>
-                    <View style={styles.flex}>
-                      <Text style={styles.driverName} numberOfLines={1}>
-                        {unit.driverName ?? "Your driver"}
-                      </Text>
-                      {item.score > 0 ? (
-                        <View style={styles.reviewStars}>
-                          {[1, 2, 3, 4, 5].map((value) => (
-                            <Star
-                              key={value}
-                              size={14}
-                              color={
-                                value <= item.score ? "#f5b301" : "#d6dbe6"
-                              }
-                              fill={
-                                value <= item.score ? "#f5b301" : "transparent"
-                              }
-                            />
-                          ))}
-                        </View>
-                      ) : (
-                        <Text style={styles.reviewNone}>Not rated</Text>
-                      )}
-                    </View>
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel={`Edit rating for ${unit.driverName ?? "driver"}`}
-                      disabled={saving}
-                      hitSlop={8}
-                      onPress={() => go(position)}
-                    >
-                      <Text style={styles.editText}>
-                        {item.score > 0 ? "Edit" : "Rate"}
-                      </Text>
-                    </Pressable>
-                  </View>
-                );
-              })}
+                  );
+                })}
 
-              {!!problem && <ErrorAlert title="Rating" message={problem} />}
+                {!!problem && <ErrorAlert title="Rating" message={problem} />}
 
-              <Text style={styles.reviewHint}>
-                {ratedCount === 0
-                  ? "Rate at least one driver to submit. You can also rate them later from Bookings."
-                  : ratedCount < queue.length
-                    ? "Drivers you didn't rate can be rated later from Bookings."
-                    : "Ratings are sent to your drivers and can't be changed after you submit."}
-              </Text>
-              <View style={styles.nav}>
+                <Text style={styles.reviewHint}>
+                  {ratedCount === 0
+                    ? "Rate at least one driver to submit. You can also rate them later from Bookings."
+                    : ratedCount < queue.length
+                      ? "Drivers you didn't rate can be rated later from Bookings."
+                      : "Ratings are sent to your drivers and can't be changed after you submit."}
+                </Text>
+              </ScrollView>
+              <View style={[styles.footer, styles.nav]}>
                 <Pressable
                   accessibilityRole="button"
                   disabled={saving}
@@ -309,137 +317,143 @@ export function RateDriversModal({
                   )}
                 </Pressable>
               </View>
-            </ScrollView>
+            </>
           ) : (
-            <ScrollView
-              keyboardShouldPersistTaps="handled"
-              contentContainerStyle={styles.body}
-            >
-              <Animated.View
-                key={driver.id}
-                entering={FadeInRight.duration(220)}
-                style={styles.step}
+            <>
+              <ScrollView
+                keyboardShouldPersistTaps="handled"
+                style={styles.scroll}
+                contentContainerStyle={styles.body}
               >
-                <View style={styles.driver}>
-                  <View style={styles.avatar}>
-                    <Text style={styles.avatarText}>
-                      {(driver.driverName ?? "D").charAt(0).toUpperCase()}
-                    </Text>
+                <Animated.View
+                  key={driver.id}
+                  entering={FadeInRight.duration(220)}
+                  style={styles.step}
+                >
+                  <View style={styles.driver}>
+                    <View style={styles.avatar}>
+                      <Text style={styles.avatarText}>
+                        {initialsOf(driver.driverName, "D")}
+                      </Text>
+                    </View>
+                    <View style={styles.flex}>
+                      <Text style={styles.driverName} numberOfLines={1}>
+                        {driver.driverName ?? "Your driver"}
+                      </Text>
+                      <Text style={styles.driverMeta} numberOfLines={1}>
+                        {[driver.vehicleType, driver.plateNumber]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </Text>
+                    </View>
                   </View>
-                  <View style={styles.flex}>
-                    <Text style={styles.driverName} numberOfLines={1}>
-                      {driver.driverName ?? "Your driver"}
-                    </Text>
-                    <Text style={styles.driverMeta} numberOfLines={1}>
-                      {[driver.vehicleType, driver.plateNumber]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </Text>
-                  </View>
-                </View>
 
-                <Text style={styles.question}>
-                  How was your trip with them?
-                </Text>
-                <StarInput
-                  value={draft.score}
-                  onChange={(value) =>
-                    update(
-                      value >= 4 !== draft.score >= 4
-                        ? { score: value, tags: [] }
-                        : { score: value },
-                    )
-                  }
-                />
-                <Text style={styles.scoreLabel}>
-                  {draft.score
-                    ? scoreLabels[draft.score]
-                    : "Tap a star to rate"}
-                </Text>
+                  <Text style={styles.question}>
+                    How was your trip with them?
+                  </Text>
+                  <StarInput
+                    value={draft.score}
+                    onChange={(value) =>
+                      update(
+                        value >= 4 !== draft.score >= 4
+                          ? { score: value, tags: [] }
+                          : { score: value },
+                      )
+                    }
+                  />
+                  <Text style={styles.scoreLabel}>
+                    {draft.score
+                      ? scoreLabels[draft.score]
+                      : "Tap a star to rate"}
+                  </Text>
 
-                {draft.score > 0 && (
-                  <Animated.View
-                    entering={FadeIn.duration(180)}
-                    style={styles.tagsWrap}
-                  >
-                    <Text style={styles.section}>
-                      {draft.score >= 4
-                        ? "WHAT WENT WELL?"
-                        : "WHAT WENT WRONG?"}
-                    </Text>
-                    <View style={styles.tags}>
-                      {tagOptions.map((tag) => {
-                        const selected = draft.tags.includes(tag);
-                        return (
-                          <Pressable
-                            key={tag}
-                            accessibilityRole="button"
-                            accessibilityState={{ selected }}
-                            onPress={() => toggleTag(tag)}
-                            style={[styles.tag, selected && styles.tagSelected]}
-                          >
-                            <Text
+                  {draft.score > 0 && (
+                    <Animated.View
+                      entering={FadeIn.duration(180)}
+                      style={styles.tagsWrap}
+                    >
+                      <Text style={styles.section}>
+                        {draft.score >= 4
+                          ? "WHAT WENT WELL?"
+                          : "WHAT WENT WRONG?"}
+                      </Text>
+                      <View style={styles.tags}>
+                        {tagOptions.map((tag) => {
+                          const selected = draft.tags.includes(tag);
+                          return (
+                            <Pressable
+                              key={tag}
+                              accessibilityRole="button"
+                              accessibilityState={{ selected }}
+                              onPress={() => toggleTag(tag)}
                               style={[
-                                styles.tagText,
-                                selected && styles.tagTextSelected,
+                                styles.tag,
+                                selected && styles.tagSelected,
                               ]}
                             >
-                              {tag}
-                            </Text>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                    <TextInput
-                      value={draft.feedback}
-                      onChangeText={(value) => update({ feedback: value })}
-                      placeholder="Add a comment (optional)"
-                      placeholderTextColor="#9a9a9a"
-                      multiline
-                      maxLength={maxFeedbackLength}
-                      style={styles.input}
-                    />
-                  </Animated.View>
-                )}
-
-                <View style={styles.nav}>
-                  {index > 0 && (
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={() => go(index - 1)}
-                      style={({ pressed }) => [
-                        styles.button,
-                        styles.secondary,
-                        styles.navButton,
-                        pressed && styles.pressed,
-                      ]}
-                    >
-                      <Text style={styles.secondaryText}>BACK</Text>
-                    </Pressable>
+                              <Text
+                                style={[
+                                  styles.tagText,
+                                  selected && styles.tagTextSelected,
+                                ]}
+                              >
+                                {tag}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                      <TextInput
+                        value={draft.feedback}
+                        onChangeText={(value) => update({ feedback: value })}
+                        placeholder="Add a comment (optional)"
+                        placeholderTextColor="#9a9a9a"
+                        multiline
+                        maxLength={maxFeedbackLength}
+                        style={styles.input}
+                      />
+                    </Animated.View>
                   )}
+
+                  {!draft.score && (
+                    <Text style={styles.reviewHint}>
+                      No stars? This driver is skipped. You can rate them later.
+                    </Text>
+                  )}
+                </Animated.View>
+              </ScrollView>
+              <View style={[styles.footer, styles.nav]}>
+                {index > 0 && (
                   <Pressable
                     accessibilityRole="button"
-                    onPress={() => go(index + 1)}
+                    onPress={() => go(index - 1)}
                     style={({ pressed }) => [
                       styles.button,
-                      styles.primary,
+                      styles.secondary,
                       styles.navButton,
-                      { marginTop: 0 },
                       pressed && styles.pressed,
                     ]}
                   >
-                    <Text style={styles.primaryText}>
-                      {index + 1 < queue.length ? "NEXT DRIVER" : "REVIEW"}
-                    </Text>
+                    <Text style={styles.secondaryText}>BACK</Text>
                   </Pressable>
-                </View>
-                {!draft.score && (
-                  <Text style={styles.reviewHint}>
-                    No stars? This driver is skipped. You can rate them later.
-                  </Text>
                 )}
-              </Animated.View>
-            </ScrollView>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => go(index + 1)}
+                  style={({ pressed }) => [
+                    styles.button,
+                    styles.primary,
+                    styles.navButton,
+                    { marginTop: 0 },
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Text style={styles.primaryText}>
+                    {index + 1 < queue.length ? "NEXT DRIVER" : "REVIEW"}
+                  </Text>
+                </Pressable>
+              </View>
+            </>
           )}
         </View>
       </KeyboardAvoidingView>
@@ -450,7 +464,7 @@ export function RateDriversModal({
 type Draft = { score: number; tags: string[]; feedback: string };
 
 const styles = StyleSheet.create({
-  nav: { flexDirection: "row", gap: 10, marginTop: 4 },
+  nav: { flexDirection: "row", gap: 10 },
   navButton: { flex: 1 },
   secondary: { borderWidth: 1.5, borderColor: palette.brand },
   secondaryText: {
@@ -536,7 +550,16 @@ const styles = StyleSheet.create({
   },
   progressDone: { backgroundColor: palette.success },
   progressCurrent: { backgroundColor: palette.brand },
-  body: { gap: 12, padding: 18 },
+  scroll: { flexGrow: 0, flexShrink: 1 },
+  body: { gap: 12, padding: 18, paddingBottom: 20 },
+  footer: {
+    paddingHorizontal: 18,
+    paddingTop: 12,
+    paddingBottom: 18,
+    borderTopWidth: 1,
+    borderTopColor: "#e5eaf3",
+    backgroundColor: "#ffffff",
+  },
   step: { gap: 12 },
   driver: { flexDirection: "row", alignItems: "center", gap: 12 },
   avatar: {

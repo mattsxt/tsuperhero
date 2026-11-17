@@ -16,6 +16,7 @@ import { StarRow } from "@/components/star-rating";
 import { usePolling } from "@/hooks/use-polling";
 import { ErrorAlert } from "@/components/error-alert";
 import { SkeletonCards } from "@/components/skeleton";
+import { initialsOf } from "@/utils/initials";
 
 const { brandBlue, mutedText, cardEdgeBlue } = homeColors;
 const starGold = "#f5b301";
@@ -143,7 +144,7 @@ function ReviewCard({ review }: { review: Review }) {
             />
           ) : (
             <Text style={styles.avatarText}>
-              {name.charAt(0).toUpperCase()}
+              {initialsOf(name)}
             </Text>
           )}
         </View>

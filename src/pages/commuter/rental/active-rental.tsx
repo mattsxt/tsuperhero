@@ -23,6 +23,7 @@ import { ConfirmModal } from "@/components/confirm-modal";
 import { ErrorAlert } from "@/components/error-alert";
 import { LoadingLogo } from "@/components/LoadingLogo";
 import { palette } from "@/constants/colors";
+import { initialsOf } from "@/utils/initials";
 
 const panelText = "#d6e2f5";
 
@@ -170,7 +171,7 @@ export function ActiveRental({
                   <LoadingLogo color={palette.cyan} size={18} label="Waiting" />
                 ) : (
                   <Text style={styles.driverInitial}>
-                    {(unit.driverName ?? "D").charAt(0).toUpperCase()}
+                    {initialsOf(unit.driverName, "D")}
                   </Text>
                 )}
               </View>

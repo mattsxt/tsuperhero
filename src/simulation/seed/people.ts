@@ -1,6 +1,6 @@
 import type { Row } from "@/simulation/db";
-import { avatar, avatars } from "@/simulation/seed/avatars";
 import { routes } from "@/simulation/seed/geography";
+import { roadPath } from "@/simulation/seed/roads";
 import { pathLengthMeters, pointAtAlong, sliceAlong, type LatLngPair } from "@/utils/geo";
 
 export const sid = (ns: number, n: number): string =>
@@ -27,7 +27,6 @@ export type Person = {
   phone: string;
   birth: string;
   kind: "commuter" | "driver" | "operator";
-  avatar: string;
   n: number;
 };
 
@@ -46,21 +45,20 @@ const extra = (
   phone: `+63${String(n).padStart(10, "0")}`,
   birth,
   kind,
-  avatar: avatar(`${first[0]}${last[0]}`, n),
   n,
 });
 
 export const people: Person[] = [
-  { key: "juan", first: "Juan", last: "Dela Cruz", email: "juan@demo.tsuperhero", phone: "+630000000001", birth: "1996-03-14", kind: "commuter", avatar: avatars.juan, n: 1 },
-  { key: "ana", first: "Ana", last: "Reyes", email: "ana@demo.tsuperhero", phone: "+630000000002", birth: "1998-07-02", kind: "commuter", avatar: avatars.ana, n: 2 },
-  { key: "nena", first: "Nena", last: "Garcia", email: "nena@demo.tsuperhero", phone: "+630000000003", birth: "1992-11-21", kind: "commuter", avatar: avatars.nena, n: 3 },
-  { key: "bong", first: "Bong", last: "Pascual", email: "bong@demo.tsuperhero", phone: "+630000000004", birth: "1990-01-09", kind: "commuter", avatar: avatars.bong, n: 4 },
-  { key: "mario", first: "Mario", last: "Santos", email: "mario@demo.tsuperhero", phone: "+630000000011", birth: "1984-05-30", kind: "driver", avatar: avatars.mario, n: 11 },
-  { key: "pedro", first: "Pedro", last: "Cruz", email: "pedro@demo.tsuperhero", phone: "+630000000012", birth: "1988-09-17", kind: "driver", avatar: avatars.pedro, n: 12 },
-  { key: "carla", first: "Carla", last: "Lopez", email: "carla@demo.tsuperhero", phone: "+630000000013", birth: "1987-02-25", kind: "driver", avatar: avatars.carla, n: 13 },
-  { key: "luis", first: "Luis", last: "Mendoza", email: "luis@demo.tsuperhero", phone: "+630000000014", birth: "1985-12-05", kind: "driver", avatar: avatars.luis, n: 14 },
-  { key: "rosa", first: "Rosa", last: "Bautista", email: "rosa@demo.tsuperhero", phone: "+630000000015", birth: "1991-06-18", kind: "driver", avatar: avatars.rosa, n: 15 },
-  { key: "tomas", first: "Tomas", last: "Villanueva", email: "tomas@demo.tsuperhero", phone: "+630000000016", birth: "1983-08-08", kind: "driver", avatar: avatars.tomas, n: 16 },
+  { key: "juan", first: "Juan", last: "Dela Cruz", email: "juan@demo.tsuperhero", phone: "+630000000001", birth: "1996-03-14", kind: "commuter", n: 1 },
+  { key: "ana", first: "Ana", last: "Reyes", email: "ana@demo.tsuperhero", phone: "+630000000002", birth: "1998-07-02", kind: "commuter", n: 2 },
+  { key: "nena", first: "Nena", last: "Garcia", email: "nena@demo.tsuperhero", phone: "+630000000003", birth: "1992-11-21", kind: "commuter", n: 3 },
+  { key: "bong", first: "Bong", last: "Pascual", email: "bong@demo.tsuperhero", phone: "+630000000004", birth: "1990-01-09", kind: "commuter", n: 4 },
+  { key: "mario", first: "Mario", last: "Santos", email: "mario@demo.tsuperhero", phone: "+630000000011", birth: "1984-05-30", kind: "driver", n: 11 },
+  { key: "pedro", first: "Pedro", last: "Cruz", email: "pedro@demo.tsuperhero", phone: "+630000000012", birth: "1988-09-17", kind: "driver", n: 12 },
+  { key: "carla", first: "Carla", last: "Lopez", email: "carla@demo.tsuperhero", phone: "+630000000013", birth: "1987-02-25", kind: "driver", n: 13 },
+  { key: "luis", first: "Luis", last: "Mendoza", email: "luis@demo.tsuperhero", phone: "+630000000014", birth: "1985-12-05", kind: "driver", n: 14 },
+  { key: "rosa", first: "Rosa", last: "Bautista", email: "rosa@demo.tsuperhero", phone: "+630000000015", birth: "1991-06-18", kind: "driver", n: 15 },
+  { key: "tomas", first: "Tomas", last: "Villanueva", email: "tomas@demo.tsuperhero", phone: "+630000000016", birth: "1983-08-08", kind: "driver", n: 16 },
   extra("liza", "Liza", "Ramos", "commuter", 31, "1999-04-11"),
   extra("jun", "Jun", "Aquino", "commuter", 32, "1994-10-03"),
   extra("maricel", "Maricel", "Flores", "commuter", 33, "2001-01-27"),
@@ -71,6 +69,16 @@ export const people: Person[] = [
   extra("rico", "Rico", "Domingo", "commuter", 38, "2000-08-23"),
   extra("grace", "Grace", "Villareal", "commuter", 39, "1995-05-30"),
   extra("allan", "Allan", "Torres", "commuter", 40, "1989-11-12"),
+  extra("marco", "Marco", "Villanueva", "commuter", 61, "1998-02-03"),
+  extra("rica", "Rica", "Mendoza", "commuter", 62, "2002-07-16"),
+  extra("dennis", "Dennis", "Ocampo", "commuter", 63, "1991-09-24"),
+  extra("bea", "Bea", "Lacson", "commuter", 64, "2000-12-08"),
+  extra("vince", "Vince", "Panganiban", "commuter", 65, "1996-05-12"),
+  extra("ella", "Ella", "Marquez", "commuter", 66, "2004-03-29"),
+  extra("carlo", "Carlo", "De Leon", "commuter", 67, "1993-08-17"),
+  extra("tess", "Tess", "Abad", "commuter", 68, "1972-10-05"),
+  extra("migs", "Migs", "Alcantara", "commuter", 69, "1999-06-21"),
+  extra("lorna", "Lorna", "Samonte", "commuter", 70, "1965-04-14"),
   extra("ben", "Ben", "Ocampo", "driver", 41, "1981-02-14"),
   extra("dante", "Dante", "Salazar", "driver", 42, "1976-07-21"),
   extra("edgar", "Edgar", "Manalo", "driver", 43, "1983-03-09"),
@@ -84,7 +92,7 @@ export const people: Person[] = [
   extra("manny", "Manny", "Aguilar", "driver", 51, "1980-05-06"),
   extra("noel", "Noel", "Fajardo", "driver", 52, "1992-02-19"),
   extra("oscar", "Oscar", "Rivera", "driver", 53, "1984-11-26"),
-  { key: "operator", first: "Bicol Demo Transport", last: "Cooperative", email: "operator@demo.tsuperhero", phone: "+630000000021", birth: "1980-01-01", kind: "operator", avatar: avatars.operator, n: 21 },
+  { key: "operator", first: "Bicol Demo Transport", last: "Cooperative", email: "operator@demo.tsuperhero", phone: "+630000000021", birth: "1980-01-01", kind: "operator", n: 21 },
 ];
 
 export const userId = (key: string): string => sid(U, people.find((p) => p.key === key)!.n);
@@ -109,7 +117,7 @@ type VehicleSpec = {
 };
 
 const routePathOf = (code: string): LatLngPair[] =>
-  (routes.find((r) => r.route_code === code)?.path as LatLngPair[] | null) ?? [];
+  roadPath(routes.find((r) => r.route_code === code)?.route_id) ?? [];
 
 const along = (code: string, fraction: number) => {
   const path = routePathOf(code);
@@ -165,7 +173,7 @@ const tricycle = (
 
 export const vehicleSpecs: VehicleSpec[] = [
   { key: "mario", n: 1, plate: "DEMO 101", type: "Jeepney", seats: 24, route: "DEL-CON-MAG-CEN", driver: "mario", status: "idle", modern: true, lat: 13.62295, lng: 123.18592 },
-  { key: "pedro", n: 2, plate: "TRC 202", type: "Tricycle", seats: 4, route: "NAGA-CITY", driver: "pedro", status: "idle", modern: false, lat: 13.62295, lng: 123.18465 },
+  { key: "pedro", n: 2, plate: "TRC 202", type: "Tricycle", seats: 4, route: "NAGA-CITY", driver: "pedro", status: "idle", modern: false, lat: 13.62295, lng: 123.18465, circuit: { route: "DEL-CON-MAG-CEN", from: 0, to: 0.6 } },
   { key: "bg1", n: 3, plate: "DEMO 103", type: "Jeepney", seats: 22, route: "DEL-CON-PAN-CEN", driver: "carla", status: "on-trip", modern: true, lat: 13.62142, lng: 123.19846 },
   { key: "bg2", n: 4, plate: "DEMO 104", type: "Jeepney", seats: 20, route: "DIVAB-MAG-CEN", driver: "luis", status: "on-trip", modern: false, lat: 13.61781, lng: 123.19738 },
   { key: "bg3", n: 5, plate: "DEMO 105", type: "Van", seats: 14, route: "SFE-FRA-CEN", driver: "rosa", status: "on-trip", modern: true, lat: 13.63639, lng: 123.19986 },
@@ -184,6 +192,8 @@ export const vehicleSpecs: VehicleSpec[] = [
   tricycle("t18", 18, "noel", "SFE-FRA-CEN", 0.5, 1, 0),
   tricycle("t19", 19, "oscar", "DEL-CON-MAG-CEN", 0.7, 1, 2),
 ];
+
+const lightlyLoaded = new Set(["j10", "j12", "j14", "t16", "t18"]);
 
 export const vehicleCircuit = (id: unknown): LatLngPair[] | null => {
   const spec = vehicleSpecs.find((v) => vehicleId(v.key) === id);
@@ -211,7 +221,7 @@ export const buildPeople = (now: Date) => {
     last_name: p.last,
     contact_number: p.phone,
     birth_date: p.birth,
-    profile_picture: p.avatar,
+    profile_picture: null,
   }));
   const commuter: Row[] = people
     .filter((p) => p.kind === "commuter")
@@ -244,6 +254,7 @@ export const buildPeople = (now: Date) => {
     cooperative_id: COOPERATIVE_ID,
     route_id: routeByCode(v.route),
     is_full: (v.load ?? 0) >= v.seats,
+    occupancy_band: lightlyLoaded.has(v.key) ? [0, 0.45] : null,
   }));
   const driver: Row[] = vehicleSpecs.map((v) => ({
     driver_id: driverId(v.driver),

@@ -1,6 +1,10 @@
+import { pickupArrivalMeters, pickupRequestRangeMeters } from "@/constants/pickup-range";
 import { currentUserId } from "@/simulation/auth";
+import { companionBusyTrip, resetCompanionBusy } from "@/simulation/companion-busy";
 import { db, type Row } from "@/simulation/db";
 import { notify } from "@/simulation/rpc/notify";
+import { roadGeometry } from "@/simulation/seed/road-geometry.generated";
+import { roadPath } from "@/simulation/seed/roads";
 import {
   distanceToPath,
   getDistanceMeters,
@@ -232,17 +236,16 @@ export const setRequestStatus = (requestId: string, status: string): void => {
     );
 };
 
-const pickupArrivalRadius = (requestId: unknown): number => {
-  const area = db.tables.waiting_area.find(
-    (a) => a.area_id === pickupOf(requestId)?.waiting_area_id,
-  );
-  return (area ? num(area.request_radius_m) : 60) + 15;
-};
+const pickupArrivalRadius = (_requestId: unknown): number => pickupArrivalMeters;
 
 const pathsOf = (route: Row): LatLngPair[][] => {
   const out: LatLngPair[][] = [];
+  const road = roadPath(route.route_id);
+  if (road) out.push(road);
   if (Array.isArray(route.path) && route.path.length)
     out.push(route.path as LatLngPair[]);
+  const baked = roadGeometry[String(route.route_id)]?.alternatives;
+  if (baked?.length) out.push(...baked);
   const alt = route.alternative_paths;
   if (Array.isArray(alt) && alt.length) {
     if (Array.isArray(alt[0]) && Array.isArray((alt[0] as unknown[])[0]))
@@ -311,7 +314,8 @@ export const tryBroadcastPickup = (requestId: string): string | null => {
       .sort((x, y) => timeOf(y.departure_time) - timeOf(x.departure_time))[0];
     if (pickup?.route_id && pickup.route_id !== trip?.route_id) continue;
     if (
-      meters(lat, lng, num(loc.records_latitude), num(loc.records_longitude)) > 300
+      meters(lat, lng, num(loc.records_latitude), num(loc.records_longitude)) >
+      pickupRequestRangeMeters
     )
       continue;
     for (const d of db.tables.driver.filter((x) => x.vehicle_id === vehicle.vehicle_id)) {
@@ -365,6 +369,7 @@ const savePickupDraft = (a: any) => {
     fail("A tricycle fits up to 4 passengers.");
   const commuterId = myCommuterId();
   if (!commuterId) fail("Your commuter account could not be found.", "42501");
+  resetCompanionBusy(commuterId);
 
   if (
     db.tables.request.some(
@@ -491,7 +496,7 @@ const setPickupRoute = (a: any) => {
     !routeFitsPoints(
       a.p_route_id,
       [a.p_pickup_lat, a.p_pickup_lng],
-      [a.p_dropoff_lat, a.p_dropoff_lng],
+      [a.p_pickup_lat, a.p_pickup_lng],
       25,
     )
   )
@@ -525,7 +530,7 @@ const publishPickupDraft = (a: any) => {
     !routeFitsPoints(
       pickup.route_id,
       [num(pickup.pickup_lat), num(pickup.pickup_lng)],
-      [num(pickup.dropoff_lat), num(pickup.dropoff_lng)],
+      [num(pickup.pickup_lat), num(pickup.pickup_lng)],
       25,
     )
   )
@@ -580,12 +585,47 @@ const getMyPickupDraft = () => {
     });
 };
 
+const LOCATION_FRESH_MS = 2 * 60_000;
+
+const freshPoint = (lat: unknown, lng: unknown, at: unknown) =>
+  at && timeOf(at) > db.now().getTime() - LOCATION_FRESH_MS && lat != null && lng != null
+    ? { latitude: num(lat), longitude: num(lng) }
+    : { latitude: null, longitude: null };
+
+const shareRideLocation = (a: any) => {
+  const lat = num(a.p_latitude);
+  const lng = num(a.p_longitude);
+  if (!(lat >= -90 && lat <= 90) || !(lng >= -180 && lng <= 180)) fail("Invalid coordinates.");
+  const commuterId = myCommuterId();
+  const request = requestOf(a.p_request_id);
+  if (!commuterId || !request || !livePickupStatus(request, open)) return null;
+  shareRideLocationEffect(request, commuterId, lat, lng);
+  return null;
+};
+
+export const shareRideLocationEffect = (
+  request: Row,
+  commuterId: unknown,
+  lat: number,
+  lng: number,
+): void => {
+  const at = iso();
+  if (request.commuter_id === commuterId) {
+    Object.assign(request, { owner_latitude: lat, owner_longitude: lng, owner_location_at: at });
+    return;
+  }
+  const companion = acceptedCompanion(request.request_id, commuterId);
+  if (companion)
+    Object.assign(companion, { last_latitude: lat, last_longitude: lng, location_at: at });
+};
+
 const getMyPickupDriver = () => {
   const commuterId = myCommuterId();
   const request = db.tables.request
     .filter(
       (r) =>
-        r.commuter_id === commuterId &&
+        (r.commuter_id === commuterId ||
+          !!acceptedCompanion(r.request_id, commuterId)) &&
         r.request_type === "Pickup" &&
         r.request_status === "accepted" &&
         vehicleOf(pickupOf(r.request_id)?.vehicle_id),
@@ -815,6 +855,9 @@ const getPickupCompanionStatuses = (a: any) => {
               profile_picture: p.profile_picture ?? null,
               companion_status: c.companion_status,
               arrived: !!c.arrived_at,
+              ...(c.companion_status === "accepted"
+                ? freshPoint(c.last_latitude, c.last_longitude, c.location_at)
+                : { latitude: null, longitude: null }),
             },
           ]
         : [];
@@ -885,12 +928,12 @@ const respondToShareInvite = (a: any) => {
     fail("This share a ride request was not found.", "42501");
   if (request!.request_type !== "Pickup" || request!.request_status !== "pending")
     fail("This shared ride has already ended.");
-  const ownerId = commuterUserId(request!.commuter_id);
   const name = nameOf(uid(), "A rider");
-  const locationChanged = companion!.location_changed === true;
   const pickup = pickupOf(a.p_request_id);
   let passengers = pickup?.number_of_passengers as number | undefined;
   if (a.p_accept) {
+    if (companionBusyTrip(commuterId) === "rental")
+      fail("Cancel your active rental before joining a shared ride.");
     if (
       db.tables.request.some(
         (r) =>
@@ -912,26 +955,35 @@ const respondToShareInvite = (a: any) => {
       fail("You already joined another shared ride. Leave it before joining this one.");
     acceptCompanionInvite(companion!, name);
   } else {
-    patch("pickup_companion", companion!, {
-      companion_status: "rejected",
-      location_changed: false,
-      responded_at: iso(),
-    });
-    if (pickup) {
-      passengers = Math.max(1, num(pickup.number_of_passengers) - 1);
-      patch("pickup", pickup, { number_of_passengers: passengers });
-    }
-    notify(
-      ownerId,
-      "share_ride_declined",
-      "Share a ride declined",
-      locationChanged
-        ? `${name} declined the new pickup location and left the shared ride.`
-        : `${name} declined your share a ride request.`,
-      { request_id: a.p_request_id },
-    );
+    passengers = declineCompanionInvite(companion!, name);
   }
   return passengers ?? 1;
+};
+
+export const declineCompanionInvite = (companion: Row, name: string): number => {
+  const request = requestOf(companion.request_id);
+  const locationChanged = companion.location_changed === true;
+  const pickup = pickupOf(companion.request_id);
+  let passengers = num(pickup?.number_of_passengers ?? 1);
+  patch("pickup_companion", companion, {
+    companion_status: "rejected",
+    location_changed: false,
+    responded_at: iso(),
+  });
+  if (pickup) {
+    passengers = Math.max(1, num(pickup.number_of_passengers) - 1);
+    patch("pickup", pickup, { number_of_passengers: passengers });
+  }
+  notify(
+    commuterUserId(request?.commuter_id),
+    "share_ride_declined",
+    "Share a ride declined",
+    locationChanged
+      ? `${name} declined the new pickup location and left the shared ride.`
+      : `${name} declined your share a ride request.`,
+    { request_id: companion.request_id },
+  );
+  return passengers;
 };
 
 const getMySharedRide = () => {
@@ -961,6 +1013,10 @@ const getMySharedRide = () => {
             plate_number: vehicleOf(p.vehicle_id)?.plate_number ?? null,
             owner_arrived: !!r.arrived_at,
             me_arrived: !!c.arrived_at,
+            route_id: p.route_id ?? null,
+            dropoff_name: p.dropoff_name ?? null,
+            dropoff_lat: p.dropoff_lat ?? null,
+            dropoff_lng: p.dropoff_lng ?? null,
           },
         },
       ];
@@ -1042,6 +1098,7 @@ const getRideParty = (a: any) => {
       arrived: !!request.owner_present_at,
       sort: 0,
       added: 0,
+      point: freshPoint(request.owner_latitude, request.owner_longitude, request.owner_location_at),
     },
     ...companionsOf(a.p_request_id)
       .filter((c) => c.companion_status === "accepted")
@@ -1051,6 +1108,7 @@ const getRideParty = (a: any) => {
         arrived: !!c.arrived_at,
         sort: 1,
         added: timeOf(c.added_at),
+        point: freshPoint(c.last_latitude, c.last_longitude, c.location_at),
       })),
   ];
   return members
@@ -1066,6 +1124,7 @@ const getRideParty = (a: any) => {
               profile_picture: p.profile_picture ?? null,
               is_owner: m.is_owner,
               arrived: m.arrived,
+              ...m.point,
             },
           ]
         : [];
@@ -1074,7 +1133,8 @@ const getRideParty = (a: any) => {
 
 const searchAvailableCommuters = (a: any) => {
   const query = String(a.p_query ?? "").trim();
-  if (!uid() || query.length < 2) return [];
+  const listAll = a.p_list_all === true;
+  if (!uid() || (!listAll && query.length < 2)) return [];
   const lower = query.toLowerCase();
   return db.tables.profile
     .filter((p) => {
@@ -1083,7 +1143,7 @@ const searchAvailableCommuters = (a: any) => {
         db.tables.user.find((u) => u.user_id === p.user_id)?.user_email ?? "",
       ).toLowerCase();
       const name = [p.first_name, p.last_name].filter(Boolean).join(" ").toLowerCase();
-      if (!name.includes(lower) && email !== lower) return false;
+      if (query && !name.includes(lower) && email !== lower) return false;
       const commuter = commuterOf(p.user_id);
       if (!commuter) return true;
       const busyOwn = db.tables.request.some(
@@ -1102,7 +1162,7 @@ const searchAvailableCommuters = (a: any) => {
         String(x.first_name).localeCompare(String(y.first_name)) ||
         String(x.last_name).localeCompare(String(y.last_name)),
     )
-    .slice(0, 10)
+    .slice(0, listAll ? 50 : 10)
     .map((p) => ({
       user_id: p.user_id,
       first_name: p.first_name,
@@ -1230,6 +1290,7 @@ export const pickupHandlers: Record<string, (args: any) => unknown> = {
   leave_shared_ride: leaveSharedRide,
   update_companion_presence: updateCompanionPresence,
   get_ride_party: getRideParty,
+  share_ride_location: shareRideLocation,
   search_available_commuters: searchAvailableCommuters,
   get_my_bookings: getMyBookings,
 };

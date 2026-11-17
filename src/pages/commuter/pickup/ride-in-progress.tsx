@@ -161,7 +161,6 @@ export function RideInProgress({
     return () => {
       active = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roadKey]);
 
   const vehicleLive =
@@ -177,7 +176,6 @@ export function RideInProgress({
     return route
       ? choosePathFor([route.waypoints, ...route.alternativePaths], pickup, dropoff)
       : null;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roads, roadKey, routeId, pickup.lat, pickup.lng, dropoff?.lat, dropoff?.lng]);
 
   const stats = useMemo(
@@ -187,7 +185,6 @@ export function RideInProgress({
         : path
           ? rideStats(path, pickup, dropoff, position)
           : straightRideStats(pickup, dropoff, position),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [path, pickup.lat, pickup.lng, dropoff?.lat, dropoff?.lng, position?.lat, position?.lng],
   );
 
@@ -214,7 +211,6 @@ export function RideInProgress({
     } else {
       arrivalReadings.current = 0;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [now, position?.lat, position?.lng, stats, isCompanion]);
 
   const mapState = useMemo<TransitMapState>(() => {

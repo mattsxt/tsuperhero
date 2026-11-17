@@ -45,7 +45,13 @@ const mapHtml = `<!DOCTYPE html>
     padding: 24px; box-sizing: border-box; text-align: center;
     font: 13px sans-serif; color: #6b6b6b;
   }
-  .pin-wrap { padding-bottom: 5px; cursor: pointer; }
+  .pin-wrap { position: relative; padding-bottom: 5px; cursor: pointer; }
+  .pin-wrap.generated::after {
+    content: ""; position: absolute; top: -3px; right: -3px;
+    width: 11px; height: 11px; border-radius: 50%;
+    background: #92400e; border: 1.5px solid #ffffff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  }
   .pin {
     width: 26px; height: 26px; box-sizing: border-box;
     display: flex; align-items: center; justify-content: center;
@@ -55,7 +61,7 @@ const mapHtml = `<!DOCTYPE html>
     transition: transform 250ms ease-in-out, border-color 250ms ease-in-out;
   }
   .pin img { width: 14px; height: 14px; transform: rotate(45deg); filter: brightness(0); }
-  .pin.selected { border-color: #1e9e45; border-width: 3px; transform: rotate(-45deg) scale(1.2); }
+  .pin.selected, .pin.mine { border-color: #1e9e45; border-width: 3px; transform: rotate(-45deg) scale(1.2); }
   .pin-wrap, .waiting { transition: opacity 220ms ease-in-out; }
   body.pin-focused .pin-wrap:not(.focused),
   body.pin-focused .waiting:not(.open) { opacity: 0.3; }
@@ -179,6 +185,23 @@ const mapHtml = `<!DOCTYPE html>
     if (source) source.setData({ type: "FeatureCollection", features: lines.map(line) });
   }
 
+  function setRange(range) {
+    var source = map.getSource("range");
+    if (!source) return;
+    if (!range || !(range.radiusMeters > 0)) {
+      source.setData(EMPTY);
+      return;
+    }
+    var latRadius = range.radiusMeters / 111320;
+    var lngRadius = range.radiusMeters / (111320 * Math.max(Math.cos(range.lat * Math.PI / 180), 0.01));
+    var ring = [];
+    for (var i = 0; i <= 64; i++) {
+      var angle = (i / 64) * 2 * Math.PI;
+      ring.push([range.lng + lngRadius * Math.cos(angle), range.lat + latRadius * Math.sin(angle)]);
+    }
+    source.setData({ type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [ring] } });
+  }
+
   function markerAt(content, lat, lng, zIndex, anchor) {
     content.style.zIndex = String(zIndex || 0);
     return new mapboxgl.Marker({ element: content, anchor: anchor || "bottom" }).setLngLat([lng, lat]).addTo(map);
@@ -186,6 +209,7 @@ const mapHtml = `<!DOCTYPE html>
 
   function applyState(state) {
     if (!map) return;
+    setRange(state.range);
     reportCenter = !!state.reportCenter;
     var routeKey = state.keepRoute
       ? lastRouteId
@@ -387,12 +411,14 @@ const mapHtml = `<!DOCTYPE html>
           event.stopPropagation();
           send({ type: "vehicle", id: vehicleId });
         });
-        entry = { marker: marker, position: position, frame: null, pin: pin };
+        entry = { marker: marker, position: position, frame: null, pin: pin, wrap: content };
         vehicleMarkers[vehicle.id] = entry;
       } else if (entry.position.lat !== vehicle.lat || entry.position.lng !== vehicle.lng) {
         animateTo(entry, vehicle.lat, vehicle.lng);
       }
       entry.pin.style.opacity = vehicle.stale ? "0.35" : "1";
+      entry.wrap.classList.toggle("generated", !!vehicle.generated);
+      entry.pin.classList.toggle("mine", !!vehicle.highlight);
       entry.pin.style.backgroundColor = vehicle.isFull
         ? OCCUPANCY_COLORS.Full
         : OCCUPANCY_COLORS[vehicle.occupancy] || "#ffffff";
@@ -426,6 +452,15 @@ const mapHtml = `<!DOCTYPE html>
       }
     });
     map.on("load", function () {
+      map.addSource("range", { type: "geojson", data: EMPTY });
+      map.addLayer({
+        id: "range-fill", type: "fill", source: "range",
+        paint: { "fill-color": "#4f8ef7", "fill-opacity": 0.16 }
+      });
+      map.addLayer({
+        id: "range-edge", type: "line", source: "range",
+        paint: { "line-color": "#2563eb", "line-width": 2, "line-opacity": 0.55, "line-dasharray": [2, 1.5] }
+      });
       map.addSource("alt", { type: "geojson", data: EMPTY });
       map.addSource("route", { type: "geojson", data: EMPTY });
       map.addSource("pickup-line", { type: "geojson", data: EMPTY });

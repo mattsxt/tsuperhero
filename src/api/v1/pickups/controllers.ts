@@ -12,6 +12,7 @@ import type {
   BookingRow,
   CompanionStatus,
   PickupCompanionStatusRow,
+  RiderLocationColumns,
   PickupDraftRow,
   PickupDriverRow,
   PickupRequestRow,
@@ -40,6 +41,7 @@ import {
 } from "@/api/v1/transit-routes/controllers";
 
 import type { Coordinates, RouteMatch } from "@/utils/geo";
+import { initials } from "@/utils/initials";
 
 export type PickupVehicle = "jeep" | "tricy";
 
@@ -746,7 +748,13 @@ export type Rider = {
   inviteStatus?: CompanionStatus;
   arrived?: boolean;
   isOwner?: boolean;
+  location?: { lat: number; lng: number } | null;
 };
+
+const riderLocation = (row: RiderLocationColumns) =>
+  typeof row.latitude === "number" && typeof row.longitude === "number"
+    ? { lat: row.latitude, lng: row.longitude }
+    : null;
 
 const toRider = (row: RiderRow): Rider => {
   const first = row.first_name?.trim() ?? "";
@@ -754,7 +762,7 @@ const toRider = (row: RiderRow): Rider => {
   return {
     userId: row.user_id,
     name: [first, last].filter(Boolean).join(" ") || "Commuter",
-    initials: `${first.charAt(0)}${last.charAt(0)}`.toUpperCase() || "?",
+    initials: initials(first, last),
     picture: row.profile_picture
       ? profileRoutes.getPictureUrl(row.profile_picture)
       : null,
@@ -802,6 +810,7 @@ export function loadPickupCompanionStatuses(
       ...toRider(row),
       inviteStatus: row.companion_status,
       arrived: !!row.arrived,
+      location: riderLocation(row),
     }));
   });
 }
@@ -838,6 +847,14 @@ export function searchRiders(query: string): Promise<Result<Rider[]>> {
   return attempt(async () => {
     const rows: RiderRow[] =
       (await unwrap(pickupRoutes.searchCommuters(query.trim()))) ?? [];
+    return rows.map(toRider);
+  });
+}
+
+export function listAvailableRiders(): Promise<Result<Rider[]>> {
+  return attempt(async () => {
+    const rows: RiderRow[] =
+      (await unwrap(pickupRoutes.listAvailableCommuters())) ?? [];
     return rows.map(toRider);
   });
 }
@@ -896,6 +913,8 @@ export type SharedRide = {
   plateNumber: string | null;
   ownerArrived: boolean;
   meArrived: boolean;
+  dropoff: DropoffPoint | null;
+  routeId: string | null;
 };
 
 export async function loadMySharedRide(): Promise<Result<SharedRide | null>> {
@@ -934,6 +953,15 @@ function fetchMySharedRide(): Promise<Result<SharedRide | null>> {
       plateNumber: row.plate_number,
       ownerArrived: row.owner_arrived ?? true,
       meArrived: !!row.me_arrived,
+      dropoff:
+        row.dropoff_lat != null && row.dropoff_lng != null
+          ? {
+              name: row.dropoff_name ?? "",
+              lat: row.dropoff_lat,
+              lng: row.dropoff_lng,
+            }
+          : null,
+      routeId: row.route_id ?? null,
     };
   });
 }
@@ -948,6 +976,18 @@ export function leaveSharedRide(requestId: string): Promise<Result<void>> {
     await unwrap(pickupRoutes.leaveSharedRide(requestId));
     if (knownSharedRide?.requestId === requestId) knownSharedRide = null;
   });
+}
+
+export async function shareRideLocation(
+  requestId: string,
+  location: { lat: number; lng: number },
+): Promise<void> {
+  await pickupRoutes
+    .shareRideLocation(requestId, location.lat, location.lng)
+    .then(
+      () => undefined,
+      () => undefined,
+    );
 }
 
 export function updateCompanionPresence(
@@ -968,12 +1008,14 @@ export function updateCompanionPresence(
 
 export function loadRideParty(requestId: string): Promise<Result<Rider[]>> {
   return attempt(async () => {
-    const rows: (RiderRow & { is_owner: boolean; arrived: boolean })[] =
+    const rows: (RiderRow &
+      RiderLocationColumns & { is_owner: boolean; arrived: boolean })[] =
       (await unwrap(pickupRoutes.findRideParty(requestId))) ?? [];
     return rows.map((row) => ({
       ...toRider(row),
       arrived: row.arrived,
       isOwner: row.is_owner,
+      location: riderLocation(row),
     }));
   });
 }

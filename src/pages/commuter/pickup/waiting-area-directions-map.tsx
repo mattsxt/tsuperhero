@@ -1,3 +1,4 @@
+import { pickupArrivalMeters } from "@/constants/pickup-range";
 import LocateFixed from "lucide-react-native/icons/locate-fixed";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet } from "react-native";
@@ -18,21 +19,29 @@ type Coordinates = { lat: number; lng: number };
 const rerouteMeters = 35;
 const rerouteMs = 20_000;
 
-export const waitingAreaArrivalMeters = 60;
+export const waitingAreaArrivalMeters = pickupArrivalMeters;
 
 export function WaitingAreaDirectionsMap({
   area,
   onLocationChange,
   onLocationError,
+  onWalkingRoute,
   padTop = 0,
   padBottom = 0,
   showRouting = true,
   locateTop,
+  vehicles,
+  pins,
+  driverLine,
 }: {
   locateTop?: number;
+  vehicles?: TransitMapState["vehicles"];
+  pins?: TransitMapState["pickups"];
+  driverLine?: LatLng[] | null;
   area: WaitingArea;
   onLocationChange?: (location: Coordinates | null) => void;
   onLocationError?: (message: string | null) => void;
+  onWalkingRoute?: (path: LatLng[] | null) => void;
   padTop?: number;
   padBottom?: number;
   showRouting?: boolean;
@@ -95,12 +104,15 @@ export function WaitingAreaDirectionsMap({
     const to: LatLng = [area.lat, area.lng];
     let active = true;
     loadWalkingRoute(from, to).then((result) => {
-      if (active) setRoutedPath(result.ok ? result.data.path : null);
+      if (!active) return;
+      const path = result.ok ? result.data.path : null;
+      setRoutedPath(path);
+      onWalkingRoute?.(path);
     });
     return () => {
       active = false;
     };
-  }, [location, area.lat, area.lng, showRouting]);
+  }, [location, area.lat, area.lng, showRouting, onWalkingRoute]);
 
   useEffect(() => {
     onLocationChange?.(location);
@@ -127,7 +139,10 @@ export function WaitingAreaDirectionsMap({
         },
       ],
       showStops: true,
-      vehicles: [],
+      range: { lat: area.lat, lng: area.lng, radiusMeters: pickupArrivalMeters },
+      vehicles: vehicles ?? [],
+      pickups: pins ?? [],
+      extraLines: driverLine && driverLine.length > 1 ? [driverLine] : [],
       userLocation: location,
       pickupLine: showRouting ? walkingPath : [],
       pickupLineColor: waitingAreaPinColors[area.type],
@@ -155,6 +170,9 @@ export function WaitingAreaDirectionsMap({
     padBottom,
     showRouting,
     recenter,
+    vehicles,
+    pins,
+    driverLine,
   ]);
 
   return (

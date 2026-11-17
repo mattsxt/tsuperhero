@@ -48,7 +48,6 @@ function useWalkingLine(from: Coordinates | null, to: Coordinates | null) {
     return () => {
       active = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
   const routedPath = routed?.key === key ? routed.path : null;
   return useMemo(() => {
@@ -56,7 +55,6 @@ function useWalkingLine(from: Coordinates | null, to: Coordinates | null) {
     return routedPath
       ? [pair(from), ...routedPath, pair(to)]
       : [pair(from), pair(to)];
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, routedPath]);
 }
 

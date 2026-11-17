@@ -15,10 +15,16 @@ export type PickupDraftRow = {
   requested_vehicle_type: "Jeepney" | "Tricycle";
 };
 
-export type PickupCompanionStatusRow = RiderRow & {
-  companion_status: CompanionStatus;
-  arrived?: boolean | null;
+export type RiderLocationColumns = {
+  latitude?: number | null;
+  longitude?: number | null;
 };
+
+export type PickupCompanionStatusRow = RiderRow &
+  RiderLocationColumns & {
+    companion_status: CompanionStatus;
+    arrived?: boolean | null;
+  };
 
 export type PickupRow = {
   pickup_id: string;
@@ -134,4 +140,8 @@ export type SharedRideRow = {
   plate_number: string | null;
   owner_arrived?: boolean | null;
   me_arrived?: boolean | null;
+  route_id?: string | null;
+  dropoff_name?: string | null;
+  dropoff_lat?: number | null;
+  dropoff_lng?: number | null;
 };

@@ -30,6 +30,8 @@ export type TransitMapState = {
     occupancy?: OccupancyLevel;
     isFull?: boolean;
     stale?: boolean;
+    generated?: boolean;
+    highlight?: boolean;
   }[];
   focus: {
     key: number | string;
@@ -53,6 +55,7 @@ export type TransitMapState = {
   extraLines?: [number, number][][];
   pickupLineColor?: string;
   userLocation?: { lat: number; lng: number } | null;
+  range?: { lat: number; lng: number; radiusMeters: number } | null;
   fit?: { key: number | string; points: [number, number][] } | null;
 };
 
