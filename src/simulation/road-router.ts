@@ -1,9 +1,10 @@
 import { transitRouteApi } from "@/api/v1/transit-routes/routes";
 import type { RoadRouter } from "@/simulation/engine";
+import { localRoadPath } from "@/simulation/local-roads";
 
-const ROUTE_TIMEOUT_MS = 8_000;
+const ROUTE_TIMEOUT_MS = 4_000;
 
-export const mapboxRoadRouter: RoadRouter = async (from, to) => {
+const onlineRoute: RoadRouter = async (from, to) => {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<null>((resolve) => {
     timer = setTimeout(() => resolve(null), ROUTE_TIMEOUT_MS);
@@ -20,3 +21,6 @@ export const mapboxRoadRouter: RoadRouter = async (from, to) => {
   clearTimeout(timer);
   return path;
 };
+
+export const mapboxRoadRouter: RoadRouter = async (from, to) =>
+  (await onlineRoute(from, to)) ?? localRoadPath(from, to);

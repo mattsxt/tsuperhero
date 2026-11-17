@@ -405,6 +405,16 @@ const sendRoutedDrive = (
     });
 };
 
+export function remainingDrivePath(plateNumber: string): LatLngPair[] | null {
+  const vehicle = db.tables.vehicle.find((v) => v.plate_number === plateNumber);
+  if (!vehicle) return null;
+  const drive = drives.get(String(vehicle.vehicle_id));
+  if (!drive || drive.mode !== "job" || drive.mover.path.length < 2) return null;
+  const { path, along } = drive.mover;
+  const total = pathLengthMeters(path);
+  return along >= total ? null : sliceAlong(path, along, total);
+}
+
 const releaseVehicle = (job: Job) => {
   jobs.delete(job.requestId);
   if (!job.vehicleId) return;

@@ -3,7 +3,17 @@ import { useEffect, useRef } from "react";
 import { shareRideLocation, type Rider } from "@/api/v1/pickups/controllers";
 import type { TransitMapState } from "@/components/transit-map-types";
 import { palette } from "@/constants/colors";
+import { isSimulation } from "@/simulation/flag";
 import { getDistanceMeters, type Coordinates } from "@/utils/geo";
+
+export function simulatedDriverPath(
+  plateNumber: string | null | undefined,
+): [number, number][] | null {
+  if (!isSimulation() || !plateNumber) return null;
+  const { remainingDrivePath } =
+    require("@/simulation/engine") as typeof import("@/simulation/engine");
+  return remainingDrivePath(plateNumber);
+}
 
 const shareEveryMs = 5_000;
 const shareMovedMeters = 15;

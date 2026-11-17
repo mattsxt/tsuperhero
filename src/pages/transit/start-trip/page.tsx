@@ -708,7 +708,7 @@ function Trip({
   };
 
   const removePassenger = () => {
-    if (onTrip && !markedFull && count > 0) setCount(count - 1);
+    if (onTrip && count > 0) setCount(count - 1);
   };
 
   const start = async () => {
@@ -876,19 +876,13 @@ function Trip({
   };
 
   const toggleFull = () => {
-    if (count >= capacity) {
-      setMarkedFull(true);
-      setToast(
-        nextError(
-          "Vehicle full",
-          "Already full",
-        ),
-      );
-      return;
-    }
     if (markedFull) {
       setMarkedFull(false);
-      setToast(nextToast("Taking passengers", "info"));
+      setToast(
+        count >= capacity
+          ? nextToast("Vehicle full", "danger")
+          : nextToast("Taking passengers", "info"),
+      );
     } else {
       setMarkedFull(true);
       setToast(nextToast("Marked full", "danger"));
@@ -1204,7 +1198,7 @@ function Trip({
             <CounterButton
               variant="minus"
               label="Remove a passenger"
-              disabled={!onTrip || markedFull || count === 0}
+              disabled={!onTrip || count === 0}
               onPress={removePassenger}
             >
               <Minus color="#ffffff" size={36} strokeWidth={3} />

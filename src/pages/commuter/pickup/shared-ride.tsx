@@ -34,7 +34,11 @@ import { isSimulation } from "@/simulation/flag";
 import { usePolling } from "@/hooks/use-polling";
 
 import { CompanionAvatars } from "./companion-avatars";
-import { partyPins, useShareRideLocation } from "./ride-party";
+import {
+  partyPins,
+  simulatedDriverPath,
+  useShareRideLocation,
+} from "./ride-party";
 import { WaitingAreaDirectionsMap } from "./waiting-area-directions-map";
 import { palette } from "@/constants/colors";
 
@@ -156,15 +160,15 @@ export function SharedRideScreen({
         : [],
     [driverLocation, driver],
   );
-  const driverLine = useMemo(
+  const driverLine = useMemo<[number, number][] | null>(
     () =>
       driverLocation
-        ? ([
+        ? (simulatedDriverPath(driver?.plateNumber) ?? [
             [driverLocation.lat, driverLocation.lng],
             [ride.lat, ride.lng],
-          ] as [number, number][])
+          ])
         : null,
-    [driverLocation, ride.lat, ride.lng],
+    [driverLocation, driver, ride.lat, ride.lng],
   );
   const pins = useMemo(() => (gathering ? partyPins(party) : []), [gathering, party]);
 

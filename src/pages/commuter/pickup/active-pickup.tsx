@@ -43,7 +43,11 @@ import {
 } from "./waiting-area-directions-map";
 import { ConfirmModal } from "@/components/confirm-modal";
 import { CompanionAvatars } from "./companion-avatars";
-import { partyPins, useShareRideLocation } from "./ride-party";
+import {
+  partyPins,
+  simulatedDriverPath,
+  useShareRideLocation,
+} from "./ride-party";
 import { ErrorAlert } from "@/components/error-alert";
 import { formatDistance } from "@/api/v1/waiting-areas/controllers";
 import { LocationSettingsButton } from "@/components/location-settings-button";
@@ -278,12 +282,13 @@ export function ActivePickup({
   const driverLine = useMemo<[number, number][] | null>(
     () =>
       driverLocation
-        ? (eta?.path ?? [
+        ? (simulatedDriverPath(driver?.plateNumber) ??
+          eta?.path ?? [
             [driverLocation.lat, driverLocation.lng],
             [pickupPoint.lat, pickupPoint.lng],
           ])
         : null,
-    [driverLocation, eta, pickupPoint],
+    [driverLocation, driver, eta, pickupPoint],
   );
 
   const mapState = useMemo<TransitMapState>(() => {
