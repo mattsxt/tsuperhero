@@ -193,7 +193,7 @@ function VehicleMarker({
         <Pressable
           accessibilityLabel={
             vehicle.generated
-              ? `${vehicle.label ?? "Vehicle"}, generated for the demo`
+              ? `${vehicle.label ?? "Vehicle"}, generated`
               : (vehicle.label ?? "Vehicle")
           }
           onPress={() => onPress?.(vehicle.id)}

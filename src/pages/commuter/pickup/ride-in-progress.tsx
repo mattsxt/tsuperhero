@@ -2,7 +2,6 @@ import { StatusBar } from "expo-status-bar";
 import ArrowLeft from "lucide-react-native/icons/arrow-left";
 import BusFront from "lucide-react-native/icons/bus-front";
 import Flag from "lucide-react-native/icons/flag";
-import RadioTower from "lucide-react-native/icons/radio-tower";
 import Siren from "lucide-react-native/icons/siren";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
@@ -376,15 +375,6 @@ export function RideInProgress({
           </View>
         )}
 
-        {!vehicleLive && (
-          <View style={styles.liveNote}>
-            <RadioTower color={mutedText} size={14} strokeWidth={2} />
-            <Text style={styles.liveNoteText}>
-              Showing your phone’s location. Live vehicle location unavailable.
-            </Text>
-          </View>
-        )}
-
         {!!problem && <ErrorAlert title="Drop-off" message={problem} />}
 
         {!isCompanion && (
@@ -423,8 +413,8 @@ export function RideInProgress({
       />
       <ConfirmModal
         visible={sosNoticeOpen}
-        title="Simulation"
-        message="Simulation: 911 would be called here. TsuperHero admins were still alerted."
+        title="Help is on the way"
+        message="TsuperHero admins have been alerted."
         confirmLabel="OK"
         cancelLabel="OK"
         hideCancel
@@ -596,13 +586,6 @@ const styles = StyleSheet.create({
   },
   vehicleText: { color: mutedText, fontFamily: "Sora", fontSize: 13 },
   plate: { color: text, fontFamily: "SoraBold", fontSize: 14 },
-  liveNote: { flexDirection: "row", alignItems: "center", gap: 6 },
-  liveNoteText: {
-    flex: 1,
-    color: mutedText,
-    fontFamily: "Sora",
-    fontSize: 11,
-  },
   offButton: {
     height: 52,
     alignItems: "center",

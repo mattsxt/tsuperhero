@@ -1309,10 +1309,6 @@ export default function PickupScreen() {
                 min={Math.max(minPickupPassengers, activeCompanionCount + 1)}
                 max={pickupVehicleCapacity[vehicle]}
               />
-              <Text style={styles.passengerHint}>
-                Including you. A {vehicle === "jeep" ? "jeepney" : "tricycle"}{" "}
-                fits up to {pickupVehicleCapacity[vehicle]}.
-              </Text>
             </View>
           </View>
 
@@ -1433,12 +1429,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 16,
   },
-  passengerHint: {
-    marginTop: 6,
-    color: mutedText,
-    fontFamily: "Sora",
-    fontSize: 11,
-  },
   loadingScreen: {
     flex: 1,
     alignItems: "center",
@@ -1469,7 +1459,7 @@ const styles = StyleSheet.create({
   },
   screen: { flex: 1, backgroundColor: "#ffffff" },
   flex: { flex: 1 },
-  body: { paddingHorizontal: 12, paddingTop: 18 },
+  body: { paddingHorizontal: 12, paddingTop: 4 },
   pressed: { opacity: 0.8 },
   helper: {
     color: mutedText,

@@ -61,21 +61,20 @@ test("lifecycle: save, route, publish, arrived", () => {
   assert.ok(request.arrived_at);
 });
 
-test("publish rejects a pickup point off the route", () => {
+test("jeepney pickup can publish with an off-route custom pickup point", () => {
   const { id } = draft();
-  assert.throws(
-    () =>
-      call("set_pickup_route", {
-        p_request_id: id,
-        p_route_id: route().route_id,
-        p_pickup_lat: 14.5,
-        p_pickup_lng: 121,
-        p_dropoff_name: "X",
-        p_dropoff_lat: 14.5,
-        p_dropoff_lng: 121,
-      }),
-    /Pickup point must be on the route\. Please re-select\./,
-  );
+  call("set_pickup_route", {
+    p_request_id: id,
+    p_route_id: route().route_id,
+    p_pickup_lat: 14.5,
+    p_pickup_lng: 121,
+    p_dropoff_name: "X",
+    p_dropoff_lat: 14.5,
+    p_dropoff_lng: 121,
+  });
+  assert.equal(call("publish_pickup_draft", { p_request_id: id }), id);
+  const saved = db.tables.pickup.find((row) => row.request_id === id)!;
+  assert.equal(saved.pickup_lat, 14.5);
 });
 
 test("jeepney pickup can publish with an off-route pinned drop-off", () => {

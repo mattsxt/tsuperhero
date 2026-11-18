@@ -14,16 +14,11 @@ import type { ReactNode } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, { FadeIn } from "react-native-reanimated";
 
-import {
-  describeFleet,
-  formatRentalTime,
-  type Rental,
-} from "@/api/v1/rentals/controllers";
+import { formatRentalTime, type Rental } from "@/api/v1/rentals/controllers";
+import { FleetBadges, VehicleTypeBadge } from "@/components/card-badges";
 import { ErrorAlert } from "@/components/error-alert";
 import { LoadingLogo } from "@/components/LoadingLogo";
 import { palette } from "@/constants/colors";
-
-const muted = "#6b6b6b";
 
 export function JobModal({
   job,
@@ -148,12 +143,31 @@ export function JobModal({
                   {job.passengers === 1 ? "passenger" : "passengers"} in total
                 </Detail>
                 <Detail
+                  raw
                   icon={<Car color={palette.brand} size={15} strokeWidth={2} />}
                 >
-                  You&apos;d drive: 1 {job.unitVehicleType ?? job.vehicleType}
-                  {job.units.length > 1
-                    ? ` · the rental needs ${describeFleet(job.units.map((unit) => unit.vehicleType))} (${job.units.filter((unit) => unit.status !== "open").length} of ${job.units.length} booked)`
-                    : ""}
+                  <View style={styles.badgeLine}>
+                    <Text style={[styles.detailText, styles.detailTextFit]}>
+                      You&apos;d drive
+                    </Text>
+                    <VehicleTypeBadge
+                      type={job.unitVehicleType ?? job.vehicleType}
+                    />
+                  </View>
+                  {job.units.length > 1 && (
+                    <View style={styles.badgeLine}>
+                      <FleetBadges
+                        types={job.units.map((unit) => unit.vehicleType)}
+                      />
+                      <Text style={styles.detailText}>
+                        {
+                          job.units.filter((unit) => unit.status !== "open")
+                            .length
+                        }{" "}
+                        of {job.units.length} booked
+                      </Text>
+                    </View>
+                  )}
                 </Detail>
                 <Detail
                   icon={
@@ -242,10 +256,6 @@ export function JobModal({
                     <Text style={styles.secondaryText}>NOT INTERESTED</Text>
                   )}
                 </Pressable>
-                <Text style={styles.footnote}>
-                  Not interested removes this job from your board. The first
-                  driver to accept gets the trip.
-                </Text>
               </View>
             )}
           </View>
@@ -255,11 +265,23 @@ export function JobModal({
   );
 }
 
-function Detail({ icon, children }: { icon: ReactNode; children: ReactNode }) {
+function Detail({
+  icon,
+  raw = false,
+  children,
+}: {
+  icon: ReactNode;
+  raw?: boolean;
+  children: ReactNode;
+}) {
   return (
     <View style={styles.detail}>
       {icon}
-      <Text style={styles.detailText}>{children}</Text>
+      {raw ? (
+        <View style={styles.detailContent}>{children}</View>
+      ) : (
+        <Text style={styles.detailText}>{children}</Text>
+      )}
     </View>
   );
 }
@@ -307,6 +329,14 @@ const styles = StyleSheet.create({
   close: { alignSelf: "flex-start" },
   body: { gap: 10, padding: 18 },
   detail: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  detailContent: { flex: 1, gap: 6 },
+  detailTextFit: { flex: 0 },
+  badgeLine: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 6,
+  },
   detailText: {
     flex: 1,
     color: "#111111",
@@ -354,13 +384,6 @@ const styles = StyleSheet.create({
     fontFamily: "SoraBold",
     fontSize: 13,
     letterSpacing: 1,
-  },
-  footnote: {
-    color: muted,
-    fontFamily: "Sora",
-    fontSize: 10,
-    lineHeight: 15,
-    textAlign: "center",
   },
   pressed: { opacity: 0.6 },
 });

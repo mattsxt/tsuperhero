@@ -14,11 +14,11 @@ import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, { FadeIn } from "react-native-reanimated";
 
 import {
-  describeFleet,
   formatRentalTime,
   type Rental,
   type RentalUnit,
 } from "@/api/v1/rentals/controllers";
+import { FleetBadges } from "@/components/card-badges";
 import { ConfirmModal } from "@/components/confirm-modal";
 import { ErrorAlert } from "@/components/error-alert";
 import { LoadingLogo } from "@/components/LoadingLogo";
@@ -26,19 +26,6 @@ import { palette } from "@/constants/colors";
 import { initialsOf } from "@/utils/initials";
 
 const panelText = "#d6e2f5";
-
-function postedAgo(date: Date) {
-  const minutes = Math.max(
-    0,
-    Math.floor((Date.now() - date.getTime()) / 60_000),
-  );
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes} min ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} ${hours === 1 ? "hour" : "hours"} ago`;
-  const days = Math.floor(hours / 24);
-  return `${days} ${days === 1 ? "day" : "days"} ago`;
-}
 
 export function ActiveRental({
   rental,
@@ -87,7 +74,6 @@ export function ActiveRental({
       : units.length > 1
         ? "WAITING FOR DRIVERS"
         : "WAITING FOR A DRIVER";
-  const fleet = describeFleet(units.map((unit) => unit.vehicleType));
 
   return (
     <Animated.View entering={FadeIn.duration(200)} style={styles.wrap}>
@@ -137,8 +123,15 @@ export function ActiveRental({
             icon={<Users color={palette.cyan} size={15} strokeWidth={2} />}
           >
             {rental.passengers}{" "}
-            {rental.passengers === 1 ? "passenger" : "passengers"} · {fleet}
+            {rental.passengers === 1 ? "passenger" : "passengers"}
           </Detail>
+          <View style={[styles.detail, styles.detailCentered]}>
+            <BusFront color={palette.cyan} size={15} strokeWidth={2} />
+            <FleetBadges
+              types={units.map((unit) => unit.vehicleType)}
+              style={styles.flex}
+            />
+          </View>
           <Detail
             icon={<Sparkles color={palette.cyan} size={15} strokeWidth={2} />}
           >
@@ -233,17 +226,6 @@ export function ActiveRental({
             </View>
           ))}
         </View>
-
-        {!booked && (
-          <View style={styles.board}>
-            <BusFront color={palette.cyan} size={18} strokeWidth={2} />
-            <Text style={styles.boardText}>
-              Your request is on the job board. Each vehicle is booked by its
-              own driver, and you&apos;ll be notified as each one accepts.
-              Posted {postedAgo(rental.requestedAt)}.
-            </Text>
-          </View>
-        )}
       </View>
 
       {!!problem && <ErrorAlert title="Rental" message={problem} />}
@@ -284,9 +266,6 @@ export function ActiveRental({
           {busy ? "CANCELLING..." : "CANCEL RENTAL"}
         </Text>
       </Pressable>
-      <Text style={styles.hint}>
-        Need to change something? Cancel this request and post a new one.
-      </Text>
 
       <ConfirmModal
         visible={!!removeTarget}
@@ -383,28 +362,13 @@ const styles = StyleSheet.create({
   },
   details: { gap: 8, marginTop: 4 },
   detail: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  detailCentered: { alignItems: "center" },
   detailText: {
     flex: 1,
     color: panelText,
     fontFamily: "Sora",
     fontSize: 12,
     lineHeight: 17,
-  },
-  board: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginTop: 6,
-    padding: 12,
-    borderRadius: 14,
-    backgroundColor: "rgba(127, 212, 247, 0.12)",
-  },
-  boardText: {
-    flex: 1,
-    color: "#ffffff",
-    fontFamily: "Sora",
-    fontSize: 11,
-    lineHeight: 16,
   },
   driver: {
     flexDirection: "row",
@@ -475,12 +439,6 @@ const styles = StyleSheet.create({
     fontFamily: "SoraBold",
     fontSize: 13,
     letterSpacing: 1,
-  },
-  hint: {
-    color: "#6b6b6b",
-    fontFamily: "Sora",
-    fontSize: 11,
-    textAlign: "center",
   },
   pressed: { opacity: 0.8 },
 });

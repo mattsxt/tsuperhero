@@ -9,8 +9,16 @@ import Megaphone from "lucide-react-native/icons/megaphone";
 import PersonStanding from "lucide-react-native/icons/person-standing";
 import MapPin from "lucide-react-native/icons/map-pin";
 import NotebookPen from "lucide-react-native/icons/notebook-pen";
+import Repeat from "lucide-react-native/icons/repeat";
+import Sparkles from "lucide-react-native/icons/sparkles";
 import Users from "lucide-react-native/icons/users";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { BackHandler, Pressable, StyleSheet, Text, View } from "react-native";
 import {
   KeyboardAwareScrollView,
@@ -28,6 +36,7 @@ import {
 } from "@/api/v1/pickups/controllers";
 import {
   activeRentalOf,
+  charterVehicleOrder,
   cancelRental,
   combineDateTime,
   completeRental,
@@ -52,6 +61,7 @@ import {
   SectionTitle,
   SoftField,
 } from "@/components/module-ui";
+import { StatusPill, VehicleTypeBadge } from "@/components/card-badges";
 import { ConnectionRequired } from "@/components/connection-required";
 import { ErrorAlert, ErrorOutline } from "@/components/error-alert";
 import { PlaceSearchField } from "@/components/place-search-field";
@@ -69,7 +79,7 @@ import { palette } from "@/constants/colors";
 import { RateDriversModal } from "@/components/rate-drivers-modal";
 
 import { ActiveRental } from "./active-rental";
-import { FleetPicker, fleetLabel, fleetSeats, maxFleet } from "./fleet-picker";
+import { FleetPicker, fleetSeats, maxFleet } from "./fleet-picker";
 
 const { brandBlue, softBlue, text, error } = moduleColors;
 
@@ -605,7 +615,6 @@ export default function RentalScreen() {
                   min={1}
                   max={maxPassengers}
                 />
-                <Text style={styles.passengerHint}>Including you.</Text>
               </View>
 
               <View style={styles.gapTop}>
@@ -641,40 +650,97 @@ export default function RentalScreen() {
                   }}
                 />
               </ErrorOutline>
-              <View style={styles.infoCard}>
-                <Users color={brandBlue} size={18} strokeWidth={2} />
-                <Text style={styles.infoText}>
-                  You have <Text style={styles.bold}>{passengers}</Text>{" "}
-                  {passengers === 1 ? "passenger" : "passengers"}. Mix any
-                  vehicles you need, up to {maxFleet}. Each vehicle can be taken
-                  by a different driver.
-                </Text>
-              </View>
 
               <SectionTitle
                 icon={<Megaphone color="#ffffff" size={18} strokeWidth={2} />}
                 title="Review and post"
               />
               <View style={styles.review}>
-                <Text style={styles.reviewEyebrow}>YOUR RENTAL TO</Text>
-                <Text style={styles.reviewTitle} numberOfLines={2}>
-                  {destination?.name ?? "Your destination"}
-                </Text>
-                <Text style={styles.reviewLine} numberOfLines={2}>
-                  From {pickup?.name ?? "your pickup location"}
-                </Text>
-                {tripDate && pickupTime && (
-                  <Text style={styles.reviewLine}>
-                    {formatRentalTime(combineDateTime(tripDate, pickupTime))}
-                    {tripType === "round_trip" && returnDate && returnTime
-                      ? ` · return ${formatRentalTime(combineDateTime(returnDate, returnTime))}`
-                      : ""}
-                  </Text>
-                )}
-                <Text style={styles.reviewLine}>
-                  {passengers} {passengers === 1 ? "passenger" : "passengers"} ·{" "}
-                  {fleetLabel(fleet) || "No vehicles yet"} · {occasion}
-                </Text>
+                <View style={styles.reviewTop}>
+                  <View style={styles.reviewHeading}>
+                    <Text style={styles.reviewEyebrow}>YOUR RENTAL TO</Text>
+                    <Text style={styles.reviewTitle} numberOfLines={2}>
+                      {destination?.name ?? "Your destination"}
+                    </Text>
+                  </View>
+                  <StatusPill
+                    label={tripType === "round_trip" ? "Round trip" : "One way"}
+                    tone="live"
+                  />
+                </View>
+
+                <View style={styles.reviewDetails}>
+                  <ReviewLine
+                    icon={<MapPin color={brandBlue} size={13} strokeWidth={2} />}
+                  >
+                    From {pickup?.name ?? "your pickup location"}
+                  </ReviewLine>
+                  {tripDate && pickupTime && (
+                    <ReviewLine
+                      icon={
+                        <CalendarDays
+                          color={brandBlue}
+                          size={13}
+                          strokeWidth={2}
+                        />
+                      }
+                    >
+                      {formatRentalTime(combineDateTime(tripDate, pickupTime))}
+                    </ReviewLine>
+                  )}
+                  {tripType === "round_trip" && returnDate && returnTime && (
+                    <ReviewLine
+                      icon={
+                        <Repeat color={brandBlue} size={13} strokeWidth={2} />
+                      }
+                    >
+                      Return{" "}
+                      {formatRentalTime(combineDateTime(returnDate, returnTime))}
+                    </ReviewLine>
+                  )}
+                  <ReviewLine
+                    icon={<Users color={brandBlue} size={13} strokeWidth={2} />}
+                  >
+                    {passengers} {passengers === 1 ? "passenger" : "passengers"}
+                  </ReviewLine>
+                  {!!occasion && (
+                    <ReviewLine
+                      icon={
+                        <Sparkles color={brandBlue} size={13} strokeWidth={2} />
+                      }
+                    >
+                      {occasion}
+                    </ReviewLine>
+                  )}
+                  {fleetSize(fleet) === 0 ? (
+                    <ReviewLine
+                      icon={
+                        <BusFront color={brandBlue} size={13} strokeWidth={2} />
+                      }
+                    >
+                      No vehicles yet
+                    </ReviewLine>
+                  ) : (
+                    <ReviewLine
+                      raw
+                      icon={
+                        <BusFront color={brandBlue} size={13} strokeWidth={2} />
+                      }
+                    >
+                      <View style={styles.reviewBadges}>
+                        {charterVehicleOrder
+                          .filter((vehicle) => fleet[vehicle] > 0)
+                          .map((vehicle) => (
+                            <VehicleTypeBadge
+                              key={vehicle}
+                              type={vehicle}
+                              count={fleet[vehicle]}
+                            />
+                          ))}
+                      </View>
+                    </ReviewLine>
+                  )}
+                </View>
               </View>
 
               {!online && <ConnectionRequired action="A rental request" />}
@@ -686,11 +752,6 @@ export default function RentalScreen() {
                 disabled={sending || !online}
                 onPress={postRequest}
               />
-              <Text style={styles.postHint}>
-                Your request goes to every available driver of these vehicles.
-                Each vehicle is booked by its own driver, and you&apos;ll be
-                notified as each one accepts.
-              </Text>
             </>
           )}
         </View>
@@ -822,20 +883,38 @@ function Problem({
   );
 }
 
+function ReviewLine({
+  icon,
+  raw = false,
+  children,
+}: {
+  icon: ReactNode;
+  raw?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <View style={styles.reviewRow}>
+      <View style={styles.reviewIcon}>{icon}</View>
+      <View style={styles.reviewContent}>
+        {raw ? (
+          children
+        ) : (
+          <Text style={styles.reviewText} numberOfLines={2}>
+            {children}
+          </Text>
+        )}
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  passengerHint: {
-    marginTop: 6,
-    color: "#6b6b6b",
-    fontFamily: "Sora",
-    fontSize: 11,
-  },
   screen: { flex: 1, backgroundColor: "#ffffff" },
   body: { paddingHorizontal: 12, paddingTop: 4 },
   flex: { flex: 1 },
   row: { flexDirection: "row", gap: 12 },
   gap: { height: 14 },
   gapTop: { marginTop: 16 },
-  bold: { fontFamily: "SoraBold" },
   progress: { marginTop: 14 },
   progressRow: {
     flexDirection: "row",
@@ -872,31 +951,29 @@ const styles = StyleSheet.create({
   chipRow: { flexDirection: "row", gap: 8 },
   chipWrap: { flexWrap: "wrap" },
   occasionChip: { flexBasis: "45%", flexGrow: 1 },
-  infoCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginTop: 18,
-    padding: 14,
-    borderRadius: 10,
-    backgroundColor: softBlue,
-  },
-  infoText: {
-    flex: 1,
-    color: text,
-    fontFamily: "Sora",
-    fontSize: 11,
-    lineHeight: 16,
-  },
   loading: { marginTop: 48 },
   pressed: { opacity: 0.8 },
   problem: { marginTop: 16 },
   review: {
-    gap: 4,
+    gap: 14,
     padding: 16,
     borderRadius: 16,
     backgroundColor: palette.navy,
   },
+  reviewTop: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  reviewHeading: { flex: 1, gap: 2 },
+  reviewDetails: { gap: 8 },
+  reviewRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  reviewIcon: {
+    width: 22,
+    height: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 11,
+    backgroundColor: softBlue,
+  },
+  reviewContent: { flex: 1 },
+  reviewBadges: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   reviewEyebrow: { color: palette.cyan, fontFamily: "SoraBold", fontSize: 10 },
   reviewTitle: {
     color: "#ffffff",
@@ -904,19 +981,11 @@ const styles = StyleSheet.create({
     fontSize: 18,
     lineHeight: 24,
   },
-  reviewLine: {
+  reviewText: {
     color: "#d6e2f5",
     fontFamily: "Sora",
     fontSize: 12,
     lineHeight: 17,
-  },
-  postHint: {
-    marginTop: 10,
-    color: "#6b6b6b",
-    fontFamily: "Sora",
-    fontSize: 11,
-    lineHeight: 16,
-    textAlign: "center",
   },
   blocked: {
     alignItems: "center",

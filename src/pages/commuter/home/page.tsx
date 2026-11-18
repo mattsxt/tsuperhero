@@ -5,11 +5,7 @@ import Bus from "lucide-react-native/icons/bus";
 import MapPinSearch from "lucide-react-native/icons/map-pin-search";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RefreshControl, StyleSheet, View } from "react-native";
-import Animated, {
-  FadeIn,
-  FadeOut,
-  useAnimatedRef,
-} from "react-native-reanimated";
+import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { loadHome, peekHomeName } from "@/api/v1/profile/controllers";
@@ -25,24 +21,18 @@ import {
 import { PickupIcon } from "@/components/module-icons";
 import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
-import {
-  DestinationSearchPanel,
-  DestinationSearchTrigger,
-} from "@/pages/commuter/home/destination-search";
 import { usePickupStatus } from "@/hooks/use-pickup-status";
 import { ActivePickupBanner } from "@/pages/commuter/home/active-pickup-banner";
 import { RecentBookings } from "@/pages/commuter/home/recent-bookings";
 import { HomeSkeleton } from "@/components/skeleton";
 
 const { brandBlue } = homeColors;
-const searchLayerGap = 14;
 
 export default function CommuterHomeScreen() {
   const insets = useSafeAreaInsets();
   const chrome = useScrollChrome();
   const blurTarget = useRef<View | null>(null);
   const [firstName, setFirstName] = useState(() => peekHomeName("commuter"));
-  const [searchOpen, setSearchOpen] = useState(false);
   const { status: pickupStatus, refresh: refreshPickupStatus } =
     usePickupStatus();
   const [refreshKey, setRefreshKey] = useState(0);
@@ -57,15 +47,6 @@ export default function CommuterHomeScreen() {
     }, []),
   );
   const [refreshing, setRefreshing] = useState(false);
-  const scrollRef = useAnimatedRef<Animated.ScrollView>();
-  const minimizedHeaderHeight = chrome.collapsedHeaderHeight ?? insets.top + 56;
-
-  const changeSearchOpen = (open: boolean) => {
-    if (open) scrollRef.current?.scrollTo({ y: 0, animated: false });
-    chrome.setLocked(open);
-    setSearchOpen(open);
-  };
-  const closeSearch = () => changeSearchOpen(false);
 
   const refresh = async () => {
     setRefreshing(true);
@@ -107,20 +88,16 @@ export default function CommuterHomeScreen() {
       <StatusBar style="light" />
       <BlurTargetView ref={blurTarget} style={styles.blurTarget}>
         <Animated.ScrollView
-          ref={scrollRef}
           onScroll={chrome.scrollHandler}
           scrollEventThrottle={16}
-          scrollEnabled={!searchOpen}
           contentContainerStyle={{
             paddingTop: chrome.headerHeight,
             paddingBottom: insets.bottom + bottomNavHeight,
           }}
-          keyboardShouldPersistTaps="handled"
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
               onRefresh={refresh}
-              enabled={!searchOpen}
               tintColor={brandBlue}
               colors={[brandBlue]}
               progressViewOffset={chrome.headerHeight}
@@ -129,72 +106,41 @@ export default function CommuterHomeScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.body}>
-            <DestinationSearchTrigger onOpen={() => changeSearchOpen(true)} />
+            <ActivePickupBanner status={pickupStatus} />
 
-            {!searchOpen && (
-              <Animated.View
-                entering={FadeIn.duration(200)}
-                exiting={FadeOut.duration(120)}
-              >
-                <ActivePickupBanner status={pickupStatus} />
+            <ActionRow>
+              <ActionCard
+                title="Routes"
+                description="Find the best routes for you"
+                icon={
+                  <MapPinSearch color={brandBlue} size={40} strokeWidth={1.8} />
+                }
+                onPress={() => router.push(Routes.commuterRoutes)}
+              />
+              <ActionCard
+                title="Rental"
+                description="Rent a vehicle for your trip"
+                icon={<Bus color={brandBlue} size={40} strokeWidth={1.8} />}
+                onPress={() => router.push(Routes.commuterRental)}
+                badge={pickupStatus?.kind === "rental" ? "ACTIVE" : undefined}
+              />
+              <ActionCard
+                title="Pickup"
+                description="Schedule a pickup easily"
+                icon={<PickupIcon color={brandBlue} size={40} />}
+                onPress={() => router.push(Routes.commuterPickup)}
+                badge={
+                  pickupStatus && pickupStatus.kind !== "rental"
+                    ? "ACTIVE"
+                    : undefined
+                }
+              />
+            </ActionRow>
 
-                <ActionRow>
-                  <ActionCard
-                    title="Routes"
-                    description="Find the best routes for you"
-                    icon={
-                      <MapPinSearch
-                        color={brandBlue}
-                        size={40}
-                        strokeWidth={1.8}
-                      />
-                    }
-                    onPress={() => router.push(Routes.commuterRoutes)}
-                  />
-                  <ActionCard
-                    title="Rental"
-                    description="Rent a vehicle for your trip"
-                    icon={<Bus color={brandBlue} size={40} strokeWidth={1.8} />}
-                    onPress={() => router.push(Routes.commuterRental)}
-                    badge={
-                      pickupStatus?.kind === "rental" ? "ACTIVE" : undefined
-                    }
-                  />
-                  <ActionCard
-                    title="Pickup"
-                    description="Schedule a pickup easily"
-                    icon={<PickupIcon color={brandBlue} size={40} />}
-                    onPress={() => router.push(Routes.commuterPickup)}
-                    badge={
-                      pickupStatus && pickupStatus.kind !== "rental"
-                        ? "ACTIVE"
-                        : undefined
-                    }
-                  />
-                </ActionRow>
-
-                <SectionDivider />
-                <RecentBookings limit={2} refreshKey={refreshKey} />
-              </Animated.View>
-            )}
+            <SectionDivider />
+            <RecentBookings limit={2} refreshKey={refreshKey} />
           </View>
         </Animated.ScrollView>
-
-        {searchOpen && (
-          <Animated.View
-            entering={FadeIn.duration(150)}
-            exiting={FadeOut.duration(120)}
-            style={[
-              styles.searchLayer,
-              { paddingTop: minimizedHeaderHeight + searchLayerGap },
-            ]}
-          >
-            <DestinationSearchPanel
-              onClose={closeSearch}
-              topOffset={minimizedHeaderHeight}
-            />
-          </Animated.View>
-        )}
 
         <StickyHeader chrome={chrome}>
           <HomeHeader
@@ -217,19 +163,7 @@ export default function CommuterHomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  loadingScreen: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#ffffff",
-  },
   screen: { flex: 1, backgroundColor: "#ffffff" },
   blurTarget: { flex: 1 },
-  body: { paddingHorizontal: 12, paddingTop: searchLayerGap },
-  searchLayer: {
-    ...StyleSheet.absoluteFill,
-    zIndex: 5,
-    paddingHorizontal: 12,
-    backgroundColor: "#ffffff",
-  },
+  body: { paddingHorizontal: 12 },
 });

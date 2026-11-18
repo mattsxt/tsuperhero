@@ -23,6 +23,7 @@ import type {
   BookingDriver,
   Rider,
 } from "@/api/v1/pickups/controllers";
+import { VehicleTypeBadge } from "@/components/card-badges";
 import { SteeringWheelIcon } from "@/components/steering-wheel-icon";
 import { palette } from "@/constants/colors";
 import { initialsOf } from "@/utils/initials";
@@ -292,11 +293,23 @@ export function BookingDetailsModal({
                       <Text style={styles.driverName} numberOfLines={1}>
                         {driver.name}
                       </Text>
-                      <Text style={styles.driverMeta} numberOfLines={1}>
-                        {[driver.vehicleType, driver.plateNumber]
-                          .filter(Boolean)
-                          .join(" · ") || "Vehicle details unavailable"}
-                      </Text>
+                      {driver.plateNumber || driver.vehicleType ? (
+                        <View style={styles.vehicleRow}>
+                          {!!driver.plateNumber && (
+                            <Text
+                              style={[styles.driverMeta, styles.plate]}
+                              numberOfLines={1}
+                            >
+                              {driver.plateNumber}
+                            </Text>
+                          )}
+                          <VehicleTypeBadge type={driver.vehicleType} />
+                        </View>
+                      ) : (
+                        <Text style={styles.driverMeta} numberOfLines={1}>
+                          Vehicle details unavailable
+                        </Text>
+                      )}
                       {rental &&
                         (driver.score ? (
                           <Stars score={driver.score} />
@@ -540,6 +553,8 @@ const styles = StyleSheet.create({
   },
   driverName: { color: palette.brand, fontFamily: "SoraBold", fontSize: 13 },
   driverMeta: { color: "#6b6b6b", fontFamily: "Sora", fontSize: 11 },
+  vehicleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  plate: { flexShrink: 1 },
   stars: { flexDirection: "row", gap: 2, marginTop: 4 },
   notRated: {
     marginTop: 3,

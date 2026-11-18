@@ -1,5 +1,11 @@
 import MessageSquareQuote from "lucide-react-native/icons/message-square-quote";
-import { StyleSheet, Text, View } from "react-native";
+import {
+  StyleSheet,
+  Text,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from "react-native";
 
 import { moduleColors } from "@/components/module-ui";
 import { StarBadge } from "@/components/star-rating";
@@ -25,6 +31,54 @@ export function StatusPill({ label, tone }: { label: string; tone: PillTone }) {
       <Text style={[styles.pillText, { color: colors.color }]}>
         {label.toUpperCase()}
       </Text>
+    </View>
+  );
+}
+
+export function vehicleTypeCode(type: string | null): string | null {
+  const normalized = type?.trim().toLowerCase() ?? "";
+  if (!normalized) return null;
+  if (normalized.startsWith("tric")) return "TRIC";
+  if (normalized.startsWith("jeep")) return "JEEP";
+  return normalized.toUpperCase();
+}
+
+export function VehicleTypeBadge({
+  type,
+  count,
+}: {
+  type: string | null;
+  count?: number;
+}) {
+  const code = vehicleTypeCode(type);
+  if (!code) return null;
+  const name = type ?? code;
+  return (
+    <View
+      accessibilityLabel={count ? `${count} ${name}` : name}
+      style={[styles.pill, styles.vehiclePill]}
+    >
+      <Text style={[styles.pillText, styles.vehiclePillText]}>
+        {count ? `${count}× ${code}` : code}
+      </Text>
+    </View>
+  );
+}
+
+export function FleetBadges({
+  types,
+  style,
+}: {
+  types: string[];
+  style?: StyleProp<ViewStyle>;
+}) {
+  const counts = new Map<string, number>();
+  types.forEach((type) => counts.set(type, (counts.get(type) ?? 0) + 1));
+  return (
+    <View style={[styles.fleet, style]}>
+      {[...counts].map(([type, count]) => (
+        <VehicleTypeBadge key={type} type={type} count={count} />
+      ))}
     </View>
   );
 }
@@ -59,6 +113,9 @@ export function RatingFeedback({ feedback }: { feedback: string }) {
 const styles = StyleSheet.create({
   pill: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 999 },
   pillText: { fontFamily: "SoraBold", fontSize: 10 },
+  fleet: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  vehiclePill: { backgroundColor: softBlue, paddingVertical: 1 },
+  vehiclePillText: { color: brandBlue, fontSize: 9, letterSpacing: 0.5 },
   ratingCell: {
     flexGrow: 1,
     alignItems: "flex-end",

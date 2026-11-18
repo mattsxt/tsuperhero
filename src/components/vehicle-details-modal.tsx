@@ -253,7 +253,7 @@ function GeneratedTag({ compact = false }: { compact?: boolean }) {
   return (
     <View
       accessible
-      accessibilityLabel="Generated for the demo"
+      accessibilityLabel="Generated vehicle"
       style={[styles.generatedTag, compact && styles.generatedTagCompact]}
     >
       <Sparkles color={palette.warning} size={compact ? 10 : 12} strokeWidth={2.4} />
@@ -315,7 +315,7 @@ function VehicleControls({
           showStatus
         />
       ) : (
-        <Text style={styles.label}>This vehicle is no longer in the demo.</Text>
+        <Text style={styles.label}>This vehicle is no longer available.</Text>
       )}
       {!!error && <Text style={styles.controlsError}>{error}</Text>}
     </SettingsCard>

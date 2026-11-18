@@ -6,11 +6,8 @@ import TriangleAlert from "lucide-react-native/icons/triangle-alert";
 import Users from "lucide-react-native/icons/users";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import {
-  describeFleet,
-  formatRentalTime,
-  type Rental,
-} from "@/api/v1/rentals/controllers";
+import { formatRentalTime, type Rental } from "@/api/v1/rentals/controllers";
+import { FleetBadges, VehicleTypeBadge } from "@/components/card-badges";
 import { palette } from "@/constants/colors";
 
 const muted = "#6b6b6b";
@@ -44,18 +41,7 @@ export function JobCard({
       <View style={styles.accent} />
       <View style={styles.content}>
         <View style={styles.tags}>
-          {!!(job.unitVehicleType ?? job.vehicleType) && (
-            <View style={[styles.tag, styles.vehicleTag]}>
-              <Text style={styles.vehicleTagText}>
-                {(job.unitVehicleType ?? job.vehicleType ?? "").toUpperCase()}
-              </Text>
-            </View>
-          )}
-          {job.units.length > 1 && (
-            <View style={styles.tag}>
-              <Text style={styles.tagText}>{job.units.length} VEHICLES</Text>
-            </View>
-          )}
+          <VehicleTypeBadge type={job.unitVehicleType ?? job.vehicleType} />
           <View style={styles.tag}>
             <Users color={palette.brand} size={11} strokeWidth={2.4} />
             <Text style={styles.tagText}>{job.passengers}</Text>
@@ -91,11 +77,13 @@ export function JobCard({
           </View>
         )}
         {job.units.length > 1 && (
-          <Text style={styles.fleet} numberOfLines={2}>
-            Needs {describeFleet(job.units.map((unit) => unit.vehicleType))} ·{" "}
-            {job.units.filter((unit) => unit.status !== "open").length} of{" "}
-            {job.units.length} booked
-          </Text>
+          <View style={styles.fleetRow}>
+            <FleetBadges types={job.units.map((unit) => unit.vehicleType)} />
+            <Text style={styles.fleet}>
+              {job.units.filter((unit) => unit.status !== "open").length} of{" "}
+              {job.units.length} booked
+            </Text>
+          </View>
         )}
         {!!job.notes && (
           <Text style={styles.notes} numberOfLines={2}>
@@ -155,8 +143,6 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: "#e3ecfb",
   },
-  vehicleTag: { backgroundColor: palette.brand },
-  vehicleTagText: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 10 },
   tagText: { color: palette.brand, fontFamily: "SoraBold", fontSize: 10 },
   posted: {
     marginLeft: "auto",
@@ -173,6 +159,12 @@ const styles = StyleSheet.create({
   },
   line: { flexDirection: "row", alignItems: "center", gap: 6 },
   lineText: { flex: 1, color: "#111111", fontFamily: "Sora", fontSize: 12 },
+  fleetRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 6,
+  },
   fleet: { color: palette.brand, fontFamily: "SoraBold", fontSize: 11 },
   notes: {
     color: muted,

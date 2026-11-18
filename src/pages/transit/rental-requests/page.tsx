@@ -209,13 +209,6 @@ export default function RentalJobsScreen() {
             })}
           </View>
 
-          {tab === "board" && (
-            <Text style={styles.intro}>
-              Open charter requests for your vehicle. Tap a job to see the
-              details and take it. The first driver to accept gets the trip.
-            </Text>
-          )}
-
           {!!problem && (
             <ErrorAlert
               title="Rental jobs"
@@ -332,13 +325,6 @@ const styles = StyleSheet.create({
   },
   countAlert: { backgroundColor: palette.danger },
   countText: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 10 },
-  intro: {
-    marginTop: 14,
-    color: "#6b6b6b",
-    fontFamily: "Sora",
-    fontSize: 11,
-    lineHeight: 16,
-  },
   loading: { marginTop: 24 },
   list: { gap: 12, marginTop: 16 },
   problem: { marginTop: 12 },

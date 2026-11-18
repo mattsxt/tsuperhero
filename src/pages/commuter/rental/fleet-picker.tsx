@@ -40,7 +40,7 @@ export const fleetSeats = (fleet: Fleet) =>
     0,
   );
 
-export const fleetLabel = (fleet: Fleet) =>
+const fleetLabel = (fleet: Fleet) =>
   charterVehicleOrder
     .filter((vehicle) => fleet[vehicle] > 0)
     .map(

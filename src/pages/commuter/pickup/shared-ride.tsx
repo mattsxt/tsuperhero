@@ -23,6 +23,7 @@ import {
 import { findRoute } from "@/api/v1/transit-routes/controllers";
 import { formatDistance } from "@/api/v1/waiting-areas/controllers";
 import { StatusPill, type PillTone } from "@/components/card-badges";
+import { VehicleTypeBadge } from "@/components/card-badges";
 import { ConfirmModal } from "@/components/confirm-modal";
 import { ErrorAlert } from "@/components/error-alert";
 import { LoadingLogo } from "@/components/LoadingLogo";
@@ -299,12 +300,12 @@ export function SharedRideScreen({
           ) : (
             <Users color={brandBlue} size={15} strokeWidth={2} />
           )}
-          <Text style={styles.detailText}>
+          <Text style={[styles.detailText, styles.detailTextFit]}>
             {ride.passengers}{" "}
-            {ride.passengers === 1 ? "passenger" : "passengers"} ·{" "}
-            {ride.vehicle === "jeep" ? "Jeepney" : "Tricycle"}
+            {ride.passengers === 1 ? "passenger" : "passengers"}
             {ride.plateNumber ? ` · ${ride.plateNumber}` : ""}
           </Text>
+          <VehicleTypeBadge type={ride.vehicle} />
         </View>
 
         {!!problem && <ErrorAlert title="Shared ride" message={problem} />}
@@ -390,6 +391,7 @@ const styles = StyleSheet.create({
   message: { color: text, fontFamily: "Sora", fontSize: 11, lineHeight: 16 },
   detail: { flexDirection: "row", alignItems: "center", gap: 8 },
   detailText: { flex: 1, color: text, fontFamily: "Sora", fontSize: 11 },
+  detailTextFit: { flex: 0, flexShrink: 1 },
   leaveButton: {
     flexDirection: "row",
     alignItems: "center",

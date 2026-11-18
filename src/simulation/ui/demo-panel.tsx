@@ -20,6 +20,8 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
 import { Image as ExpoImage } from "expo-image";
+import ChevronsLeft from "lucide-react-native/icons/chevrons-left";
+import ChevronsRight from "lucide-react-native/icons/chevrons-right";
 import Pause from "lucide-react-native/icons/pause";
 import Play from "lucide-react-native/icons/play";
 import Settings from "lucide-react-native/icons/settings";
@@ -62,6 +64,13 @@ import {
 } from "@/simulation/generated-vehicles";
 
 const size = 56;
+const toggleHeight = 20;
+const toggleGap = 6;
+const handleWidth = 26;
+const handleHeight = 52;
+const faint = "#f3f4f6";
+const faintOpacity = 0.3;
+const faintBackground = "rgba(209, 213, 219, 0.6)";
 const openMs = 260;
 const closeMs = 220;
 const speeds: engine.Speed[] = [1, 4, 10];
@@ -93,6 +102,8 @@ export function DemoPanel() {
   const startX = useSharedValue(0);
   const startY = useSharedValue(0);
   const [open, setOpen] = useState(false);
+  const [hidden, setHidden] = useState(false);
+  const [side, setSide] = useState<"left" | "right">("right");
   const progress = useSharedValue(0);
   const sheetHeight = useSharedValue(480);
   const [driver, setDriver] = useState(false);
@@ -164,7 +175,7 @@ export function DemoPanel() {
   }));
 
   const minY = insets.top + 8;
-  const maxY = height - size - insets.bottom - 8;
+  const maxY = height - size - toggleGap - toggleHeight - insets.bottom - 8;
   const maxX = width - size - 4;
 
   const pan = Gesture.Pan()
@@ -176,6 +187,9 @@ export function DemoPanel() {
     .onUpdate((e) => {
       x.value = Math.min(maxX, Math.max(4, startX.value + e.translationX));
       y.value = Math.min(maxY, Math.max(minY, startY.value + e.translationY));
+    })
+    .onEnd(() => {
+      scheduleOnRN(setSide, x.value + size / 2 > width / 2 ? "right" : "left");
     });
   const tap = Gesture.Tap().onEnd((_e, ok) => {
     if (ok) scheduleOnRN(openSheet);
@@ -185,6 +199,11 @@ export function DemoPanel() {
   const buttonStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: x.value }, { translateY: y.value }],
   }));
+  const handleStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: y.value + (size - handleHeight) / 2 }],
+  }));
+  const HideIcon = side === "right" ? ChevronsRight : ChevronsLeft;
+  const ShowIcon = side === "right" ? ChevronsLeft : ChevronsRight;
 
   const chooseSpeed = (next: engine.Speed) => {
     engine.setSpeed(next);
@@ -261,18 +280,49 @@ export function DemoPanel() {
 
   return (
     <>
-      <GestureDetector gesture={gesture}>
+      {hidden ? (
         <Animated.View
-          accessible
-          accessibilityRole="button"
-          accessibilityLabel="Open simulation controls"
-          accessibilityActions={[{ name: "activate" }]}
-          onAccessibilityAction={openSheet}
-          style={[styles.fab, buttonStyle]}
+          style={[
+            styles.handle,
+            side === "right" ? styles.handleRight : styles.handleLeft,
+            handleStyle,
+          ]}
         >
-          <Settings color="#ffffff" size={26} strokeWidth={2.2} />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Show controls"
+            hitSlop={8}
+            onPress={() => setHidden(false)}
+            style={styles.handleButton}
+          >
+            <ShowIcon color={faint} size={18} strokeWidth={2.6} />
+          </Pressable>
         </Animated.View>
-      </GestureDetector>
+      ) : (
+        <Animated.View style={[styles.fabWrap, buttonStyle]}>
+          <GestureDetector gesture={gesture}>
+            <View
+              accessible
+              accessibilityRole="button"
+              accessibilityLabel="Open controls"
+              accessibilityActions={[{ name: "activate" }]}
+              onAccessibilityAction={openSheet}
+              style={styles.fab}
+            >
+              <Settings color="#ffffff" size={26} strokeWidth={2.2} />
+            </View>
+          </GestureDetector>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Hide controls"
+            hitSlop={8}
+            onPress={() => setHidden(true)}
+            style={({ pressed }) => [styles.toggle, pressed && styles.pressed]}
+          >
+            <HideIcon color={faint} size={14} strokeWidth={2.6} />
+          </Pressable>
+        </Animated.View>
+      )}
 
       <Modal
         visible={open}
@@ -284,7 +334,7 @@ export function DemoPanel() {
         <View style={styles.root}>
           <Animated.View style={[styles.backdrop, backdropStyle]}>
             <Pressable
-              accessibilityLabel="Close simulation controls"
+              accessibilityLabel="Close controls"
               style={StyleSheet.absoluteFill}
               onPress={closeSheet}
             />
@@ -304,7 +354,7 @@ export function DemoPanel() {
               contentContainerStyle={[styles.sheetContent, { paddingBottom: insets.bottom + 18 }]}
             >
               <View style={styles.titleRow}>
-                <Text style={styles.title}>DEMO CONTROLS</Text>
+                <Text style={styles.title}>CONTROLS</Text>
                 {vehicleType && <VehicleBadge type={vehicleType} />}
               </View>
 
@@ -335,7 +385,7 @@ export function DemoPanel() {
                 {canPause && (
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel={paused ? "Resume the simulation" : "Pause the simulation"}
+                    accessibilityLabel={paused ? "Resume" : "Pause"}
                     accessibilityState={{ selected: paused }}
                     onPress={togglePause}
                     style={[styles.speed, styles.pauseButton, paused && styles.pauseActive]}
@@ -480,7 +530,7 @@ export function DemoPanel() {
                 }}
               />
               <ActionButton
-                label="RESET DEMO"
+                label="RESET"
                 danger
                 onPress={() => {
                   closeSheet();
@@ -596,11 +646,16 @@ function ActionButton({
 }
 
 const styles = StyleSheet.create({
-  fab: {
+  fabWrap: {
     position: "absolute",
     top: 0,
     left: 0,
     zIndex: 2000,
+    width: size,
+    alignItems: "center",
+    gap: toggleGap,
+  },
+  fab: {
     elevation: 12,
     width: size,
     height: size,
@@ -608,13 +663,40 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: palette.header,
-    borderWidth: 2,
-    borderColor: "#ffffff",
     shadowColor: "#0a1634",
     shadowOpacity: 0.3,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
   },
+  toggle: {
+    width: 34,
+    height: toggleHeight,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: toggleHeight / 2,
+    backgroundColor: faintBackground,
+    opacity: faintOpacity,
+  },
+  handle: {
+    position: "absolute",
+    top: 0,
+    zIndex: 2000,
+    width: handleWidth,
+    height: handleHeight,
+    backgroundColor: faintBackground,
+    opacity: faintOpacity,
+  },
+  handleRight: {
+    right: 0,
+    borderTopLeftRadius: 12,
+    borderBottomLeftRadius: 12,
+  },
+  handleLeft: {
+    left: 0,
+    borderTopRightRadius: 12,
+    borderBottomRightRadius: 12,
+  },
+  handleButton: { flex: 1, alignItems: "center", justifyContent: "center" },
   root: { flex: 1, justifyContent: "flex-end" },
   backdrop: {
     ...StyleSheet.absoluteFill,

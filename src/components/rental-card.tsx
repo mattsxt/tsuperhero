@@ -1,10 +1,10 @@
-import Bus from "lucide-react-native/icons/bus";
 import BusFront from "lucide-react-native/icons/bus-front";
 import CalendarDays from "lucide-react-native/icons/calendar-days";
 import MapPin from "lucide-react-native/icons/map-pin";
 import NotebookPen from "lucide-react-native/icons/notebook-pen";
 import Phone from "lucide-react-native/icons/phone";
 import Repeat from "lucide-react-native/icons/repeat";
+import Sparkles from "lucide-react-native/icons/sparkles";
 import UserRound from "lucide-react-native/icons/user-round";
 import Users from "lucide-react-native/icons/users";
 import type { ReactNode } from "react";
@@ -21,6 +21,8 @@ import {
   RatingCell,
   RatingFeedback,
   StatusPill,
+  vehicleTypeCode,
+  VehicleTypeBadge,
   type PillTone,
 } from "@/components/card-badges";
 import { ErrorAlert } from "@/components/error-alert";
@@ -68,9 +70,8 @@ export function RentalCard({
     viewer === "driver"
       ? { name: rental.commuterName, contact: rental.commuterContact }
       : { name: rental.driverName, contact: rental.driverContact };
-  const vehicle = [rental.plateNumber, rental.vehicleType]
-    .filter(Boolean)
-    .join(" · ");
+  const hasVehicle =
+    !!rental.plateNumber || !!vehicleTypeCode(rental.vehicleType);
 
   return (
     <View style={styles.card}>
@@ -105,14 +106,17 @@ export function RentalCard({
             Return {formatRentalTime(rental.returnTime)}
           </Detail>
         )}
-        <Detail icon={<Bus color={brandBlue} size={13} strokeWidth={2} />}>
+        <Detail
+          icon={<Sparkles color={brandBlue} size={13} strokeWidth={2} />}
+        >
           {rental.purpose}
         </Detail>
-        {viewer === "commuter" && !!vehicle && (
+        {viewer === "commuter" && hasVehicle && (
           <Detail
             icon={<BusFront color={brandBlue} size={13} strokeWidth={2} />}
+            trailing={<VehicleTypeBadge type={rental.vehicleType} />}
           >
-            {vehicle}
+            {rental.plateNumber}
           </Detail>
         )}
         {!!person.name && (
@@ -194,12 +198,14 @@ export function RentalCard({
 
 function Detail({
   icon,
+  trailing,
   children,
   lines = 1,
   wide = false,
   fill = false,
 }: {
   icon: ReactNode;
+  trailing?: ReactNode;
   children: ReactNode;
   lines?: number;
   wide?: boolean;
@@ -213,9 +219,15 @@ function Detail({
       ]}
     >
       <View style={styles.detailIcon}>{icon}</View>
-      <Text style={styles.detailText} numberOfLines={lines}>
-        {children}
-      </Text>
+      {!!children && (
+        <Text
+          style={[styles.detailText, !!trailing && styles.detailTextFit]}
+          numberOfLines={lines}
+        >
+          {children}
+        </Text>
+      )}
+      {trailing}
     </View>
   );
 }
@@ -269,6 +281,7 @@ const styles = StyleSheet.create({
     backgroundColor: softBlue,
   },
   detailText: { flex: 1, color: text, fontFamily: "Sora", fontSize: 10 },
+  detailTextFit: { flex: 0, flexShrink: 1 },
   link: { color: brandBlue, fontFamily: "SoraBold" },
   actions: { flexDirection: "row", gap: 8 },
   action: {

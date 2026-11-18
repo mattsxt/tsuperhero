@@ -1,6 +1,6 @@
 import Footprints from "lucide-react-native/icons/footprints";
 import TriangleAlert from "lucide-react-native/icons/triangle-alert";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { pickupOnRouteMeters } from "@/api/v1/pickups/controllers";
@@ -12,6 +12,7 @@ import {
   type PickupRouteMatch,
 } from "@/api/v1/transit-routes/controllers";
 import { moduleColors } from "@/components/module-ui";
+import { Notice } from "@/components/notice";
 import { TransitMap, type TransitMapState } from "@/components/transit-map";
 import {
   choosePathFor,
@@ -279,38 +280,6 @@ export function RouteMatchPreview({
   );
 }
 
-function Notice({
-  tone,
-  icon,
-  title,
-  body,
-}: {
-  tone: "info" | "warning";
-  icon: ReactNode;
-  title: string;
-  body: string;
-}) {
-  return (
-    <View
-      accessibilityRole="alert"
-      style={[styles.notice, tone === "warning" ? styles.warning : styles.info]}
-    >
-      <View style={styles.noticeIcon}>{icon}</View>
-      <View style={styles.flex}>
-        <Text
-          style={[
-            styles.noticeTitle,
-            { color: tone === "warning" ? "#92400e" : brandBlue },
-          ]}
-        >
-          {title}
-        </Text>
-        <Text style={styles.noticeBody}>{body}</Text>
-      </View>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   wrap: { marginTop: 10, gap: 10 },
   flex: { flex: 1 },
@@ -321,24 +290,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#e2e8f0",
-  },
-  notice: {
-    flexDirection: "row",
-    gap: 10,
-    padding: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-  },
-  info: { backgroundColor: "#eff6ff", borderColor: "#bfdbfe" },
-  warning: { backgroundColor: "#fffbeb", borderColor: "#fde68a" },
-  noticeIcon: { paddingTop: 1 },
-  noticeTitle: { fontFamily: "SoraBold", fontSize: 11 },
-  noticeBody: {
-    marginTop: 3,
-    color: text,
-    fontFamily: "Sora",
-    fontSize: 10,
-    lineHeight: 15,
   },
   list: {
     gap: 8,

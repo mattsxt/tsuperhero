@@ -492,16 +492,6 @@ const setPickupRoute = (a: any) => {
   if (!ownedRequest(a.p_request_id, isDraft))
     fail("This pickup draft is no longer available.");
   if (
-    a.p_route_id != null &&
-    !routeFitsPoints(
-      a.p_route_id,
-      [a.p_pickup_lat, a.p_pickup_lng],
-      [a.p_pickup_lat, a.p_pickup_lng],
-      25,
-    )
-  )
-    fail("Pickup point must be on the route. Please re-select.");
-  if (
     a.p_waiting_area_id != null &&
     !db.tables.waiting_area.some((w) => w.area_id === a.p_waiting_area_id && w.is_active)
   )
@@ -524,17 +514,6 @@ const publishPickupDraft = (a: any) => {
   if (!request) fail("This pickup draft is no longer available.");
   if (companionsOf(a.p_request_id).some((c) => c.companion_status === "pending"))
     fail("Wait for every companion to accept or decline before confirming.");
-  const pickup = pickupOf(a.p_request_id)!;
-  if (
-    pickup.route_id &&
-    !routeFitsPoints(
-      pickup.route_id,
-      [num(pickup.pickup_lat), num(pickup.pickup_lng)],
-      [num(pickup.pickup_lat), num(pickup.pickup_lng)],
-      25,
-    )
-  )
-    fail("Pickup point must be on the route. Please re-select.");
   patch("request", request!, { is_draft: false });
   return a.p_request_id;
 };

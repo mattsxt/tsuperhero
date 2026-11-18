@@ -31,7 +31,7 @@ export function RoleButtons() {
 
   return (
     <View style={styles.wrap}>
-      <Text style={styles.heading}>SIMULATION: PICK YOUR USER ROLE</Text>
+      <Text style={styles.heading}>PICK YOUR USER ROLE</Text>
       {roles.map((role) => (
         <Pressable
           key={role.email}

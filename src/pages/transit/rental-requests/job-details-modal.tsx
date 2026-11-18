@@ -6,6 +6,7 @@ import NotebookPen from "lucide-react-native/icons/notebook-pen";
 import Phone from "lucide-react-native/icons/phone";
 import Repeat from "lucide-react-native/icons/repeat";
 import Sparkles from "lucide-react-native/icons/sparkles";
+import TriangleAlert from "lucide-react-native/icons/triangle-alert";
 import Users from "lucide-react-native/icons/users";
 import { useState, type ReactNode } from "react";
 import {
@@ -19,6 +20,8 @@ import {
 } from "react-native";
 
 import { formatRentalTime, type Rental } from "@/api/v1/rentals/controllers";
+import { VehicleTypeBadge } from "@/components/card-badges";
+import { ConfirmModal } from "@/components/confirm-modal";
 import { palette } from "@/constants/colors";
 import { useNow } from "@/hooks/use-now";
 import { initialsOf } from "@/utils/initials";
@@ -150,11 +153,17 @@ export function JobDetailsModal({
 
             <Text style={styles.section}>YOUR VEHICLE</Text>
             <Detail
+              raw
               icon={<Car color={palette.brand} size={15} strokeWidth={2} />}
             >
-              {mine
-                ? `${mine.vehicleType}${mine.plateNumber ? ` · ${mine.plateNumber}` : ""}`
-                : (job.vehicleType ?? "Your vehicle")}
+              {!!mine?.plateNumber && (
+                <Text style={[styles.detailText, styles.plate]}>
+                  {mine.plateNumber}
+                </Text>
+              )}
+              <VehicleTypeBadge
+                type={mine?.vehicleType ?? job.vehicleType ?? "Vehicle"}
+              />
             </Detail>
 
             {others.length > 0 && (
@@ -163,12 +172,15 @@ export function JobDetailsModal({
                 {others.map((unit) => (
                   <Detail
                     key={unit.id}
+                    raw
                     icon={<Car color="#6b6b6b" size={15} strokeWidth={2} />}
                   >
-                    {unit.vehicleType} ·{" "}
-                    {unit.status === "open"
-                      ? "waiting for a driver"
-                      : `${unit.driverName ?? "Driver"}${unit.plateNumber ? ` (${unit.plateNumber})` : ""}`}
+                    <VehicleTypeBadge type={unit.vehicleType} />
+                    <Text style={[styles.detailText, styles.plate]}>
+                      {unit.status === "open"
+                        ? "Waiting for a driver"
+                        : `${unit.driverName ?? "Driver"}${unit.plateNumber ? ` (${unit.plateNumber})` : ""}`}
+                    </Text>
                   </Detail>
                 ))}
               </>
@@ -198,21 +210,9 @@ export function JobDetailsModal({
                 </Pressable>
               )}
             </View>
-            {job.status !== "completed" && (
-              <Text style={styles.footnote}>
-                The commuter marks the rental as completed after the trip.
-              </Text>
-            )}
 
             {droppable && (
               <View style={styles.dropBox}>
-                {confirmingDrop && (
-                  <Text style={styles.dropWarning}>
-                    Drop this job? Your{" "}
-                    {mine?.vehicleType.toLowerCase() ?? "vehicle"} goes back on
-                    the job board and the commuter is notified.
-                  </Text>
-                )}
                 {!!dropError && (
                   <Text style={styles.dropError}>{dropError}</Text>
                 )}
@@ -220,26 +220,14 @@ export function JobDetailsModal({
                   accessibilityRole="button"
                   accessibilityState={{ busy: dropping }}
                   disabled={dropping}
-                  onPress={
-                    confirmingDrop ? drop : () => setConfirmingDrop(true)
-                  }
+                  onPress={() => setConfirmingDrop(true)}
                   style={({ pressed }) => [
                     styles.drop,
-                    confirmingDrop && styles.dropConfirm,
                     (pressed || dropping) && styles.pressed,
                   ]}
                 >
-                  <Text
-                    style={[
-                      styles.dropText,
-                      confirmingDrop && styles.dropConfirmText,
-                    ]}
-                  >
-                    {dropping
-                      ? "DROPPING..."
-                      : confirmingDrop
-                        ? "YES, DROP THIS JOB"
-                        : "DROP THIS JOB"}
+                  <Text style={styles.dropText}>
+                    {dropping ? "DROPPING..." : "DROP THIS JOB"}
                   </Text>
                 </Pressable>
               </View>
@@ -257,27 +245,48 @@ export function JobDetailsModal({
           </View>
         </View>
       </View>
+
+      <ConfirmModal
+        visible={confirmingDrop}
+        destructive
+        title="Drop this job?"
+        message={`Your ${mine?.vehicleType.toLowerCase() ?? "vehicle"} goes back on the job board and the commuter is notified.`}
+        confirmLabel="Drop job"
+        cancelLabel="Keep job"
+        icon={<TriangleAlert color="#ffffff" size={22} strokeWidth={2.2} />}
+        onCancel={() => setConfirmingDrop(false)}
+        onConfirm={() => {
+          setConfirmingDrop(false);
+          void drop();
+        }}
+      />
     </Modal>
   );
 }
 
-function Detail({ icon, children }: { icon: ReactNode; children: ReactNode }) {
+function Detail({
+  icon,
+  raw = false,
+  children,
+}: {
+  icon: ReactNode;
+  raw?: boolean;
+  children: ReactNode;
+}) {
   return (
-    <View style={styles.detail}>
+    <View style={[styles.detail, raw && styles.detailCentered]}>
       {icon}
-      <Text style={styles.detailText}>{children}</Text>
+      {raw ? (
+        <View style={styles.badgeLine}>{children}</View>
+      ) : (
+        <Text style={styles.detailText}>{children}</Text>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   dropBox: { gap: 8, marginTop: 12 },
-  dropWarning: {
-    color: palette.danger,
-    fontFamily: "Sora",
-    fontSize: 12,
-    lineHeight: 17,
-  },
   dropError: { color: palette.danger, fontFamily: "SoraBold", fontSize: 11 },
   drop: {
     height: 46,
@@ -287,9 +296,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: palette.danger,
   },
-  dropConfirm: { backgroundColor: palette.danger },
   dropText: { color: palette.danger, fontFamily: "SoraBold", fontSize: 13 },
-  dropConfirmText: { color: "#ffffff" },
   backdrop: {
     flex: 1,
     justifyContent: "center",
@@ -348,6 +355,15 @@ const styles = StyleSheet.create({
     fontSize: 10,
   },
   detail: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  detailCentered: { alignItems: "center" },
+  badgeLine: {
+    flex: 1,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 6,
+  },
+  plate: { flex: 0, flexShrink: 1 },
   detailText: {
     flex: 1,
     color: "#111111",
@@ -378,12 +394,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: 18,
     backgroundColor: palette.brand,
-  },
-  footnote: {
-    color: "#6b6b6b",
-    fontFamily: "Sora",
-    fontSize: 11,
-    lineHeight: 16,
   },
   done: {
     height: 50,

@@ -31,10 +31,6 @@ export function RoutePickerModal({
           <View style={styles.header}>
             <Text style={styles.title}>Choose your route</Text>
           </View>
-          <Text style={styles.message}>
-            Pick the jeepney route you want to operate on. Your jeepney starts at
-            the beginning of that route.
-          </Text>
           <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
             {routes.map((route) => (
               <Pressable
@@ -78,15 +74,6 @@ const styles = StyleSheet.create({
   card: { overflow: "hidden", maxHeight: "85%", borderRadius: 20, backgroundColor: card },
   header: { paddingVertical: 14, alignItems: "center", backgroundColor: navy },
   title: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 18 },
-  message: {
-    paddingTop: 14,
-    paddingHorizontal: 20,
-    color: "#1f2937",
-    fontFamily: "Sora",
-    fontSize: 14,
-    lineHeight: 20,
-    textAlign: "center",
-  },
   list: { flexGrow: 0 },
   listContent: { gap: 8, paddingTop: 14, paddingHorizontal: 16 },
   row: {

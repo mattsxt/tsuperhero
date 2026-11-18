@@ -4,6 +4,7 @@ import CalendarDays from "lucide-react-native/icons/calendar-days";
 import ClipboardList from "lucide-react-native/icons/clipboard-list";
 import Star from "lucide-react-native/icons/star";
 import IdCard from "lucide-react-native/icons/id-card";
+import Sparkles from "lucide-react-native/icons/sparkles";
 import UserRound from "lucide-react-native/icons/user-round";
 import Users from "lucide-react-native/icons/users";
 import UsersRound from "lucide-react-native/icons/users-round";
@@ -37,6 +38,8 @@ import {
   RatingCell,
   RatingFeedback,
   StatusPill,
+  vehicleTypeCode,
+  VehicleTypeBadge,
 } from "@/components/card-badges";
 import { BookingRatingSheet } from "@/components/booking-rating-sheet";
 import {
@@ -277,9 +280,8 @@ export function BookingCard({
   onRate: () => void;
   onOpen?: () => void;
 }) {
-  const vehicle = [booking.plateNumber, booking.vehicleType]
-    .filter(Boolean)
-    .join(" · ");
+  const hasVehicle =
+    !!booking.plateNumber || !!vehicleTypeCode(booking.vehicleType);
   return (
     <Pressable
       accessibilityRole="button"
@@ -312,9 +314,12 @@ export function BookingCard({
             {booking.passengers === 1 ? "passenger" : "passengers"}
           </Detail>
         )}
-        {!!vehicle && (
-          <Detail icon={<IdCard color={brandBlue} size={13} strokeWidth={2} />}>
-            {vehicle}
+        {hasVehicle && (
+          <Detail
+            icon={<IdCard color={brandBlue} size={13} strokeWidth={2} />}
+            trailing={<VehicleTypeBadge type={booking.vehicleType} />}
+          >
+            {booking.plateNumber}
           </Detail>
         )}
         {booking.kind === "pickup" && booking.riders.length > 1 && (
@@ -345,7 +350,9 @@ export function BookingCard({
           </Detail>
         )}
         {!!booking.purpose && (
-          <Detail icon={<Bus color={brandBlue} size={13} strokeWidth={2} />}>
+          <Detail
+            icon={<Sparkles color={brandBlue} size={13} strokeWidth={2} />}
+          >
             {booking.purpose}
           </Detail>
         )}
@@ -391,13 +398,27 @@ export function BookingCard({
   );
 }
 
-function Detail({ icon, children }: { icon: ReactNode; children: ReactNode }) {
+function Detail({
+  icon,
+  trailing,
+  children,
+}: {
+  icon: ReactNode;
+  trailing?: ReactNode;
+  children: ReactNode;
+}) {
   return (
     <View style={styles.detail}>
       <View style={styles.detailIcon}>{icon}</View>
-      <Text style={styles.detailText} numberOfLines={1}>
-        {children}
-      </Text>
+      {!!children && (
+        <Text
+          style={[styles.detailText, !!trailing && styles.detailTextFit]}
+          numberOfLines={1}
+        >
+          {children}
+        </Text>
+      )}
+      {trailing}
     </View>
   );
 }
@@ -490,4 +511,5 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   detailText: { flex: 1, color: text, fontFamily: "Sora", fontSize: 10 },
+  detailTextFit: { flex: 0, flexShrink: 1 },
 });

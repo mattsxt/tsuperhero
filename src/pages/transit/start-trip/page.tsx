@@ -8,6 +8,7 @@ import RouteIcon from "lucide-react-native/icons/route";
 import ArrowLeft from "lucide-react-native/icons/arrow-left";
 import BusFront from "lucide-react-native/icons/bus-front";
 import Check from "lucide-react-native/icons/check";
+import Flag from "lucide-react-native/icons/flag";
 import LocateFixed from "lucide-react-native/icons/locate-fixed";
 import MapPin from "lucide-react-native/icons/map-pin";
 import Minus from "lucide-react-native/icons/minus";
@@ -27,7 +28,6 @@ import {
   Animated as NativeAnimated,
   BackHandler,
   Easing as NativeEasing,
-  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -147,7 +147,6 @@ const clock = (date: Date) =>
 
 const panelNavy = palette.navy;
 const circleNavy = palette.header;
-const modalBlue = "#d6ecf8";
 const { brandBlue } = moduleColors;
 const chipBlue = "#a8dcf7";
 const declineRed = palette.danger;
@@ -1294,9 +1293,14 @@ function Trip({
         onConfirm={resumeTrip}
         onCancel={endUnfinishedTrip}
       />
-      <FinalizeTripModal
+      <ConfirmModal
         visible={confirmingStop}
         busy={finalizing}
+        title="End this trip?"
+        message="You'll stop sharing your location. Passengers who boarded your vehicle will be marked as dropped off."
+        confirmLabel="End trip"
+        cancelLabel="Keep driving"
+        icon={<Flag color="#ffffff" size={22} strokeWidth={2.2} />}
         onCancel={() => setConfirmingStop(false)}
         onConfirm={finalizeTrip}
       />
@@ -1396,77 +1400,6 @@ function PickupCard({
         </Pressable>
       </View>
     </View>
-  );
-}
-
-function FinalizeTripModal({
-  visible,
-  busy,
-  onCancel,
-  onConfirm,
-}: {
-  visible: boolean;
-  busy: boolean;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      statusBarTranslucent
-      onRequestClose={busy ? undefined : onCancel}
-    >
-      <View style={styles.modalRoot}>
-        <View style={styles.modalCard}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>End this trip?</Text>
-          </View>
-          <Text style={styles.modalMessage}>
-            You’ll stop sharing your location. Riders still on board will be
-            marked as dropped off.
-          </Text>
-          <View style={styles.modalBody}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Cancel"
-              disabled={busy}
-              onPress={onCancel}
-              style={({ pressed }) => [
-                styles.modalButton,
-                styles.modalCancel,
-                (pressed || busy) && styles.pressed,
-              ]}
-            >
-              <Text style={[styles.modalButtonText, styles.modalCancelText]}>
-                KEEP DRIVING
-              </Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Confirm and finalize the trip"
-              accessibilityState={{ busy }}
-              disabled={busy}
-              onPress={onConfirm}
-              style={({ pressed }) => [
-                styles.modalButton,
-                styles.modalConfirm,
-                pressed && styles.pressed,
-              ]}
-            >
-              {busy ? (
-                <LoadingLogo color="#ffffff" size={22} />
-              ) : (
-                <Text style={[styles.modalButtonText, styles.modalConfirmText]}>
-                  END TRIP
-                </Text>
-              )}
-            </Pressable>
-          </View>
-        </View>
-      </View>
-    </Modal>
   );
 }
 
@@ -2038,53 +1971,4 @@ const styles = StyleSheet.create({
   fullButton: { flex: 1 },
   endButton: { flex: 2 },
   tripButtonText: { fontFamily: "SoraBold", fontSize: 16, letterSpacing: 0.6 },
-  modalRoot: {
-    flex: 1,
-    justifyContent: "center",
-    padding: 24,
-    backgroundColor: "rgba(0, 0, 0, 0.45)",
-  },
-  modalCard: {
-    overflow: "hidden",
-    borderRadius: 20,
-    backgroundColor: modalBlue,
-  },
-  modalHeader: {
-    paddingVertical: 14,
-    alignItems: "center",
-    backgroundColor: circleNavy,
-  },
-  modalTitle: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 18 },
-  modalMessage: {
-    paddingTop: 14,
-    paddingHorizontal: 20,
-    color: "#1f2937",
-    fontFamily: "Sora",
-    fontSize: 14,
-    lineHeight: 20,
-    textAlign: "center",
-  },
-  modalBody: {
-    flexDirection: "row",
-    gap: 10,
-    paddingTop: 14,
-    paddingBottom: 16,
-    paddingHorizontal: 16,
-  },
-  modalButton: {
-    flex: 1,
-    height: 52,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 12,
-  },
-  modalCancel: {
-    borderWidth: 1.5,
-    borderColor: circleNavy,
-    backgroundColor: "#ffffff",
-  },
-  modalConfirm: { backgroundColor: circleNavy },
-  modalButtonText: { fontFamily: "SoraBold", fontSize: 16 },
-  modalCancelText: { color: circleNavy },
-  modalConfirmText: { color: "#ffffff" },
 });

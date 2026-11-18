@@ -31,14 +31,6 @@ export const charterVehicleOrder: CharterVehicle[] = [
 export const fleetSize = (fleet: Fleet) =>
   charterVehicleOrder.reduce((total, vehicle) => total + fleet[vehicle], 0);
 
-export function describeFleet(types: string[]) {
-  const counts = new Map<string, number>();
-  types.forEach((type) => counts.set(type, (counts.get(type) ?? 0) + 1));
-  return [...counts]
-    .map(([type, count]) => `${count} ${type}${count === 1 ? "" : "s"}`)
-    .join(", ");
-}
-
 export type RentalUnit = {
   id: string;
   vehicleType: string;

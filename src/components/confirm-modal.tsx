@@ -2,6 +2,7 @@ import TriangleAlert from "lucide-react-native/icons/triangle-alert";
 import type { ReactNode } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 
+import { LoadingLogo } from "@/components/LoadingLogo";
 import { moduleColors } from "@/components/module-ui";
 import { palette } from "@/constants/colors";
 
@@ -16,6 +17,7 @@ export function ConfirmModal({
   cancelLabel = "Keep",
   destructive = false,
   hideCancel = false,
+  busy = false,
   icon,
   onConfirm,
   onCancel,
@@ -27,6 +29,7 @@ export function ConfirmModal({
   cancelLabel?: string;
   destructive?: boolean;
   hideCancel?: boolean;
+  busy?: boolean;
   icon?: ReactNode;
   onConfirm: () => void;
   onCancel: () => void;
@@ -54,6 +57,8 @@ export function ConfirmModal({
             <Text style={styles.message}>{message}</Text>
             <Pressable
               accessibilityRole="button"
+              accessibilityState={{ disabled: busy, busy }}
+              disabled={busy}
               onPress={onConfirm}
               style={({ pressed }) => [
                 styles.button,
@@ -61,18 +66,24 @@ export function ConfirmModal({
                 pressed && styles.pressed,
               ]}
             >
-              <Text style={styles.confirmText}>
-                {confirmLabel.toUpperCase()}
-              </Text>
+              {busy ? (
+                <LoadingLogo color="#ffffff" size={22} />
+              ) : (
+                <Text style={styles.confirmText}>
+                  {confirmLabel.toUpperCase()}
+                </Text>
+              )}
             </Pressable>
             {!hideCancel && (
               <Pressable
                 accessibilityRole="button"
+                accessibilityState={{ disabled: busy }}
+                disabled={busy}
                 onPress={onCancel}
                 style={({ pressed }) => [
                   styles.button,
                   styles.cancel,
-                  pressed && styles.pressed,
+                  (pressed || busy) && styles.pressed,
                 ]}
               >
                 <Text style={styles.cancelText}>

@@ -103,14 +103,14 @@ const vehicleFilters: {
   Icon: typeof Layers;
 }[] = [
   { value: "all", label: "Show all vehicles", Icon: Layers },
-  { value: "simulated", label: "Show simulated vehicles only", Icon: BusFront },
+  { value: "simulated", label: "Show regular vehicles only", Icon: BusFront },
   { value: "generated", label: "Show generated vehicles only", Icon: Sparkles },
 ];
 
 const emptyVehicleText: Record<VehicleFilter, string> = {
   all: "Nothing to see here yet. Active vehicles on this route will show up here.",
-  simulated: "No simulated vehicles on this route right now.",
-  generated: "No generated vehicles here. Add one from the demo controls.",
+  simulated: "No regular vehicles on this route right now.",
+  generated: "No generated vehicles here.",
 };
 const cardNavy = "#0f2a5c";
 const lightBlue = "#a8dcf7";

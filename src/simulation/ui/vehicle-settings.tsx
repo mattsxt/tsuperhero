@@ -137,9 +137,6 @@ export function VehicleSettingsFields({
             value={value.status}
             onChange={(status) => onChange({ ...value, status })}
           />
-          {value.status === "loading" && (
-            <Text style={styles.hint}>Stays put until you set it back to In Transit.</Text>
-          )}
         </Section>
       )}
       <Section label="OCCUPANCY UPDATES">
@@ -149,11 +146,6 @@ export function VehicleSettingsFields({
           value={value.dynamic}
           onChange={(dynamic) => onChange({ ...value, dynamic })}
         />
-        <Text style={styles.hint}>
-          {value.dynamic
-            ? "Passengers board and get off as it stops along the way."
-            : "The load stays exactly where you set it."}
-        </Text>
       </Section>
       <Section label={value.dynamic ? "STARTING OCCUPANCY" : "OCCUPANCY LEVEL"}>
         <OccupancyPicker
@@ -300,7 +292,7 @@ export function GenerateVehicleModal({
         <Pressable accessibilityLabel="Close" style={StyleSheet.absoluteFill} onPress={close} />
         <SettingsCard
           title="Generate a vehicle"
-          subtitle="Adds a live vehicle to the demo map."
+          subtitle="Adds a live vehicle to the map."
           onClose={close}
           footer={
             <FooterButtons
@@ -456,7 +448,6 @@ const styles = StyleSheet.create({
   footerRow: { flexDirection: "row", gap: 10 },
   section: { gap: 8 },
   sectionLabel: { color: mutedText, fontFamily: "SoraBold", fontSize: 10, letterSpacing: 0.5 },
-  hint: { color: mutedText, fontFamily: "Sora", fontSize: 11, lineHeight: 16 },
   segmented: {
     flexDirection: "row",
     padding: 4,

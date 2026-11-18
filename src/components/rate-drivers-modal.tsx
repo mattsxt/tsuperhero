@@ -21,6 +21,7 @@ import {
   unratedDrivers,
   type Rental,
 } from "@/api/v1/rentals/controllers";
+import { VehicleTypeBadge } from "@/components/card-badges";
 import { ErrorAlert } from "@/components/error-alert";
 import { LoadingLogo } from "@/components/LoadingLogo";
 import { StarInput } from "@/components/star-rating";
@@ -142,7 +143,7 @@ export function RateDriversModal({
                   ? "ALL DONE"
                   : reviewing
                     ? "REVIEW YOUR RATINGS"
-                    : `RATE YOUR DRIVERS · ${index + 1} OF ${queue.length}`}
+                    : "RATE YOUR DRIVERS"}
               </Text>
               <Text style={styles.title} numberOfLines={2}>
                 {rental.destination}
@@ -272,13 +273,6 @@ export function RateDriversModal({
 
                 {!!problem && <ErrorAlert title="Rating" message={problem} />}
 
-                <Text style={styles.reviewHint}>
-                  {ratedCount === 0
-                    ? "Rate at least one driver to submit. You can also rate them later from Bookings."
-                    : ratedCount < queue.length
-                      ? "Drivers you didn't rate can be rated later from Bookings."
-                      : "Ratings are sent to your drivers and can't be changed after you submit."}
-                </Text>
               </ScrollView>
               <View style={[styles.footer, styles.nav]}>
                 <Pressable
@@ -340,11 +334,19 @@ export function RateDriversModal({
                       <Text style={styles.driverName} numberOfLines={1}>
                         {driver.driverName ?? "Your driver"}
                       </Text>
-                      <Text style={styles.driverMeta} numberOfLines={1}>
-                        {[driver.vehicleType, driver.plateNumber]
-                          .filter(Boolean)
-                          .join(" · ")}
-                      </Text>
+                      {(!!driver.plateNumber || !!driver.vehicleType) && (
+                        <View style={styles.vehicleRow}>
+                          {!!driver.plateNumber && (
+                            <Text
+                              style={[styles.driverMeta, styles.plate]}
+                              numberOfLines={1}
+                            >
+                              {driver.plateNumber}
+                            </Text>
+                          )}
+                          <VehicleTypeBadge type={driver.vehicleType} />
+                        </View>
+                      )}
                     </View>
                   </View>
 
@@ -415,11 +417,6 @@ export function RateDriversModal({
                     </Animated.View>
                   )}
 
-                  {!draft.score && (
-                    <Text style={styles.reviewHint}>
-                      No stars? This driver is skipped. You can rate them later.
-                    </Text>
-                  )}
                 </Animated.View>
               </ScrollView>
               <View style={[styles.footer, styles.nav]}>
@@ -489,13 +486,6 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   editText: { color: palette.brand, fontFamily: "SoraBold", fontSize: 12 },
-  reviewHint: {
-    color: "#6b6b6b",
-    fontFamily: "Sora",
-    fontSize: 11,
-    lineHeight: 16,
-    textAlign: "center",
-  },
   backdrop: {
     flex: 1,
     justifyContent: "center",
@@ -573,6 +563,13 @@ const styles = StyleSheet.create({
   avatarText: { color: palette.brand, fontFamily: "SoraBold", fontSize: 18 },
   driverName: { color: palette.brand, fontFamily: "SoraBold", fontSize: 15 },
   driverMeta: { color: "#6b6b6b", fontFamily: "Sora", fontSize: 12 },
+  vehicleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 2,
+  },
+  plate: { flexShrink: 1 },
   question: {
     marginTop: 4,
     color: "#111111",
