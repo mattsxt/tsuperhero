@@ -98,6 +98,129 @@ test("answerCompanionInvite accept starts the companion walk near the commuter",
   assert.ok(Math.abs(meters - 200) < 20, String(meters));
 });
 
+test("a simulated companion follows the walking route to the pickup", async () => {
+  const id = pickupWithAna();
+  const [invite] = engine.pendingCompanionInvites();
+  const request = db.tables.request.find((r) => r.request_id === id)!;
+  const pickup = db.tables.pickup.find((p) => p.request_id === id)!;
+  const target: [number, number] = [
+    Number(pickup.pickup_lat ?? request.device_latitude),
+    Number(pickup.pickup_lng ?? request.device_longitude),
+  ];
+  const corner: [number, number] = [target[0] + 0.001, target[1] + 0.001];
+  let routedFrom: [number, number] | null = null;
+  engine.setWalkRouter(async (from) => {
+    routedFrom = from;
+    return [from, corner, target];
+  });
+  try {
+    engine.answerCompanionInvite(invite.key, true);
+    engine.start();
+    mock.timers.tick(1000);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.ok(routedFrom, "the walking router was asked for a path");
+
+    let passedCorner = false;
+    const companion = companionOf(id);
+    for (let i = 0; i < 900 && !companion.arrived_at; i++) {
+      mock.timers.tick(1000);
+      const lat = Number(companion.last_latitude);
+      const lng = Number(companion.last_longitude);
+      if (getDistanceMeters({ lat, lng }, { lat: corner[0], lng: corner[1] }) < 5)
+        passedCorner = true;
+    }
+    assert.ok(companion.arrived_at, "the companion reaches the pickup");
+    assert.ok(passedCorner, "the companion walks through the routed corner");
+  } finally {
+    engine.setWalkRouter(null);
+  }
+});
+
+test("the signed-in companion follows the walking route to the pickup", async () => {
+  const id = pickupWithAna();
+  const request = db.tables.request.find((r) => r.request_id === id)!;
+  const pickup = db.tables.pickup.find((p) => p.request_id === id)!;
+  const target: [number, number] = [
+    Number(pickup.pickup_lat ?? request.device_latitude),
+    Number(pickup.pickup_lng ?? request.device_longitude),
+  ];
+  const corner: [number, number] = [target[0] + 0.001, target[1] + 0.001];
+  engine.setWalkRouter(async (from) => [from, corner, target]);
+  try {
+    as("ana");
+    call("respond_to_share_invite", { p_request_id: id, p_accept: true });
+    engine.start();
+    mock.timers.tick(1000);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    let passedCorner = false;
+    const companion = companionOf(id);
+    for (let i = 0; i < 900 && !companion.arrived_at; i++) {
+      mock.timers.tick(1000);
+      const here = currentSimulatedPoint();
+      if (getDistanceMeters(here, { lat: corner[0], lng: corner[1] }) < 5) passedCorner = true;
+    }
+    assert.ok(companion.arrived_at, "the companion reaches the pickup");
+    assert.ok(passedCorner, "the companion walks through the routed corner");
+  } finally {
+    engine.setWalkRouter(null);
+  }
+});
+
+test("a tricycle starts the ride from where it stopped on the road", async () => {
+  const from = area("SAFE Gas");
+  const to = area("E-Mall");
+  const target = { lat: Number(from.area_latitude), lng: Number(from.area_longitude) };
+  const roadStop: [number, number] = [target.lat + 0.0003, target.lng];
+  const id = call("save_pickup_draft", {
+    p_request_id: null,
+    p_latitude: target.lat,
+    p_longitude: target.lng,
+    p_destination: "SAFE Gas",
+    p_passengers: 1,
+    p_vehicle_type: "Tricycle",
+  });
+  call("set_pickup_route", {
+    p_request_id: id,
+    p_route_id: null,
+    p_pickup_lat: target.lat,
+    p_pickup_lng: target.lng,
+    p_dropoff_lat: to.area_latitude,
+    p_dropoff_lng: to.area_longitude,
+    p_dropoff_name: "E-Mall",
+    p_waiting_area_id: null,
+  });
+  call("publish_pickup_draft", { p_request_id: id });
+  const routedFrom: [number, number][] = [];
+  engine.setRoadRouter(async (start, end) => {
+    routedFrom.push(start);
+    return routedFrom.length === 1 ? [start, roadStop] : [start, end];
+  });
+  try {
+    engine.walkTo(target);
+    engine.start();
+    const request = db.tables.request.find((r) => r.request_id === id)!;
+    for (let i = 0; i < 1200 && request.request_status !== "riding"; i++) {
+      mock.timers.tick(1000);
+      for (let n = 0; n < 4; n++) await Promise.resolve();
+      if (!request.owner_present_at && getDistanceMeters(currentSimulatedPoint(), target) <= 100) {
+        const here = currentSimulatedPoint();
+        call("mark_pickup_arrived", { p_request_id: id, p_latitude: here.lat, p_longitude: here.lng });
+      }
+    }
+    for (let n = 0; n < 4; n++) await Promise.resolve();
+    assert.equal(request.request_status, "riding");
+    assert.equal(routedFrom.length, 2);
+    assert.deepEqual(routedFrom[1], roadStop);
+  } finally {
+    engine.setRoadRouter(null);
+  }
+});
+
 test("an accepted invite simulates the signed-in companion walking to the pickup", () => {
   const id = pickupWithAna();
   const request = db.tables.request.find((r) => r.request_id === id)!;

@@ -20,6 +20,7 @@ import { isSimulation } from "@/simulation/flag";
 import * as simulationEngine from "@/simulation/engine";
 import { getDistanceMeters, type Coordinates } from "@/utils/geo";
 
+import { partyPins } from "./ride-party";
 import { WaitingAreaDirectionsMap } from "./waiting-area-directions-map";
 
 const { brandBlue, mutedText, softBlue, text } = moduleColors;
@@ -81,6 +82,7 @@ export function GoToPickup({
     .filter((rider) => !rider.arrived)
     .map((rider) => rider.name.split(" ")[0]);
   const ready = here && notArrived.length === 0 && !busy;
+  const companionPins = useMemo(() => partyPins(riders), [riders]);
 
   const placeName = isPlusCode(target.name)
     ? routeName
@@ -100,6 +102,8 @@ export function GoToPickup({
         locateTop={insets.top + 70}
         padTop={insets.top + 80}
         padBottom={cardHeight + 30}
+        pins={companionPins}
+        fitPins
       />
 
       <View style={[styles.topBar, { top: insets.top + 12 }]}>

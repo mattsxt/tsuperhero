@@ -1,13 +1,11 @@
 import { useLocalSearchParams } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import BusFront from "lucide-react-native/icons/bus-front";
 import ChevronsDown from "lucide-react-native/icons/chevrons-down";
 import ChevronsUp from "lucide-react-native/icons/chevrons-up";
 import MapPin from "lucide-react-native/icons/map-pin";
 import MapPinned from "lucide-react-native/icons/map-pinned";
 import Layers from "lucide-react-native/icons/layers";
 import Search from "lucide-react-native/icons/search";
-import Sparkles from "lucide-react-native/icons/sparkles";
 import X from "lucide-react-native/icons/x";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
@@ -44,6 +42,7 @@ import {
   loadWaitingAreas,
   type WaitingArea,
 } from "@/api/v1/waiting-areas/controllers";
+import { VehicleIcon } from "@/components/module-icons";
 import { ModuleHeader, moduleColors } from "@/components/module-ui";
 import { TransitMap, type TransitMapState } from "@/components/transit-map";
 import {
@@ -61,7 +60,7 @@ import { LoadingLogo } from "@/components/LoadingLogo";
 
 const { brandBlue, headerBlue, mutedText, softBlue, text } = moduleColors;
 
-type VehicleFilter = "all" | "simulated" | "generated";
+type VehicleFilter = "all" | "jeep" | "tricy";
 
 const myRidePollMs = 4_000;
 
@@ -97,20 +96,16 @@ function rideAsLiveVehicle(
   };
 }
 
-const vehicleFilters: {
-  value: VehicleFilter;
-  label: string;
-  Icon: typeof Layers;
-}[] = [
-  { value: "all", label: "Show all vehicles", Icon: Layers },
-  { value: "simulated", label: "Show regular vehicles only", Icon: BusFront },
-  { value: "generated", label: "Show generated vehicles only", Icon: Sparkles },
+const vehicleFilters: { value: VehicleFilter; label: string }[] = [
+  { value: "all", label: "Show all vehicles" },
+  { value: "jeep", label: "Show jeepneys only" },
+  { value: "tricy", label: "Show tricycles only" },
 ];
 
 const emptyVehicleText: Record<VehicleFilter, string> = {
   all: "Nothing to see here yet. Active vehicles on this route will show up here.",
-  simulated: "No regular vehicles on this route right now.",
-  generated: "No generated vehicles here.",
+  jeep: "No jeepneys on this route right now.",
+  tricy: "No tricycles on this route right now.",
 };
 const cardNavy = "#0f2a5c";
 const lightBlue = "#a8dcf7";
@@ -291,9 +286,7 @@ export default function RoutesScreen() {
   const listedVehicles = useMemo(
     () =>
       filterVehicles
-        ? vehiclesOnRoute.filter(
-            (vehicle) => vehicle.generated === (vehicleFilter === "generated"),
-          )
+        ? vehiclesOnRoute.filter((vehicle) => vehicle.type === vehicleFilter)
         : vehiclesOnRoute,
     [filterVehicles, vehicleFilter, vehiclesOnRoute],
   );
@@ -526,8 +519,9 @@ export default function RoutesScreen() {
                     accessibilityLabel="Filter vehicles"
                     style={styles.vehicleFilter}
                   >
-                    {vehicleFilters.map(({ value, label, Icon }) => {
+                    {vehicleFilters.map(({ value, label }) => {
                       const selected = value === vehicleFilter;
+                      const color = selected ? headerBlue : "#ffffff";
                       return (
                         <Pressable
                           key={value}
@@ -541,11 +535,11 @@ export default function RoutesScreen() {
                             selected && styles.vehicleFilterSelected,
                           ]}
                         >
-                          <Icon
-                            color={selected ? headerBlue : "#ffffff"}
-                            size={15}
-                            strokeWidth={2.2}
-                          />
+                          {value === "all" ? (
+                            <Layers color={color} size={15} strokeWidth={2.2} />
+                          ) : (
+                            <VehicleIcon type={value} color={color} size={15} />
+                          )}
                         </Pressable>
                       );
                     })}

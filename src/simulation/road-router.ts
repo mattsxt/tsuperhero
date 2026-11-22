@@ -4,13 +4,18 @@ import { localRoadPath } from "@/simulation/local-roads";
 
 const ROUTE_TIMEOUT_MS = 4_000;
 
-const onlineRoute: RoadRouter = async (from, to) => {
+type DirectionsResult = {
+  routes?: { geometry?: { coordinates?: [number, number][] } }[];
+};
+
+const onlineRoute = async (
+  request: () => Promise<DirectionsResult>,
+): Promise<[number, number][] | null> => {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<null>((resolve) => {
     timer = setTimeout(() => resolve(null), ROUTE_TIMEOUT_MS);
   });
-  const routed = transitRouteApi
-    .etaRoute(from, to)
+  const routed = request()
     .then((response) => {
       const coordinates = response.routes?.[0]?.geometry?.coordinates;
       if (!coordinates?.length) return null;
@@ -23,4 +28,9 @@ const onlineRoute: RoadRouter = async (from, to) => {
 };
 
 export const mapboxRoadRouter: RoadRouter = async (from, to) =>
-  (await onlineRoute(from, to)) ?? localRoadPath(from, to);
+  (await onlineRoute(() => transitRouteApi.etaRoute(from, to))) ??
+  localRoadPath(from, to);
+
+export const mapboxWalkRouter: RoadRouter = async (from, to) =>
+  (await onlineRoute(() => transitRouteApi.walkingRoute(from, to))) ??
+  localRoadPath(from, to);

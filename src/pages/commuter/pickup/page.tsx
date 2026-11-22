@@ -65,7 +65,7 @@ import {
   findNearestWaitingArea,
   findWaitingAreasOnRoute,
   getKnownWaitingAreas,
-  loadWaitingAreas,
+  loadWaitingAreas,
   type WaitingArea,
   type WaitingAreaRecommendation,
   type WaitingAreaType,
@@ -122,7 +122,7 @@ import { RideInProgress } from "./ride-in-progress";
 import { RouteMatchPreview } from "./route-match-preview";
 import { SharedRideScreen } from "./shared-ride";
 import {
-  WaitingAreaDirectionsMap,
+  WaitingAreaDirectionsMap,
 } from "./waiting-area-directions-map";
 
 const { brandBlue, softBlue, mutedText, text, error } = moduleColors;
@@ -286,7 +286,9 @@ export default function PickupScreen() {
           (current) =>
             current.userId === rider.userId &&
             current.inviteStatus === rider.inviteStatus &&
-            current.arrived === rider.arrived,
+            current.arrived === rider.arrived &&
+            current.location?.lat === rider.location?.lat &&
+            current.location?.lng === rider.location?.lng,
         ),
       )
     ) {

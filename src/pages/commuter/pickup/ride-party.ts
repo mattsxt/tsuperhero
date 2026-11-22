@@ -67,7 +67,7 @@ export function partyPins(
         lat: rider.location.lat,
         lng: rider.location.lng,
         badge: rider.initials,
-        label: `${firstName} · ${rider.arrived ? "here" : "on the way"}`,
+        label: `${firstName} · ${rider.arrived ? "HERE" : "OTW"}`,
         color: rider.arrived ? palette.success : notArrivedColor,
       },
     ];

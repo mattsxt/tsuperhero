@@ -33,7 +33,9 @@ export function WaitingAreaDirectionsMap({
   vehicles,
   pins,
   driverLine,
+  fitPins = false,
 }: {
+  fitPins?: boolean;
   locateTop?: number;
   vehicles?: TransitMapState["vehicles"];
   pins?: TransitMapState["pickups"];
@@ -125,6 +127,12 @@ export function WaitingAreaDirectionsMap({
           [area.lat, area.lng],
         ]
       : [[area.lat, area.lng]];
+    const framedPins = fitPins ? (pins ?? []) : [];
+    for (const pin of framedPins) points.push([pin.lat, pin.lng]);
+    const framedPinKey = framedPins
+      .map((pin) => pin.id)
+      .sort()
+      .join(",");
     return {
       routeId: null,
       route: null,
@@ -155,7 +163,7 @@ export function WaitingAreaDirectionsMap({
           }
         : null,
       fit: {
-        key: `waiting-area-${area.id}-${fitOrigin ? "user" : "area"}`,
+        key: `waiting-area-${area.id}-${fitOrigin ? "user" : "area"}-${framedPinKey}`,
         points,
       },
       padTop,
@@ -172,6 +180,7 @@ export function WaitingAreaDirectionsMap({
     recenter,
     vehicles,
     pins,
+    fitPins,
     driverLine,
   ]);
 

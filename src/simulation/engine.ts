@@ -369,6 +369,13 @@ export function setRoadRouter(router: RoadRouter | null): void {
   roadRouter = router;
 }
 
+let walkRouter: RoadRouter | null = null;
+const routingWalks = new WeakSet<Mover>();
+
+export function setWalkRouter(router: RoadRouter | null): void {
+  walkRouter = router;
+}
+
 const sendRoutedDrive = (
   vehicleId: string,
   from: LatLngPair,
@@ -487,10 +494,7 @@ const boardJob = (job: Job, at: MoverPosition) => {
   const routeId = pickup.route_id ?? activeTrip(vehicleId)?.route_id;
   const onArrive = (end: MoverPosition) => completeJob(job, end);
   if (routePath(routeId)) sendDrive(vehicleId, legPath(from, to, routeId), onArrive);
-  else {
-    const start = dropoffOf(pickup) ? pickupPointOf(request, pickup) : from;
-    sendRoutedDrive(vehicleId, start, to, legPath(start, to, routeId), onArrive);
-  }
+  else sendRoutedDrive(vehicleId, from, to, legPath(from, to, routeId), onArrive);
 };
 
 const completeJob = (job: Job, at: MoverPosition) => {
@@ -655,6 +659,29 @@ export function companionWalkStart(key: string): LatLngPair | null {
   return companionStarts.get(key) ?? null;
 }
 
+const routeCompanionWalk = (
+  movers: Map<string, Mover>,
+  moverKey: string,
+  startKey: string,
+  waiting: Mover,
+  target: LatLngPair,
+) => {
+  if (!walkRouter) return;
+  const from = waiting.path[0];
+  routingWalks.add(waiting);
+  walkRouter(from, target)
+    .catch(() => null)
+    .then((road) => {
+      routingWalks.delete(waiting);
+      if (movers.get(moverKey) !== waiting || !road || road.length < 2) return;
+      const path =
+        metersBetween(road[road.length - 1], target) > 1 ? [...road, target] : road;
+      if (companionStarts.get(startKey) === from) companionStarts.set(startKey, path[0]);
+      movers.set(moverKey, { ...waiting, path, along: 0 });
+      emitState();
+    });
+};
+
 const runCompanions = (user: string | null, seconds: number) => {
   const mine = user ? commuterIdOf(user) : undefined;
   for (const companion of db.tables.pickup_companion) {
@@ -677,7 +704,7 @@ const runCompanions = (user: string | null, seconds: number) => {
         const here = userFix(user);
         const from: LatLngPair = [here.lat, here.lng];
         companionStarts.set(key, from);
-        walks.set(user!, {
+        const walk: Mover = {
           id: user!,
           path: [from, target],
           along: 0,
@@ -690,7 +717,9 @@ const runCompanions = (user: string | null, seconds: number) => {
             if (row && live && row.companion_status === "accepted")
               companionPresenceEffect(live, row, target[0], target[1]);
           },
-        });
+        };
+        walks.set(user!, walk);
+        routeCompanionWalk(walks, user!, key, walk, target);
       }
       continue;
     }
@@ -700,7 +729,7 @@ const runCompanions = (user: string | null, seconds: number) => {
         ? ([positionOf(existing).lat, positionOf(existing).lng] as LatLngPair)
         : companionStartNear(user, target);
       if (!existing) companionStarts.set(key, from);
-      companionWalks.set(key, {
+      const walk: Mover = {
         id: key,
         path: [from, target],
         along: 0,
@@ -712,13 +741,16 @@ const runCompanions = (user: string | null, seconds: number) => {
           if (row && live && row.companion_status === "accepted")
             companionPresenceEffect(live, row, target[0], target[1]);
         },
-      });
+      };
+      companionWalks.set(key, walk);
+      routeCompanionWalk(companionWalks, key, key, walk, target);
     }
   }
 };
 
 const moveCompanions = (seconds: number) => {
   for (const [key, mover] of [...companionWalks]) {
+    if (routingWalks.has(mover)) continue;
     const next = advance(mover, seconds);
     if (companionWalks.get(key) === mover) companionWalks.set(key, next);
   }
@@ -726,6 +758,7 @@ const moveCompanions = (seconds: number) => {
 
 const moveWalks = (seconds: number) => {
   for (const [user, mover] of [...walks]) {
+    if (routingWalks.has(mover)) continue;
     const next = advance(mover, seconds);
     if (walks.get(user) === mover) walks.set(user, next);
   }
