@@ -3,10 +3,21 @@ import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import Constants from "expo-constants";
 import { AppState, Platform } from "react-native";
 
+import { toUserMessage } from "@/api/v1/errors";
+import { isOnline, subscribeToOnline } from "@/hooks/use-online";
+import { isSimulation } from "@/simulation/flag";
+
 let client: SupabaseClient | undefined;
 
 export function getSupabaseClient() {
   if (client) {
+    return client;
+  }
+
+  if (isSimulation()) {
+    const { createMockClient } =
+      require("@/simulation/client") as typeof import("@/simulation/client");
+    client = createMockClient();
     return client;
   }
 
@@ -36,18 +47,29 @@ export function getSupabaseClient() {
     });
   }
 
+  subscribeToOnline(() => {
+    if (!isOnline()) return;
+    supabase.auth.startAutoRefresh();
+    void supabase.auth.getSession().catch(() => null);
+  });
+
   client = supabase;
   return client;
 }
 
+let refreshing: Promise<boolean> | null = null;
+
+export function refreshExpiredSession(): Promise<boolean> {
+  refreshing ??= getSupabaseClient()
+    .auth.refreshSession()
+    .then(({ data, error }) => !error && !!data.session)
+    .catch(() => false)
+    .finally(() => {
+      refreshing = null;
+    });
+  return refreshing;
+}
+
 export function getErrorMessage(error: unknown) {
-  if (
-    error &&
-    typeof error === "object" &&
-    "message" in error &&
-    typeof error.message === "string"
-  ) {
-    return error.message;
-  }
-  return "Something went wrong.";
+  return toUserMessage(error);
 }

@@ -1,6 +1,5 @@
 import { router } from "expo-router";
 import ChevronLeft from "lucide-react-native/icons/chevron-left";
-import CircleCheck from "lucide-react-native/icons/circle-check";
 import Eye from "lucide-react-native/icons/eye";
 import EyeOff from "lucide-react-native/icons/eye-off";
 import RefreshCcw from "lucide-react-native/icons/refresh-ccw";
@@ -14,22 +13,36 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import Reanimated, { FadeIn } from "react-native-reanimated";
 
 import {
   codeLength,
   completeSignUp,
   getEmailProblem,
   getPasswordProblem,
-  passwordRules,
   requestSignUpCode,
   verifySignUpCode,
 } from "@/api/v1/auth/controllers";
+import {
+  AuthScreen,
+  authSpacingTransition,
+  useKeyboardVisible,
+} from "@/components/auth-screen";
 import { BrandHeader } from "@/components/brand-header";
+import { PasswordStrength } from "@/components/password-strength";
 import { Routes } from "@/constants/routes";
+import { palette } from "@/constants/colors";
+import { useNow } from "@/hooks/use-now";
 
-const brandBlue = "#193caf";
+const stepErrorTitles = ["Email address", "Verification code", "Password"];
+
+const brandBlue = palette.brand;
 const inputWidth = 320;
+const stepFadeMs = 260;
+const resendCooldownMs = 60_000;
+
+const countdown = (seconds: number) =>
+  `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 
 export default function RegisterScreen() {
   const [step, setStep] = useState(1);
@@ -42,17 +55,22 @@ export default function RegisterScreen() {
   const [codeError, setCodeError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const codeInputs = useRef<(TextInput | null)[]>([]);
+  const keyboardVisible = useKeyboardVisible();
+  const [resendAt, setResendAt] = useState(0);
+  const now = useNow(1000, step === 2);
+  const resendSeconds = Math.max(0, Math.ceil((resendAt - now) / 1000));
 
   const focusCodeInput = (index: number) => {
     codeInputs.current[Math.max(0, Math.min(index, codeLength - 1))]?.focus();
   };
 
   const resendCode = async () => {
-    if (submitting) return;
+    if (submitting || resendAt > Date.now()) return;
     setSubmitting(true);
     setCode("");
     const result = await requestSignUpCode(email);
     setCodeError(result.ok ? "" : result.error);
+    if (result.ok) setResendAt(Date.now() + resendCooldownMs);
     setSubmitting(false);
   };
 
@@ -86,20 +104,47 @@ export default function RegisterScreen() {
       return;
     }
 
-    if (step === 1) setCode("");
+    if (step === 1) {
+      setCode("");
+      setResendAt(Date.now() + resendCooldownMs);
+    }
     if (step === 2) setCodeError("");
     setStep((currentStep) => Math.min(currentStep + 1, 4));
   };
   const goToPreviousStep = () =>
     setStep((currentStep) => Math.max(currentStep - 1, 1));
 
+  const stepError =
+    step === 1 ? emailError : step === 2 ? codeError : passwordError;
+
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
-        <BrandHeader variant="badge" />
+    <AuthScreen
+      compact={keyboardVisible}
+      error={
+        stepError && step < 4
+          ? { title: stepErrorTitles[step - 1], message: stepError }
+          : undefined
+      }
+    >
+      <BrandHeader variant="badge" compact={keyboardVisible} />
 
-        {step < 4 && <Text style={styles.heading}>SIGN UP</Text>}
+      {step < 4 && (
+        <Reanimated.Text
+          style={[
+            styles.heading,
+            keyboardVisible && styles.headingCompact,
+            authSpacingTransition,
+          ]}
+        >
+          SIGN UP
+        </Reanimated.Text>
+      )}
 
+      <Reanimated.View
+        key={step}
+        entering={FadeIn.duration(stepFadeMs)}
+        style={styles.stepWrap}
+      >
         {step === 4 ? (
           <CompletionState />
         ) : (
@@ -120,9 +165,6 @@ export default function RegisterScreen() {
                   keyboardType="email-address"
                   style={[styles.input, emailError && styles.inputError]}
                 />
-                {!!emailError && (
-                  <Text style={styles.errorText}>{emailError}</Text>
-                )}
               </View>
             )}
 
@@ -136,9 +178,33 @@ export default function RegisterScreen() {
                 </Text>
                 <View style={styles.fieldHeading}>
                   <FieldLabel label="CODE" />
-                  <Pressable onPress={resendCode} style={styles.resendButton}>
-                    <RefreshCcw color="#171717" size={10} strokeWidth={2} />
-                    <Text style={styles.resendText}>RESEND CODE</Text>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: resendSeconds > 0 }}
+                    accessibilityLabel={
+                      resendSeconds > 0
+                        ? `Resend code available in ${resendSeconds} seconds`
+                        : "Resend code"
+                    }
+                    disabled={resendSeconds > 0}
+                    onPress={resendCode}
+                    style={styles.resendButton}
+                  >
+                    <RefreshCcw
+                      color={resendSeconds > 0 ? "#9a9a9a" : "#171717"}
+                      size={10}
+                      strokeWidth={2}
+                    />
+                    <Text
+                      style={[
+                        styles.resendText,
+                        resendSeconds > 0 && styles.resendWaiting,
+                      ]}
+                    >
+                      {resendSeconds > 0
+                        ? `RESEND CODE IN ${countdown(resendSeconds)}`
+                        : "RESEND CODE"}
+                    </Text>
                   </Pressable>
                 </View>
                 <View style={styles.codeRow}>
@@ -171,7 +237,9 @@ export default function RegisterScreen() {
                           !code[index]?.trim() &&
                           index > 0
                         ) {
-                          const nextCode = code.padEnd(codeLength, " ").split("");
+                          const nextCode = code
+                            .padEnd(codeLength, " ")
+                            .split("");
                           nextCode[index - 1] = " ";
                           setCode(nextCode.join("").trimEnd());
                           focusCodeInput(index - 1);
@@ -183,13 +251,13 @@ export default function RegisterScreen() {
                       autoComplete="one-time-code"
                       textContentType="oneTimeCode"
                       maxLength={codeLength}
-                      style={styles.codeInput}
+                      style={[
+                        styles.codeInput,
+                        !!codeError && styles.inputError,
+                      ]}
                     />
                   ))}
                 </View>
-                {!!codeError && (
-                  <Text style={styles.errorText}>{codeError}</Text>
-                )}
               </View>
             )}
 
@@ -206,7 +274,10 @@ export default function RegisterScreen() {
             )}
 
             <Pressable
-              style={[styles.primaryButton, submitting && styles.buttonDisabled]}
+              style={[
+                styles.primaryButton,
+                submitting && styles.buttonDisabled,
+              ]}
               disabled={submitting}
               onPress={continueToNextStep}
             >
@@ -217,21 +288,23 @@ export default function RegisterScreen() {
             <AccountLink />
           </>
         )}
-      </View>
-    </SafeAreaView>
+      </Reanimated.View>
+    </AuthScreen>
   );
 }
 
 function StepIndicator({ step }: { step: number }) {
-  const progress = useRef(new Animated.Value(step)).current;
+  const [progress] = useState(() => new Animated.Value(step - 1));
 
   useEffect(() => {
-    Animated.timing(progress, {
+    const animation = Animated.timing(progress, {
       toValue: step,
       duration: 320,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: false,
-    }).start();
+    });
+    animation.start();
+    return () => animation.stop();
   }, [progress, step]);
 
   return (
@@ -299,18 +372,6 @@ function PasswordStep({
   setPasswordVisible: (value: boolean) => void;
   onBack: () => void;
 }) {
-  const passedRules = passwordRules.filter((rule) =>
-    rule.test(password),
-  ).length;
-  const strength =
-    password.length === 0
-      ? { label: "", barColor: "#dedede", textColor: "#dedede" }
-      : passedRules === passwordRules.length
-        ? { label: "STRONG", barColor: "#9be89a", textColor: "#0E870E" }
-        : passedRules >= 2
-          ? { label: "MODERATE", barColor: "#fff0a6", textColor: "#FFC300" }
-          : { label: "WEAK", barColor: "#ffc2c2", textColor: "#A61010" };
-
   return (
     <View style={styles.stepContent}>
       <Text style={styles.stepTitle}>Create your password</Text>
@@ -347,28 +408,7 @@ function PasswordStep({
           )}
         </Pressable>
       </View>
-      {!!passwordError && <Text style={styles.errorText}>{passwordError}</Text>}
-      <View
-        style={[styles.strengthBar, { backgroundColor: strength.barColor }]}
-      />
-      <Text style={[styles.strengthText, { color: strength.textColor }]}>
-        {strength.label}
-      </Text>
-      <View style={styles.rules}>
-        {passwordRules.map((rule) => {
-          const passed = rule.test(password);
-          return (
-            <View key={rule.label} style={styles.ruleRow}>
-              <CircleCheck
-                color={passed ? "#ffffff" : "#b7b7b7"}
-                size={12}
-                fill={passed ? brandBlue : "transparent"}
-              />
-              <Text style={styles.ruleText}>{rule.label}</Text>
-            </View>
-          );
-        })}
-      </View>
+      <PasswordStrength password={password} />
     </View>
   );
 }
@@ -381,7 +421,10 @@ function AccountLink() {
   return (
     <Text style={styles.accountText}>
       Already have an account?{" "}
-      <Text style={styles.accountLink} onPress={() => router.replace(Routes.login)}>
+      <Text
+        style={styles.accountLink}
+        onPress={() => router.replace(Routes.login)}
+      >
         Sign in here
       </Text>
       .
@@ -407,13 +450,6 @@ function CompletionState() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#ffffff" },
-  container: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 10,
-  },
   heading: {
     color: "#050505",
     fontFamily: "SoraBold",
@@ -421,6 +457,7 @@ const styles = StyleSheet.create({
     lineHeight: 28,
     marginTop: 18,
   },
+  headingCompact: { marginTop: 8 },
   stepHeader: {
     width: inputWidth,
     flexDirection: "row",
@@ -441,16 +478,15 @@ const styles = StyleSheet.create({
   stepContent: { width: inputWidth },
   stepTitle: {
     color: "#050505",
-    fontFamily: "Sora",
+    fontFamily: "SoraBold",
     fontSize: 12,
-    fontWeight: "700",
     textAlign: "center",
     marginBottom: 14,
   },
   description: {
     color: "#171717",
     fontFamily: "Sora",
-    fontSize: 9,
+    fontSize: 10,
     lineHeight: 13,
     textAlign: "center",
     marginBottom: 27,
@@ -463,15 +499,15 @@ const styles = StyleSheet.create({
   },
   fieldLabel: {
     color: "#090909",
-    fontFamily: "Sora",
-    fontSize: 9,
-    fontWeight: "700",
+    fontFamily: "SoraBold",
+    fontSize: 10,
   },
   resendText: {
     color: "#171717",
     fontFamily: "Sora",
-    fontSize: 8,
+    fontSize: 10,
   },
+  resendWaiting: { color: "#9a9a9a", fontVariant: ["tabular-nums"] },
   resendButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -488,13 +524,7 @@ const styles = StyleSheet.create({
     fontFamily: "Sora",
     fontSize: 11,
   },
-  inputError: { borderColor: "#d93025" },
-  errorText: {
-    color: "#d93025",
-    fontFamily: "Sora",
-    fontSize: 8,
-    marginTop: 4,
-  },
+  inputError: { borderColor: palette.danger },
   codeRow: { flexDirection: "row", gap: 8 },
   codeInput: {
     flex: 1,
@@ -516,7 +546,7 @@ const styles = StyleSheet.create({
     borderColor: brandBlue,
     borderRadius: 10,
   },
-  passwordInputWrapError: { borderColor: "#d93025" },
+  passwordInputWrapError: { borderColor: palette.danger },
   passwordInput: {
     flex: 1,
     height: "100%",
@@ -526,25 +556,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
   eyeButton: { paddingHorizontal: 12 },
-  strengthBar: {
-    width: inputWidth,
-    height: 8,
-    alignItems: "flex-end",
-    justifyContent: "center",
-    paddingHorizontal: 4,
-    marginTop: 10,
-    borderRadius: 2,
-  },
-  strengthText: {
-    fontFamily: "Sora",
-    fontSize: 7,
-    fontWeight: "700",
-    alignSelf: "flex-end",
-    marginTop: 3,
-  },
-  rules: { gap: 4, marginTop: 10 },
-  ruleRow: { flexDirection: "row", alignItems: "center", gap: 4 },
-  ruleText: { color: "#111111", fontFamily: "Sora", fontSize: 9 },
   primaryButton: {
     width: inputWidth,
     height: 35,
@@ -558,12 +569,12 @@ const styles = StyleSheet.create({
   primaryButtonText: {
     color: "#ffffff",
     fontFamily: "SoraBold",
-    fontSize: 9,
+    fontSize: 10,
   },
   accountText: {
     color: "#111111",
     fontFamily: "Sora",
-    fontSize: 6,
+    fontSize: 10,
     textAlign: "center",
     marginTop: 10,
   },
@@ -572,12 +583,12 @@ const styles = StyleSheet.create({
     fontFamily: "SoraBold",
     textDecorationLine: "underline",
   },
+  stepWrap: { alignItems: "center" },
   completion: { alignItems: "center", width: inputWidth, marginTop: 96 },
   completionTitle: {
     color: "#050505",
-    fontFamily: "Sora",
+    fontFamily: "SoraBold",
     fontSize: 19,
-    fontWeight: "700",
     lineHeight: 25,
     textAlign: "center",
   },

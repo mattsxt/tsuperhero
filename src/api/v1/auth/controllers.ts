@@ -1,36 +1,41 @@
 import { authRoutes } from "@/api/v1/auth/routes";
-import { getSignedInRoute } from "@/api/v1/profile/controllers";
-import { attempt, failure, unwrap, type Result } from "@/api/v1/result";
-import type { AppRoute } from "@/constants/routes";
+import {
+  getCodeProblem,
+  getEmailProblem,
+  getPasswordProblem,
+} from "@/api/v1/auth/validation";
+import { getErrorMessage } from "@/api/v1/client";
+import { forgetPushToken } from "@/api/v1/notifications/controllers";
+import { cancelActivePickupBeforeSignOut } from "@/api/v1/pickups/controllers";
+import {
+  getSignedInRoute,
+  unsupportedAccountMessage,
+} from "@/api/v1/profile/controllers";
+import {
+  attempt,
+  failure,
+  success,
+  unwrap,
+  type Result,
+} from "@/api/v1/result";
+import { signedOutOrOffline } from "@/api/v1/session-route";
+import { Routes, type AppRoute } from "@/constants/routes";
+import { checkOnline } from "@/hooks/use-online";
 
-export const codeLength = 6;
+export {
+  codeLength,
+  getEmailProblem,
+  getPasswordProblem
+} from "@/api/v1/auth/validation";
 
-export const passwordRules = [
-  { label: "8 characters minimum", test: (value: string) => value.length >= 8 },
-  { label: "1 lowercase letter", test: (value: string) => /[a-z]/.test(value) },
-  { label: "1 uppercase letter", test: (value: string) => /[A-Z]/.test(value) },
-  { label: "1 number", test: (value: string) => /\d/.test(value) },
-];
-
-export function getEmailProblem(email: string) {
-  const normalizedEmail = email.trim();
-  if (!normalizedEmail) return "Email address is required.";
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
-    return "Enter a valid email address.";
+export async function getStartupRoute(): Promise<AppRoute> {
+  try {
+    const { session } = await unwrap(authRoutes.getSession());
+    if (!session) return Routes.login;
+    return (await getSignedInRoute(session.user.id)) ?? Routes.login;
+  } catch (error) {
+    return signedOutOrOffline(error);
   }
-  return null;
-}
-
-export function getCodeProblem(code: string) {
-  return code.length === codeLength && /^\d+$/.test(code)
-    ? null
-    : `Enter the ${codeLength}-digit code.`;
-}
-
-export function getPasswordProblem(password: string) {
-  const failedRules = passwordRules.filter((rule) => !rule.test(password));
-  if (failedRules.length === 0) return null;
-  return `Password needs ${failedRules.map((rule) => rule.label.toLowerCase()).join(", ")}.`;
 }
 
 export async function login(
@@ -47,7 +52,9 @@ export async function login(
       authRoutes.signInWithPassword(normalizedEmail, password),
     );
     if (!user) throw new Error("Sign in failed. Please try again.");
-    return getSignedInRoute(user.id);
+    const route = await getSignedInRoute(user.id);
+    if (!route) throw new Error(unsupportedAccountMessage);
+    return route;
   });
 }
 
@@ -73,16 +80,71 @@ export async function verifySignUpCode(
 export async function completeSignUp(password: string): Promise<Result> {
   const problem = getPasswordProblem(password);
   if (problem) return failure(problem);
+  if (!(await checkOnline())) {
+    return failure("Connect to the internet to finish creating your account.");
+  }
   return attempt(async () => {
     await unwrap(authRoutes.updatePassword(password));
+    const cancellation = await cancelActivePickupBeforeSignOut();
+    if (!cancellation.ok) throw new Error(cancellation.error);
+    await forgetPushToken();
     const { error } = await authRoutes.signOut();
     if (error) throw error;
   });
 }
 
 export async function logout(): Promise<Result> {
+  if (!(await checkOnline())) {
+    return failure("Connect to the internet before signing out.");
+  }
   return attempt(async () => {
+    const cancellation = await cancelActivePickupBeforeSignOut();
+    if (!cancellation.ok) throw new Error(cancellation.error);
+    await forgetPushToken();
     const { error } = await authRoutes.signOut();
     if (error) throw error;
   });
+}
+
+export type PasswordForm = { current: string; next: string; confirm: string };
+export type PasswordFormField = keyof PasswordForm;
+export type PasswordFormErrors = Partial<Record<PasswordFormField, string>>;
+
+export async function changePassword(
+  form: PasswordForm,
+): Promise<Result & { fieldErrors?: PasswordFormErrors }> {
+  if (!(await checkOnline())) {
+    return failure("Connect to the internet to change your password.");
+  }
+  const fieldErrors: PasswordFormErrors = {};
+  if (!form.current) fieldErrors.current = "Enter your current password.";
+  const problem = getPasswordProblem(form.next);
+  if (problem) fieldErrors.next = problem;
+  else if (form.next === form.current) {
+    fieldErrors.next = "New password must be different from your current one.";
+  }
+  if (form.confirm !== form.next)
+    fieldErrors.confirm = "Passwords don't match.";
+
+  if (Object.keys(fieldErrors).length > 0) {
+    return { ...failure("Please check the form."), fieldErrors };
+  }
+
+  try {
+    const { session } = await unwrap(authRoutes.getSession());
+    const email = session?.user.email;
+    if (!email) return failure("Your session has expired. Sign in again.");
+
+    const { error } = await authRoutes.signInWithPassword(email, form.current);
+    if (error?.code === "invalid_credentials") {
+      const message = "Current password is incorrect.";
+      return { ...failure(message), fieldErrors: { current: message } };
+    }
+    if (error) throw error;
+
+    await unwrap(authRoutes.updatePassword(form.next));
+    return success(undefined);
+  } catch (error) {
+    return failure(getErrorMessage(error));
+  }
 }

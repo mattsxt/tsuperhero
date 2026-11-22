@@ -4,37 +4,47 @@ import Bell from "lucide-react-native/icons/bell";
 import House from "lucide-react-native/icons/house";
 import UserRound from "lucide-react-native/icons/user-round";
 import type { RefObject } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import Animated, {
+  useAnimatedStyle,
+  type SharedValue,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Routes, type AppRoute } from "@/constants/routes";
+import { useNotifications } from "@/hooks/use-notifications";
+import { palette } from "@/constants/colors";
 
-const navBlue = "#1034A6";
+const navBlue = palette.header;
 
 export const bottomNavHeight = 110;
 
+const navBarHeight = 70;
+const navGap = 12;
+
 type Tab = "home" | "notifications" | "profile";
-
-const tabOrder: Record<Tab, number> = { notifications: 0, home: 1, profile: 2 };
-
-export type TabTransition = "forward" | "back";
 
 export function BottomNav({
   active,
   homeRoute,
   blurTarget,
+  hidden,
 }: {
   active: Tab;
   homeRoute: AppRoute;
   blurTarget: RefObject<View | null>;
+  hidden?: SharedValue<number>;
 }) {
   const insets = useSafeAreaInsets();
+  const { unreadCount } = useNotifications();
+  const offscreen = navBarHeight + insets.bottom + navGap + 16;
+  const slideStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: (hidden?.value ?? 0) * offscreen }],
+  }));
 
   const goTo = (tab: Tab, route: AppRoute) => {
     if (tab === active) return;
-    const transition: TabTransition =
-      tabOrder[tab] < tabOrder[active] ? "back" : "forward";
-    router.replace({ pathname: route, params: { transition } });
+    router.replace({ pathname: route } as Parameters<typeof router.replace>[0]);
   };
 
   const tabs: {
@@ -43,7 +53,12 @@ export function BottomNav({
     Icon: typeof House;
     route?: AppRoute;
   }[] = [
-    { tab: "notifications", label: "Notifications", Icon: Bell },
+    {
+      tab: "notifications",
+      label: "Notifications",
+      Icon: Bell,
+      route: Routes.notifications,
+    },
     { tab: "home", label: "Home", Icon: House, route: homeRoute },
     {
       tab: "profile",
@@ -54,7 +69,9 @@ export function BottomNav({
   ];
 
   return (
-    <View style={[styles.nav, { bottom: insets.bottom + 12 }]}>
+    <Animated.View
+      style={[styles.nav, { bottom: insets.bottom + navGap }, slideStyle]}
+    >
       <BlurView
         blurTarget={blurTarget}
         blurMethod="dimezisBlurViewSdk31Plus"
@@ -65,11 +82,12 @@ export function BottomNav({
       <View style={styles.tint} />
       {tabs.map(({ tab, label, Icon, route }) => {
         const selected = tab === active;
+        const badge = tab === "notifications" ? unreadCount : 0;
         return (
           <Pressable
             key={tab}
             accessibilityRole="button"
-            accessibilityLabel={label}
+            accessibilityLabel={badge > 0 ? `${label}, ${badge} unread` : label}
             accessibilityState={{ selected }}
             onPress={route ? () => goTo(tab, route) : undefined}
             style={({ pressed }) => [
@@ -83,10 +101,15 @@ export function BottomNav({
               size={34}
               strokeWidth={2}
             />
+            {badge > 0 && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>{badge > 9 ? "9+" : badge}</Text>
+              </View>
+            )}
           </Pressable>
         );
       })}
-    </View>
+    </Animated.View>
   );
 }
 
@@ -95,7 +118,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 16,
     right: 16,
-    height: 70,
+    height: navBarHeight,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -120,5 +143,20 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   tabSelected: { backgroundColor: "#ffffff" },
+  badge: {
+    position: "absolute",
+    top: 4,
+    right: 2,
+    minWidth: 18,
+    height: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: navBlue,
+    backgroundColor: palette.danger,
+  },
+  badgeText: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 9 },
   tabPressed: { backgroundColor: "rgba(255, 255, 255, 0.15)" },
 });

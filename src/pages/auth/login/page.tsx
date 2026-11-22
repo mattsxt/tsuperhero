@@ -1,7 +1,7 @@
 import { router } from "expo-router";
 import Eye from "lucide-react-native/icons/eye";
 import EyeOff from "lucide-react-native/icons/eye-off";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import {
   Animated,
   Easing,
@@ -11,13 +11,30 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import Reanimated from "react-native-reanimated";
 
 import { login } from "@/api/v1/auth/controllers";
+import {
+  AuthScreen,
+  authSpacingTransition,
+  useKeyboardVisible,
+} from "@/components/auth-screen";
 import { BrandHeader } from "@/components/brand-header";
+import { LoadingLogo } from "@/components/LoadingLogo";
+import { LoadingScreen } from "@/components/LoadingScreen";
 import { Routes } from "@/constants/routes";
+import { palette } from "@/constants/colors";
+import { isSimulation } from "@/simulation/flag";
 
-const brandBlue = "#193caf";
+const brandBlue = palette.brand;
+const errorRed = palette.danger;
+const welcomeMs = 1200;
+
+const RoleButtons = isSimulation()
+  ? // eslint-disable-next-line @typescript-eslint/no-require-imports
+    (require("@/simulation/ui/role-buttons") as typeof import("@/simulation/ui/role-buttons"))
+      .RoleButtons
+  : null;
 
 export default function LoginScreen() {
   const [emailLoginVisible, setEmailLoginVisible] = useState(false);
@@ -26,7 +43,9 @@ export default function LoginScreen() {
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [loginError, setLoginError] = useState("");
   const [loggingIn, setLoggingIn] = useState(false);
-  const formProgress = useRef(new Animated.Value(0)).current;
+  const [signedIn, setSignedIn] = useState(false);
+  const [formProgress] = useState(() => new Animated.Value(0));
+  const keyboardVisible = useKeyboardVisible();
 
   const showEmailLogin = () => {
     setEmailLoginVisible(true);
@@ -39,6 +58,7 @@ export default function LoginScreen() {
   };
 
   const signIn = async () => {
+    if (loggingIn) return;
     setLoggingIn(true);
     setLoginError("");
     const result = await login(email, password);
@@ -48,7 +68,14 @@ export default function LoginScreen() {
       setLoginError(result.error);
       return;
     }
-    router.replace(result.data);
+    setSignedIn(true);
+    await new Promise((resolve) => setTimeout(resolve, welcomeMs));
+    router.replace(result.data as Parameters<typeof router.replace>[0]);
+  };
+
+  const editField = (setter: (value: string) => void) => (value: string) => {
+    setter(value);
+    if (loginError) setLoginError("");
   };
 
   const formHeight = formProgress.interpolate({
@@ -64,98 +91,127 @@ export default function LoginScreen() {
     outputRange: [1, 0, 0],
   });
 
-  return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
+  if (signedIn) return <LoadingScreen />;
+
+  if (isSimulation()) {
+    return (
+      <AuthScreen compact={false}>
         <BrandHeader variant="badge" />
+        {RoleButtons && <RoleButtons />}
+      </AuthScreen>
+    );
+  }
 
-        <Text style={styles.title}>SIGN IN</Text>
+  return (
+    <AuthScreen
+      compact={keyboardVisible}
+      error={loginError ? { title: "Sign in", message: loginError } : undefined}
+    >
+      <BrandHeader variant="badge" compact={keyboardVisible} />
 
-        <Animated.View
-          style={[
-            styles.formReveal,
-            { height: formHeight, opacity: formOpacity },
-          ]}
-        >
-          <View style={styles.fieldGroup}>
-            <Text style={styles.fieldLabel}>EMAIL ADDRESS</Text>
-            <TextInput
-              value={email}
-              onChangeText={setEmail}
-              placeholder="Email address"
-              placeholderTextColor="#929292"
-              autoCapitalize="none"
-              autoComplete="email"
-              keyboardType="email-address"
-              style={styles.input}
-            />
-          </View>
-          <View style={styles.fieldGroup}>
-            <Text style={styles.fieldLabel}>PASSWORD</Text>
-            <View style={styles.passwordInputWrap}>
-              <TextInput
-                value={password}
-                onChangeText={setPassword}
-                placeholder="Password"
-                placeholderTextColor="#929292"
-                autoComplete="password"
-                secureTextEntry={!passwordVisible}
-                style={styles.passwordInput}
-              />
-              <Pressable
-                accessibilityLabel={
-                  passwordVisible ? "Hide password" : "Show password"
-                }
-                accessibilityRole="button"
-                hitSlop={10}
-                onPress={() => setPasswordVisible((visible) => !visible)}
-                style={styles.eyeButton}
-              >
-                {passwordVisible ? (
-                  <Eye color={brandBlue} size={17} />
-                ) : (
-                  <EyeOff color={brandBlue} size={17} />
-                )}
-              </Pressable>
-            </View>
-          </View>
-        </Animated.View>
+      {RoleButtons && !keyboardVisible && <RoleButtons />}
 
-        {!!loginError && <Text style={styles.errorText}>{loginError}</Text>}
+      <Reanimated.Text
+        style={[
+          styles.title,
+          keyboardVisible && styles.titleCompact,
+          authSpacingTransition,
+        ]}
+      >
+        SIGN IN
+      </Reanimated.Text>
 
-        {!emailLoginVisible ? (
-          <Animated.View style={{ opacity: introOpacity }}>
-            <Pressable style={styles.primaryButton} onPress={showEmailLogin}>
-              <Text style={styles.primaryButtonText}>CONTINUE WITH EMAIL</Text>
-            </Pressable>
-          </Animated.View>
-        ) : (
-          <Pressable
-            style={[styles.primaryButton, loggingIn && styles.buttonDisabled]}
-            disabled={loggingIn}
-            onPress={signIn}
+      <Animated.View
+        style={[
+          styles.formReveal,
+          { height: formHeight, opacity: formOpacity },
+        ]}
+      >
+        <View style={styles.fieldGroup}>
+          <Text style={styles.fieldLabel}>EMAIL ADDRESS</Text>
+          <TextInput
+            value={email}
+            onChangeText={editField(setEmail)}
+            placeholder="Email address"
+            placeholderTextColor="#929292"
+            autoCapitalize="none"
+            autoComplete="email"
+            keyboardType="email-address"
+            style={[styles.input, !!loginError && styles.inputError]}
+          />
+        </View>
+        <View style={styles.fieldGroup}>
+          <Text style={styles.fieldLabel}>PASSWORD</Text>
+          <View
+            style={[
+              styles.passwordInputWrap,
+              !!loginError && styles.inputError,
+            ]}
           >
-            <Text style={styles.primaryButtonText}>
-              {loggingIn ? "LOGGING IN..." : "LOGIN"}
-            </Text>
+            <TextInput
+              value={password}
+              onChangeText={editField(setPassword)}
+              placeholder="Password"
+              placeholderTextColor="#929292"
+              autoComplete="password"
+              secureTextEntry={!passwordVisible}
+              style={styles.passwordInput}
+            />
+            <Pressable
+              accessibilityLabel={
+                passwordVisible ? "Hide password" : "Show password"
+              }
+              accessibilityRole="button"
+              hitSlop={10}
+              onPress={() => setPasswordVisible((visible) => !visible)}
+              style={styles.eyeButton}
+            >
+              {passwordVisible ? (
+                <Eye color={brandBlue} size={17} />
+              ) : (
+                <EyeOff color={brandBlue} size={17} />
+              )}
+            </Pressable>
+          </View>
+        </View>
+      </Animated.View>
+
+      {!emailLoginVisible ? (
+        <Animated.View style={{ opacity: introOpacity }}>
+          <Pressable style={styles.primaryButton} onPress={showEmailLogin}>
+            <Text style={styles.primaryButtonText}>CONTINUE WITH EMAIL</Text>
           </Pressable>
-        )}
-
-        <Divider label="OR" />
-
+        </Animated.View>
+      ) : (
         <Pressable
-          style={styles.primaryButton}
-          onPress={() => router.push(Routes.register)}
+          accessibilityRole="button"
+          accessibilityLabel="Log in"
+          accessibilityState={{ busy: loggingIn }}
+          style={[styles.primaryButton, loggingIn && styles.buttonDisabled]}
+          disabled={loggingIn}
+          onPress={signIn}
         >
-          <Text style={styles.primaryButtonText}>SIGN UP NOW</Text>
+          {loggingIn ? (
+            <LoadingLogo
+              size={20}
+              color="#ffffff"
+              label="Checking your details"
+            />
+          ) : (
+            <Text style={styles.primaryButtonText}>LOGIN</Text>
+          )}
         </Pressable>
+      )}
 
-        <Text style={styles.partnerText}>
-          Want to become a TsuperHero partner?{" "}
-          <Text style={styles.partnerLink}>Apply now</Text>!
-        </Text>
-      </View>
-    </SafeAreaView>
+      <Divider label="OR" />
+
+      <Pressable
+        style={styles.primaryButton}
+        onPress={() => router.push(Routes.register)}
+      >
+        <Text style={styles.primaryButtonText}>SIGN UP NOW</Text>
+      </Pressable>
+    </AuthScreen>
   );
 }
 
@@ -170,25 +226,15 @@ function Divider({ label }: { label: string }) {
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#ffffff",
-  },
-  container: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 10,
-  },
   title: {
     color: "#050505",
     fontFamily: "SoraBold",
     fontSize: 17,
-    fontWeight: "400",
     lineHeight: 24,
     marginTop: 43,
     marginBottom: 32,
   },
+  titleCompact: { marginTop: 14, marginBottom: 16 },
   primaryButton: {
     width: 320,
     height: 35,
@@ -200,19 +246,11 @@ const styles = StyleSheet.create({
   buttonDisabled: {
     opacity: 0.6,
   },
-  errorText: {
-    width: 320,
-    color: "#d93025",
-    fontFamily: "Sora",
-    fontSize: 8,
-    marginTop: -4,
-    marginBottom: 8,
-  },
+  inputError: { borderColor: errorRed },
   primaryButtonText: {
     color: "#ffffff",
     fontFamily: "SoraBold",
-    fontSize: 9,
-    fontWeight: "400",
+    fontSize: 10,
   },
   divider: {
     width: 320,
@@ -229,14 +267,7 @@ const styles = StyleSheet.create({
   dividerText: {
     color: "#d4d4d4",
     fontFamily: "Sora",
-    fontSize: 8,
-  },
-  noAccountText: {
-    color: "#d4d4d4",
-    fontFamily: "Sora",
-    fontSize: 8,
-    marginTop: 7,
-    marginBottom: 11,
+    fontSize: 10,
   },
   formReveal: {
     width: 320,
@@ -250,7 +281,7 @@ const styles = StyleSheet.create({
   fieldLabel: {
     color: "#111111",
     fontFamily: "SoraBold",
-    fontSize: 8,
+    fontSize: 10,
   },
   input: {
     width: 320,
@@ -284,18 +315,5 @@ const styles = StyleSheet.create({
     height: "100%",
     justifyContent: "center",
     paddingHorizontal: 12,
-  },
-  partnerText: {
-    color: "#111111",
-    fontFamily: "Sora",
-    fontSize: 7,
-    marginTop: 10,
-    textAlign: "center",
-    width: 320,
-  },
-  partnerLink: {
-    color: brandBlue,
-    fontFamily: "SoraBold",
-    textDecorationLine: "underline",
   },
 });

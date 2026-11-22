@@ -1,0 +1,876 @@
+import Mapbox, {
+  Camera,
+  CircleLayer,
+  FillLayer,
+  LineLayer,
+  MapView,
+  MarkerView,
+  ShapeSource,
+  SymbolLayer,
+} from "@rnmapbox/maps";
+import Sparkles from "lucide-react-native/icons/sparkles";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { SvgXml } from "react-native-svg";
+
+import { MapControls } from "@/components/map-controls";
+import {
+  occupancyPinColors,
+  type TransitMapProps,
+} from "@/components/transit-map-types";
+import { mapStyleUrl, mapboxToken } from "@/constants/mapbox";
+import { waitingAreaPinColors } from "@/constants/waiting-area";
+import { palette } from "@/constants/colors";
+import { vehicleIconUris } from "@/constants/vehicle-icon-uris";
+import { isSimulation } from "@/simulation/flag";
+import { circlePath } from "@/utils/geo";
+
+export type {
+  MapCenter,
+  TransitMapState,
+} from "@/components/transit-map-types";
+
+Mapbox.setAccessToken(mapboxToken ?? null);
+
+type Position = [number, number];
+type LatLngPair = [number, number];
+
+const brandBlue = "#193caf";
+const routeBlue = "#1034A6";
+const pinRed = "#c81e1e";
+const defaultCenter: Position = [123.1948, 13.6218];
+const glideMs = isSimulation() ? 1_000 : 900;
+const glideFrameMs = 66;
+
+const rangeFill = "#4f8ef7";
+const rangeEdge = "#2563eb";
+const vehicleBox = { width: 36, height: 31, pin: 31 };
+const waitingBox = { width: 200, height: 80, icon: 22 };
+
+const TERMINAL_SVG =
+  '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6v6M15 6v6M2 12h19.6M18 18h3s.5-1.7.8-2.8c.1-.4.2-.8.2-1.2 0-.4-.1-.8-.2-1.2l-1.4-5C20.1 6.8 19.1 6 18 6H4a2 2 0 0 0-2 2v10h3"/><circle cx="7" cy="18" r="2"/><path d="M9 18h5"/><circle cx="16" cy="18" r="2"/></svg>';
+const WAITING_SVG =
+  '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2"/><path d="M12 8v7M9 22l3-7 3 7M8 12h8"/></svg>';
+
+const vehicleIconXml: Record<string, string> = Object.fromEntries(
+  Object.entries(vehicleIconUris).map(([type, uri]) => [
+    type,
+    atob(uri.slice(uri.indexOf(",") + 1)),
+  ]),
+);
+
+const toPosition = ([lat, lng]: LatLngPair): Position => [lng, lat];
+
+function lineCollection(paths: Position[][]): GeoJSON.FeatureCollection {
+  return {
+    type: "FeatureCollection",
+    features: paths.map((coordinates) => ({
+      type: "Feature",
+      properties: {},
+      geometry: { type: "LineString", coordinates },
+    })),
+  };
+}
+
+const minFitSpanDegrees = 0.004;
+const pointZoom = 16;
+
+function boundsOf(points: Position[], minSpan = 0) {
+  const lngs = points.map(([lng]) => lng);
+  const lats = points.map(([, lat]) => lat);
+  const grow = (min: number, max: number) => {
+    const extra = Math.max(0, minSpan - (max - min)) / 2;
+    return [min - extra, max + extra];
+  };
+  const [west, east] = grow(Math.min(...lngs), Math.max(...lngs));
+  const [south, north] = grow(Math.min(...lats), Math.max(...lats));
+  return {
+    ne: [east, north] as Position,
+    sw: [west, south] as Position,
+  };
+}
+
+function useGlide(lat: number, lng: number) {
+  const [position, setPosition] = useState({ lat, lng });
+  const current = useRef(position);
+
+  useEffect(() => {
+    const from = current.current;
+    if (from.lat === lat && from.lng === lng) return;
+    let start: number | null = null;
+    let lastDrawn = 0;
+    let frame = 0;
+    const step = (time: number) => {
+      if (start === null) start = time;
+      const t = Math.min((time - start) / glideMs, 1);
+      if (t < 1 && time - lastDrawn < glideFrameMs) {
+        frame = requestAnimationFrame(step);
+        return;
+      }
+      lastDrawn = time;
+      const eased = isSimulation()
+        ? t
+        : t < 0.5
+          ? 2 * t * t
+          : 1 - Math.pow(-2 * t + 2, 2) / 2;
+      const next = {
+        lat: from.lat + (lat - from.lat) * eased,
+        lng: from.lng + (lng - from.lng) * eased,
+      };
+      current.current = next;
+      setPosition(next);
+      if (t < 1) frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frame);
+  }, [lat, lng]);
+
+  return position;
+}
+
+const pinLabelHeight = 22;
+
+function pinAnchorY(pin: { muted?: boolean; label?: string }) {
+  const size = pin.muted ? 16 : 30;
+  const height = size + (pin.label ? pinLabelHeight : 0);
+  return size / 2 / height;
+}
+
+function PinMarker({
+  pin,
+}: {
+  pin: NonNullable<TransitMapProps["state"]["pickups"]>[number];
+}) {
+  const color = pin.color ?? pinRed;
+  return (
+    <MarkerView
+      coordinate={[pin.lng, pin.lat]}
+      anchor={{ x: 0.5, y: pinAnchorY(pin) }}
+      allowOverlap
+    >
+      <View style={styles.pinMarker} pointerEvents="none">
+        {pin.muted ? (
+          <View style={styles.pinMuted} />
+        ) : (
+          <View style={[styles.pinBadge, { backgroundColor: color }]}>
+            <Text style={styles.pinBadgeText}>{pin.badge ?? ""}</Text>
+          </View>
+        )}
+        {!!pin.label && (
+          <Text
+            style={[styles.pinLabel, pin.muted && styles.pinLabelMuted]}
+            numberOfLines={1}
+          >
+            {pin.label}
+          </Text>
+        )}
+      </View>
+    </MarkerView>
+  );
+}
+
+function VehicleMarker({
+  vehicle,
+  dimmed,
+  onPress,
+}: {
+  vehicle: TransitMapProps["state"]["vehicles"][number];
+  dimmed: boolean;
+  onPress?: (id: string) => void;
+}) {
+  const { lat, lng } = useGlide(vehicle.lat, vehicle.lng);
+  const icon = vehicleIconXml[vehicle.type];
+  return (
+    <MarkerView
+      coordinate={[lng, lat]}
+      anchor={{ x: 0.5, y: vehicleBox.pin / vehicleBox.height }}
+      allowOverlap
+    >
+      <View
+        style={[styles.vehicleBox, (dimmed || vehicle.stale) && styles.dimmed]}
+        pointerEvents="box-none"
+      >
+        <Pressable
+          accessibilityLabel={
+            vehicle.generated
+              ? `${vehicle.label ?? "Vehicle"}, generated`
+              : (vehicle.label ?? "Vehicle")
+          }
+          onPress={() => onPress?.(vehicle.id)}
+          hitSlop={8}
+          style={styles.pinArea}
+        >
+          <View
+            style={[
+              styles.pin,
+              vehicle.highlight && styles.pinHighlight,
+              {
+                backgroundColor: vehicle.isFull
+                  ? occupancyPinColors.Full
+                  : vehicle.occupancy
+                    ? occupancyPinColors[vehicle.occupancy]
+                    : "#ffffff",
+              },
+            ]}
+          >
+            {icon ? (
+              <View style={styles.pinIcon}>
+                <SvgXml xml={icon} width={14} height={14} />
+              </View>
+            ) : null}
+          </View>
+          {vehicle.generated && (
+            <View style={styles.generatedBadge}>
+              <Sparkles color="#ffffff" size={8} strokeWidth={3} />
+            </View>
+          )}
+        </Pressable>
+      </View>
+    </MarkerView>
+  );
+}
+
+function WaitingAreaMarker({
+  area,
+  open,
+  dimmed,
+  onToggle,
+}: {
+  area: NonNullable<TransitMapProps["state"]["waitingAreas"]>[number];
+  open: boolean;
+  dimmed: boolean;
+  onToggle: () => void;
+}) {
+  const terminal = area.kind === "terminal";
+  const tricycleStation = area.kind === "tricycle_station";
+  return (
+    <MarkerView
+      coordinate={[area.lng, area.lat]}
+      anchor={{ x: 0.5, y: waitingBox.icon / waitingBox.height }}
+      allowOverlap
+    >
+      <View
+        style={[styles.waitingBox, dimmed && styles.dimmed]}
+        pointerEvents="box-none"
+      >
+        <Pressable
+          accessibilityLabel={area.name}
+          onPress={onToggle}
+          hitSlop={10}
+          style={[
+            styles.waitingIcon,
+            terminal && styles.terminalIcon,
+            tricycleStation && styles.tricycleStationIcon,
+            open && styles.waitingIconOpen,
+          ]}
+        >
+          <SvgXml
+            xml={terminal ? TERMINAL_SVG : WAITING_SVG}
+            width={12}
+            height={12}
+          />
+        </Pressable>
+        {open ? (
+          <View style={styles.waitingLabel}>
+            <Text
+              style={[
+                styles.waitingName,
+                (terminal || tricycleStation) && styles.stationName,
+              ]}
+              numberOfLines={1}
+            >
+              {area.name}
+            </Text>
+            {area.tag ? (
+              <Text style={styles.waitingTag}>{area.tag}</Text>
+            ) : null}
+          </View>
+        ) : null}
+      </View>
+    </MarkerView>
+  );
+}
+
+function fitTo(
+  view: Camera,
+  fit: NonNullable<TransitMapProps["state"]["fit"]>,
+  padTop: number,
+  padBottom: number,
+  durationMs: number,
+) {
+  if (!fit.points.length) return;
+  if (fit.points.length === 1) {
+    view.setCamera({
+      centerCoordinate: toPosition(fit.points[0]),
+      zoomLevel: pointZoom,
+      animationDuration: durationMs,
+    });
+  } else {
+    const { ne, sw } = boundsOf(fit.points.map(toPosition), minFitSpanDegrees);
+    view.fitBounds(ne, sw, [padTop, 40, padBottom, 40], durationMs);
+  }
+}
+
+const mutedPinGrey = "#64748b";
+
+export function TransitMap({
+  state,
+  onDrag,
+  onCenterChange,
+  onVehiclePress,
+  controls = false,
+  controlsTop,
+}: TransitMapProps) {
+  const camera = useRef<Camera>(null);
+  const zoom = useRef(14);
+  const [loaded, setLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [openWaitingId, setOpenWaitingId] = useState<string | null>(null);
+  const gesturing = useRef(false);
+  const applied = useRef<{
+    route: string | null;
+    fit: number | string | null;
+    focus: number | string | null;
+  }>({ route: null, fit: null, focus: null });
+
+  const route = useMemo(
+    () => (state.route ?? []).map(toPosition),
+    [state.route],
+  );
+  const alternatives = useMemo(
+    () => (state.alternativeRoutes ?? []).map((path) => path.map(toPosition)),
+    [state.alternativeRoutes],
+  );
+  const routeShape = useMemo(
+    () => lineCollection(route.length ? [route] : []),
+    [route],
+  );
+  const alternativeShape = useMemo(
+    () => lineCollection(route.length ? alternatives : []),
+    [route, alternatives],
+  );
+  const pickupShape = useMemo(
+    () => ({
+      type: "FeatureCollection" as const,
+      features: (state.pickups ?? [])
+        .filter((pickup) => !pickup.muted && !pickup.color)
+        .map((pickup) => ({
+        type: "Feature" as const,
+        id: pickup.id,
+        properties: {
+          count:
+            pickup.badge ??
+            (typeof pickup.passengers === "number"
+              ? String(pickup.passengers)
+              : ""),
+          label: pickup.label?.trim() ?? "",
+        },
+        geometry: {
+          type: "Point" as const,
+          coordinates: [pickup.lng, pickup.lat],
+        },
+      })),
+    }),
+    [state.pickups],
+  );
+  const pickupLineShape = useMemo(
+    () =>
+      lineCollection(
+        state.pickupLine && state.pickupLine.length > 1
+          ? [state.pickupLine.map(toPosition)]
+          : [],
+      ),
+    [state.pickupLine],
+  );
+  const rangeLat = state.range?.lat;
+  const rangeLng = state.range?.lng;
+  const rangeRadius = state.range?.radiusMeters;
+  const rangeShape = useMemo(
+    () => ({
+      type: "FeatureCollection" as const,
+      features:
+        rangeLat !== undefined && rangeLng !== undefined && rangeRadius
+          ? [
+              {
+                type: "Feature" as const,
+                properties: {},
+                geometry: {
+                  type: "Polygon" as const,
+                  coordinates: [
+                    circlePath({ lat: rangeLat, lng: rangeLng }, rangeRadius).map(
+                      toPosition,
+                    ),
+                  ],
+                },
+              },
+            ]
+          : [],
+    }),
+    [rangeLat, rangeLng, rangeRadius],
+  );
+  const extraLineShape = useMemo(
+    () =>
+      lineCollection(
+        (state.extraLines ?? [])
+          .filter((line) => line.length > 1)
+          .map((line) => line.map(toPosition)),
+      ),
+    [state.extraLines],
+  );
+
+  useEffect(() => {
+    const view = camera.current;
+    if (!loaded || !view) return;
+
+    const routeKey = route.length ? `${state.routeId}:${route.length}` : null;
+    if (routeKey !== applied.current.route) {
+      applied.current.route = routeKey;
+      if (routeKey) {
+        const { ne, sw } = boundsOf([...route, ...alternatives.flat()]);
+        view.fitBounds(ne, sw, [state.padTop, 30, state.padBottom, 30], 0);
+      }
+    }
+
+    const fit = state.fit;
+    if (fit && fit.key !== applied.current.fit && fit.points.length) {
+      fitTo(view, fit, state.padTop, state.padBottom, 0);
+    }
+    applied.current.fit = fit?.key ?? null;
+
+    const focus = state.focus;
+    if (focus && focus.key !== applied.current.focus) {
+      view.setCamera({
+        centerCoordinate: [focus.lng, focus.lat],
+        zoomLevel: focus.zoom,
+        padding: {
+          paddingTop: state.padTop,
+          paddingBottom: state.padBottom,
+          paddingLeft: 0,
+          paddingRight: 0,
+        },
+        animationDuration: 500,
+        animationMode: "easeTo",
+      });
+    }
+    applied.current.focus = focus?.key ?? null;
+  }, [
+    loaded,
+    route,
+    alternatives,
+    state.routeId,
+    state.fit,
+    state.focus,
+    state.padTop,
+    state.padBottom,
+  ]);
+
+  const zoomBy = (delta: number) => {
+    zoom.current = Math.max(3, Math.min(20, zoom.current + delta));
+    camera.current?.zoomTo(zoom.current, 250);
+  };
+
+  if (!mapboxToken) {
+    return (
+      <View style={styles.message}>
+        <Text style={styles.messageText}>
+          Missing Mapbox public token. Set EXPO_PUBLIC_MAPBOX_TOKEN to a public
+          pk. token in .env and rebuild the app.
+        </Text>
+      </View>
+    );
+  }
+
+  const waitingAreas = (state.waitingAreas ?? []).filter(
+    (area) =>
+      area.kind === "terminal" ||
+      area.kind === "tricycle_station" ||
+      state.showStops,
+  );
+  const openArea = waitingAreas.find((area) => area.id === openWaitingId);
+  const dimmed = !!openArea;
+
+  return (
+    <View style={StyleSheet.absoluteFill}>
+      <MapView
+        style={StyleSheet.absoluteFill}
+        styleURL={mapStyleUrl}
+        rotateEnabled={false}
+        pitchEnabled={false}
+        compassEnabled={false}
+        scaleBarEnabled={false}
+        onDidFinishLoadingMap={() => {
+          setLoaded(true);
+          setFailed(false);
+        }}
+        onMapLoadingError={() => setFailed(true)}
+        onPress={() => setOpenWaitingId(null)}
+        onCameraChanged={(map) => {
+          zoom.current = map.properties.zoom;
+          if (map.gestures.isGestureActive && !gesturing.current) {
+            gesturing.current = true;
+            onDrag?.();
+          }
+        }}
+        onMapIdle={(map) => {
+          gesturing.current = false;
+          const [lng, lat] = map.properties.center;
+          onCenterChange?.({ lat, lng });
+        }}
+      >
+        <Camera
+          ref={camera}
+          defaultSettings={{ centerCoordinate: defaultCenter, zoomLevel: 14 }}
+        />
+
+        <ShapeSource id="request-range" shape={rangeShape}>
+          <FillLayer
+            id="request-range-fill"
+            style={{ fillColor: rangeFill, fillOpacity: 0.16 }}
+          />
+          <LineLayer
+            id="request-range-edge"
+            style={{
+              lineColor: rangeEdge,
+              lineWidth: 2,
+              lineOpacity: 0.55,
+              lineDasharray: [2, 1.5],
+            }}
+          />
+        </ShapeSource>
+
+        <ShapeSource id="alternative-routes" shape={alternativeShape}>
+          <LineLayer
+            id="alternative-routes"
+            style={{
+              lineColor: routeBlue,
+              lineWidth: 4,
+              lineOpacity: 0.95,
+              lineDasharray: [2, 2],
+            }}
+          />
+        </ShapeSource>
+        <ShapeSource id="route" shape={routeShape}>
+          <LineLayer
+            id="route"
+            style={{
+              lineColor: routeBlue,
+              lineWidth: 4,
+              lineOpacity: 0.95,
+              lineCap: "round",
+              lineJoin: "round",
+            }}
+          />
+        </ShapeSource>
+        <ShapeSource id="pickup-line" shape={pickupLineShape}>
+          <LineLayer
+            id="pickup-line"
+            style={{
+              lineColor: state.pickupLineColor ?? "#1f2937",
+              lineWidth: 3,
+              lineOpacity: 0.9,
+              lineCap: "round",
+              lineJoin: "round",
+            }}
+          />
+        </ShapeSource>
+
+        <ShapeSource id="extra-lines" shape={extraLineShape}>
+          <LineLayer
+            id="extra-lines"
+            style={{
+              lineColor: mutedPinGrey,
+              lineWidth: 3,
+              lineOpacity: 0.9,
+              lineDasharray: [1, 1.6],
+              lineJoin: "round",
+            }}
+          />
+        </ShapeSource>
+
+        <ShapeSource id="pickups" shape={pickupShape}>
+          <CircleLayer
+            id="pickup-pins"
+            style={{
+              circleRadius: 13,
+              circleColor: pinRed,
+              circleStrokeColor: "#ffffff",
+              circleStrokeWidth: 2.5,
+            }}
+          />
+          <CircleLayer
+            id="pickup-pin-centers"
+            style={{ circleRadius: 8, circleColor: "#ffffff" }}
+          />
+          <SymbolLayer
+            id="pickup-counts"
+            style={{
+              textField: ["get", "count"],
+              textSize: 11,
+              textColor: pinRed,
+              textFont: ["Open Sans Bold", "Arial Unicode MS Bold"],
+              textAllowOverlap: true,
+              textIgnorePlacement: true,
+            }}
+          />
+          <SymbolLayer
+            id="pickup-labels"
+            style={{
+              textField: ["get", "label"],
+              textSize: 11,
+              textColor: "#193caf",
+              textHaloColor: "#ffffff",
+              textHaloWidth: 2,
+              textOffset: [0, 1.9],
+              textAnchor: "top",
+              textMaxWidth: 12,
+              textFont: ["Open Sans Bold", "Arial Unicode MS Bold"],
+            }}
+          />
+        </ShapeSource>
+
+        {(state.pickups ?? [])
+          .filter((pickup) => pickup.muted || pickup.color)
+          .map((pickup) => (
+            <PinMarker key={pickup.id} pin={pickup} />
+          ))}
+
+        {state.vehicles.map((vehicle) => (
+          <VehicleMarker
+            key={vehicle.id}
+            vehicle={vehicle}
+            dimmed={dimmed}
+            onPress={onVehiclePress}
+          />
+        ))}
+        {waitingAreas
+          .filter((area) => area.id !== openWaitingId)
+          .sort((a, b) =>
+            a.kind === b.kind
+              ? 0
+              : a.kind === "terminal" || a.kind === "tricycle_station"
+                ? 1
+                : -1,
+          )
+          .map((area) => (
+            <WaitingAreaMarker
+              key={area.id}
+              area={area}
+              open={false}
+              dimmed={dimmed}
+              onToggle={() => setOpenWaitingId(area.id)}
+            />
+          ))}
+        {state.userLocation ? (
+          <MarkerView
+            coordinate={[state.userLocation.lng, state.userLocation.lat]}
+            anchor={{ x: 0.5, y: 0.5 }}
+            allowOverlap
+          >
+            <View style={styles.meHalo} pointerEvents="none">
+              <View style={styles.meDot} />
+            </View>
+          </MarkerView>
+        ) : null}
+        {openArea ? (
+          <WaitingAreaMarker
+            key={openArea.id}
+            area={openArea}
+            open
+            dimmed={false}
+            onToggle={() => setOpenWaitingId(null)}
+          />
+        ) : null}
+      </MapView>
+
+      {controls && loaded ? (
+        <MapControls
+          top={controlsTop}
+          onZoomIn={() => zoomBy(1)}
+          onZoomOut={() => zoomBy(-1)}
+          onRecenter={
+            controls === "zoom"
+              ? undefined
+              : () => {
+                  if (camera.current && state.fit) {
+                    fitTo(
+                      camera.current,
+                      state.fit,
+                      state.padTop,
+                      state.padBottom,
+                      400,
+                    );
+                  }
+                }
+          }
+        />
+      ) : null}
+
+      {failed && !loaded ? (
+        <View style={styles.message}>
+          <Text style={styles.messageText}>
+            The map could not load. Check your connection.
+          </Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  pinMarker: { alignItems: "center", maxWidth: 160 },
+  pinBadge: {
+    width: 30,
+    height: 30,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 15,
+    borderWidth: 3,
+    borderColor: "#ffffff",
+    elevation: 4,
+    shadowColor: "#000000",
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
+  },
+  pinBadgeText: { color: "#ffffff", fontWeight: "800", fontSize: 14 },
+  pinMuted: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 4,
+    borderColor: mutedPinGrey,
+    backgroundColor: "#ffffff",
+  },
+  pinLabel: {
+    marginTop: 3,
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    overflow: "hidden",
+    borderRadius: 6,
+    backgroundColor: "#ffffff",
+    color: "#193caf",
+    fontWeight: "700",
+    fontSize: 11,
+  },
+  pinLabelMuted: { color: "#475569" },
+  message: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+    backgroundColor: "#e8eaed",
+  },
+  messageText: { fontSize: 13, color: "#6b6b6b", textAlign: "center" },
+  dimmed: { opacity: 0.3 },
+  vehicleBox: {
+    width: vehicleBox.width,
+    height: vehicleBox.height,
+    alignItems: "center",
+  },
+  pinArea: {
+    height: vehicleBox.pin,
+    alignItems: "center",
+    justifyContent: "flex-start",
+  },
+  pin: {
+    width: 26,
+    height: 26,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ffffff",
+    borderWidth: 2,
+    borderColor: "#0f2a6b",
+    borderTopLeftRadius: 13,
+    borderTopRightRadius: 13,
+    borderBottomRightRadius: 13,
+    borderBottomLeftRadius: 0,
+    transform: [{ rotate: "-45deg" }],
+    elevation: 3,
+  },
+  pinIcon: { transform: [{ rotate: "45deg" }] },
+  pinHighlight: {
+    borderWidth: 3,
+    borderColor: "#1e9e45",
+    transform: [{ rotate: "-45deg" }, { scale: 1.18 }],
+  },
+  generatedBadge: {
+    position: "absolute",
+    top: -3,
+    right: 1,
+    width: 14,
+    height: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 7,
+    borderWidth: 1.5,
+    borderColor: "#ffffff",
+    backgroundColor: palette.warning,
+  },
+  waitingBox: {
+    width: waitingBox.width,
+    height: waitingBox.height,
+    alignItems: "center",
+  },
+  waitingIcon: {
+    width: waitingBox.icon,
+    height: waitingBox.icon,
+    borderRadius: waitingBox.icon / 2,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: waitingAreaPinColors.stop,
+    borderWidth: 2,
+    borderColor: "#ffffff",
+    elevation: 3,
+  },
+  terminalIcon: {
+    borderRadius: 6,
+    backgroundColor: waitingAreaPinColors.terminal,
+  },
+  tricycleStationIcon: {
+    backgroundColor: waitingAreaPinColors.tricycle_station,
+  },
+  waitingIconOpen: { transform: [{ scale: 1.3 }] },
+  waitingLabel: {
+    marginTop: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    gap: 4,
+    elevation: 3,
+  },
+  waitingName: { fontSize: 11, fontWeight: "bold", color: "#15803d" },
+  stationName: { color: brandBlue },
+  waitingTag: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 999,
+    overflow: "hidden",
+    backgroundColor: "#e3ecfb",
+    color: brandBlue,
+    fontSize: 10,
+    fontWeight: "bold",
+  },
+  meHalo: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(26, 115, 232, 0.2)",
+  },
+  meDot: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "#1a73e8",
+    borderWidth: 3,
+    borderColor: "#ffffff",
+    elevation: 2,
+  },
+});

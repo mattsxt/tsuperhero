@@ -1,103 +1,132 @@
 import { BlurTargetView } from "expo-blur";
-import { router } from "expo-router";
+import { Image } from "expo-image";
+import { router, useFocusEffect } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import CircleUserRound from "lucide-react-native/icons/circle-user-round";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
+import FileText from "lucide-react-native/icons/file-text";
 import LogOut from "lucide-react-native/icons/log-out";
+import CircleHelp from "lucide-react-native/icons/circle-question-mark";
 import ShieldCog from "lucide-react-native/icons/shield-cog";
-import ShieldQuestionMark from "lucide-react-native/icons/shield-question-mark";
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { useCallback, useRef, useState, type ReactNode } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { logout } from "@/api/v1/auth/controllers";
+import { describePickupBeforeSignOut } from "@/api/v1/pickups/controllers";
+import { ConfirmModal } from "@/components/confirm-modal";
 import {
   loadProfileSummary,
+  peekProfileSummary,
+  peekSignedInHomeRoute,
   type ProfileSummary,
 } from "@/api/v1/profile/controllers";
 import { BottomNav, bottomNavHeight } from "@/components/bottom-nav";
+import {
+  StickyHeader,
+  useScrollChrome,
+  CollapsibleHeader,
+} from "@/components/scroll-chrome";
+import { LoadingScreen, signOutMessages } from "@/components/LoadingScreen";
 import { Routes } from "@/constants/routes";
+import { useOnline } from "@/hooks/use-online";
+import { ErrorAlert } from "@/components/error-alert";
+import { palette } from "@/constants/colors";
 
-const brandBlue = "#193caf";
-const headerBlue = "#1034A6";
+const brandBlue = palette.brand;
+const headerBlue = palette.header;
 const cardEdgeBlue = "#1a2f8f";
 const iconBackground = "#d4ecf9";
 const dangerRed = "#a31818";
+const signOutMinMs = 1200;
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
+  const chrome = useScrollChrome();
   const blurTarget = useRef<View | null>(null);
-  const [summary, setSummary] = useState<ProfileSummary | null>(null);
+  const [summary, setSummary] = useState<ProfileSummary | null>(
+    peekProfileSummary,
+  );
   const [signingOut, setSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState("");
+  const [signOutWarning, setSignOutWarning] = useState<string | null>(null);
+  const [checkingSignOut, setCheckingSignOut] = useState(false);
+  const online = useOnline();
 
-  useEffect(() => {
-    let active = true;
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
 
-    const load = async () => {
-      const result = await loadProfileSummary();
-      if ("redirect" in result) {
-        router.replace(result.redirect);
-        return;
-      }
-      if (active) setSummary(result);
-    };
+      const load = async () => {
+        const result = await loadProfileSummary();
+        if ("redirect" in result) {
+          router.replace(result.redirect);
+          return;
+        }
+        if (active) setSummary(result);
+      };
 
-    load();
-    return () => {
-      active = false;
-    };
-  }, []);
+      load();
+      return () => {
+        active = false;
+      };
+    }, []),
+  );
+
+  const requestSignOut = async () => {
+    if (signingOut || checkingSignOut) return;
+    setSignOutError("");
+    setCheckingSignOut(true);
+    const warning = await describePickupBeforeSignOut();
+    setCheckingSignOut(false);
+    if (warning) setSignOutWarning(warning);
+    else void signOut();
+  };
 
   const signOut = async () => {
     if (signingOut) return;
+    setSignOutError("");
     setSigningOut(true);
-    const result = await logout();
-    setSigningOut(false);
+    const [result] = await Promise.all([
+      logout(),
+      new Promise((resolve) => setTimeout(resolve, signOutMinMs)),
+    ]);
 
     if (!result.ok) {
-      Alert.alert("Couldn't sign out", result.error);
+      setSigningOut(false);
+      setSignOutError(result.error);
       return;
     }
     router.replace(Routes.login);
   };
 
-  if (!summary) {
-    return (
-      <View style={styles.loadingScreen}>
-        <ActivityIndicator color={brandBlue} />
-      </View>
-    );
-  }
+  if (signingOut) return <LoadingScreen messages={signOutMessages} />;
+
+  const homeRoute = summary?.homeRoute ?? peekSignedInHomeRoute();
 
   return (
     <View style={styles.screen}>
       <StatusBar style="light" />
       <BlurTargetView ref={blurTarget} style={styles.blurTarget}>
-        <ScrollView
+        <Animated.ScrollView
+          onScroll={chrome.scrollHandler}
+          scrollEventThrottle={16}
           contentContainerStyle={{
+            paddingTop: chrome.headerHeight,
             paddingBottom: insets.bottom + bottomNavHeight,
           }}
           showsVerticalScrollIndicator={false}
         >
-          <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
-            <Text style={styles.title}>User Profile and Actions</Text>
-            <Text style={styles.subtitle}>
-              Manage your own profile and settings
-            </Text>
-          </View>
-
           <View style={styles.body}>
             <Text style={styles.sectionLabel}>Configure your profile</Text>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`Edit profile of ${summary.fullName}`}
+              accessibilityLabel={
+                summary ? `Edit profile of ${summary.fullName}` : "Edit profile"
+              }
+              disabled={!summary || !online}
+              onPress={() => router.push(Routes.profileEdit)}
               style={({ pressed }) => [
                 styles.card,
                 styles.profileCard,
@@ -105,60 +134,116 @@ export default function ProfileScreen() {
               ]}
             >
               <View style={styles.avatar}>
-                <Text style={styles.avatarText}>{summary.initials}</Text>
+                {summary?.pictureUrl ? (
+                  <Image
+                    source={{ uri: summary.pictureUrl }}
+                    style={styles.avatarImage}
+                    contentFit="cover"
+                  />
+                ) : (
+                  <Text style={styles.avatarText}>
+                    {summary?.initials ?? "…"}
+                  </Text>
+                )}
               </View>
               <View style={styles.profileText}>
                 <Text style={styles.profileName} numberOfLines={1}>
-                  {summary.fullName}
+                  {summary?.fullName ?? "Loading profile…"}
                 </Text>
                 <Text style={styles.profileDetail} numberOfLines={1}>
-                  {summary.email}
+                  {summary?.email ?? ""}
                 </Text>
                 <Text style={styles.profileDetail}>
-                  {summary.contactNumber}
+                  {summary?.contactNumber ?? ""}
                 </Text>
               </View>
-              <View style={styles.userTypeBadge}>
-                <Text style={styles.userTypeText}>{summary.userTypeLabel}</Text>
-              </View>
+              {summary && (
+                <View style={styles.userTypeBadge}>
+                  <Text style={styles.userTypeText}>
+                    {summary.userTypeLabel}
+                  </Text>
+                </View>
+              )}
               <ChevronRight color={brandBlue} size={20} strokeWidth={2.5} />
             </Pressable>
 
             <Text style={styles.sectionLabel}>Actions</Text>
+            {!online && (
+              <Text style={styles.offlineNotice}>
+                Connect to the internet to edit your profile or sign out.
+              </Text>
+            )}
             <View style={styles.actions}>
               <ActionRow
                 label="Security"
+                onPress={() => router.push(Routes.profileSecurity)}
                 icon={
                   <ShieldCog color={brandBlue} size={18} strokeWidth={1.8} />
                 }
               />
               <ActionRow
-                label="Help & Support"
+                label="Help"
+                onPress={() => router.push(Routes.profileHelp)}
                 icon={
-                  <ShieldQuestionMark
-                    color={brandBlue}
-                    size={18}
-                    strokeWidth={1.8}
-                  />
+                  <CircleHelp color={brandBlue} size={18} strokeWidth={1.8} />
                 }
               />
+              {summary?.userType === "transit_personnel" && (
+                <ActionRow
+                  label="Vehicles & Documents"
+                  onPress={() => router.push(Routes.profileVehicles)}
+                  icon={
+                    <FileText color={brandBlue} size={18} strokeWidth={1.8} />
+                  }
+                />
+              )}
+              {!!signOutError && (
+                <ErrorAlert title="Sign out" message={signOutError} />
+              )}
               <ActionRow
-                label={signingOut ? "Signing out..." : "Sign out"}
+                label="Sign out"
                 danger
-                disabled={signingOut}
-                onPress={signOut}
+                disabled={signingOut || checkingSignOut || !online}
+                onPress={requestSignOut}
                 icon={<LogOut color={dangerRed} size={18} strokeWidth={1.8} />}
                 trailing={null}
               />
             </View>
           </View>
-        </ScrollView>
+        </Animated.ScrollView>
+
+        <StickyHeader chrome={chrome}>
+          <CollapsibleHeader
+            title="User Profile and Actions"
+            subtitle="Manage your own profile and settings"
+            icon={
+              <CircleUserRound color="#ffffff" size={40} strokeWidth={1.8} />
+            }
+          />
+        </StickyHeader>
       </BlurTargetView>
 
-      <BottomNav
-        active="profile"
-        homeRoute={summary.homeRoute}
-        blurTarget={blurTarget}
+      {homeRoute && (
+        <BottomNav
+          active="profile"
+          homeRoute={homeRoute}
+          blurTarget={blurTarget}
+          hidden={chrome.navHidden}
+        />
+      )}
+      <ConfirmModal
+        visible={!!signOutWarning}
+        title="Sign out now?"
+        message={signOutWarning ?? ""}
+        confirmLabel="Sign out"
+        cancelLabel="Stay signed in"
+        destructive
+        icon={<LogOut color="#ffffff" size={22} strokeWidth={2.2} />}
+        onCancel={() => setSignOutWarning(null)}
+        onConfirm={() => {
+          setSignOutWarning(null);
+          void signOut();
+        }}
       />
     </View>
   );
@@ -208,12 +293,6 @@ function ActionRow({
 }
 
 const styles = StyleSheet.create({
-  loadingScreen: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#ffffff",
-  },
   screen: { flex: 1, backgroundColor: "#ffffff" },
   blurTarget: { flex: 1 },
   header: {
@@ -223,12 +302,37 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
   },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  headerRowCollapsedIcon: { alignItems: "center" },
+  headerTextBlock: { flex: 1 },
+  headerIcon: {
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+    opacity: 1,
+    transform: [{ scale: 1 }],
+  },
+  headerIconCollapsed: {
+    width: 0,
+    height: 0,
+    opacity: 0,
+    transform: [{ scale: 0.4 }],
+  },
+  headerCollapsed: { paddingBottom: 14 },
   title: {
     color: "#ffffff",
     fontFamily: "SoraBold",
     fontSize: 21,
     lineHeight: 28,
   },
+  titleCollapsed: { fontSize: 17, lineHeight: 24 },
   subtitle: {
     color: "#ffffff",
     fontFamily: "Sora",
@@ -242,6 +346,12 @@ const styles = StyleSheet.create({
     fontSize: 10,
     marginTop: 18,
     marginBottom: 10,
+  },
+  offlineNotice: {
+    color: "#6b6b6b",
+    fontFamily: "Sora",
+    fontSize: 10,
+    marginBottom: 8,
   },
   card: {
     flexDirection: "row",
@@ -265,16 +375,18 @@ const styles = StyleSheet.create({
     height: 46,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
     borderRadius: 23,
     backgroundColor: iconBackground,
   },
+  avatarImage: { width: "100%", height: "100%" },
   avatarText: { color: "#111111", fontFamily: "SoraBold", fontSize: 15 },
   profileText: { flex: 1, marginLeft: 12, marginRight: 8 },
   profileName: { color: brandBlue, fontFamily: "SoraBold", fontSize: 16 },
   profileDetail: {
     color: "#111111",
     fontFamily: "Sora",
-    fontSize: 8,
+    fontSize: 10,
     marginTop: 3,
   },
   userTypeBadge: {
@@ -286,7 +398,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: "#0f2a5c",
   },
-  userTypeText: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 6 },
+  userTypeText: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 10 },
   actions: { gap: 12 },
   actionRow: { height: 62, paddingLeft: 20, paddingRight: 12 },
   iconCircle: {

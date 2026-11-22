@@ -3,59 +3,80 @@ import DateTimePicker, {
 } from "@react-native-community/datetimepicker";
 import { router } from "expo-router";
 import Calendar1 from "lucide-react-native/icons/calendar-1";
-import ChevronDown from "lucide-react-native/icons/chevron-down";
 import ChevronLeft from "lucide-react-native/icons/chevron-left";
-import PersonStanding from "lucide-react-native/icons/person-standing";
 import { createElement, useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   BackHandler,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
+import Reanimated, { FadeIn } from "react-native-reanimated";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { SafeAreaView } from "react-native-safe-area-context";
-import Svg, { Circle, Path } from "react-native-svg";
 
 import {
   checkSetupAccess,
   contactLength,
   contactLengthMessage,
-  genderOptions,
   getContactProblem,
-  getHomeRoute,
   getNameProblem,
+  peekSetupUserId,
   submitProfile,
   toIsoDate,
-  type Gender,
   type ProfileFormErrors,
   type ProfileFormField,
-  type UserType,
 } from "@/api/v1/profile/controllers";
 import { BrandHeader } from "@/components/brand-header";
+import {
+  ErrorAlert,
+  ErrorMark,
+  firstFieldError,
+} from "@/components/error-alert";
+import { LoadingLogo } from "@/components/LoadingLogo";
+import { LoadingScreen } from "@/components/LoadingScreen";
 import { MiniToast, type MiniToastMessage } from "@/components/mini-toast";
+import { Routes } from "@/constants/routes";
+import { palette } from "@/constants/colors";
+import { useStatusBarTop } from "@/hooks/use-status-bar-top";
 
-const backgroundBlue = "#1034A6";
+const backgroundBlue = palette.header;
 const accentBlue = "#29A9E1";
 const errorRed = "#ffb4ab";
+const profileFieldOrder = [
+  "firstName",
+  "lastName",
+  "birthdate",
+  "contact",
+] as const;
+const profileFieldTitles = {
+  firstName: "First name",
+  lastName: "Last name",
+  birthdate: "Birthdate",
+  contact: "Contact number",
+};
+
+const stepFadeMs = 260;
+
+const setupLoadingMessages = [
+  "Getting things ready...",
+  "Loading your profile...",
+  "Almost there...",
+];
 const contentWidth = 320;
 
 export default function SetupScreen() {
-  const [checking, setChecking] = useState(true);
-  const [userId, setUserId] = useState("");
+  const [knownUserId] = useState(peekSetupUserId);
+  const [checking, setChecking] = useState(knownUserId === null);
+  const [userId, setUserId] = useState(knownUserId ?? "");
   const [step, setStep] = useState(1);
-  const [userType, setUserType] = useState<UserType | null>(null);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [birthdate, setBirthdate] = useState<Date | null>(null);
-  const [gender, setGender] = useState<Gender | null>(null);
-  const [genderOpen, setGenderOpen] = useState(false);
   const [contact, setContact] = useState("");
   const [errors, setErrors] = useState<ProfileFormErrors>({});
   const [saveError, setSaveError] = useState("");
@@ -71,7 +92,7 @@ export default function SetupScreen() {
     const checkAccess = async () => {
       const access = await checkSetupAccess();
       if ("redirect" in access) {
-        router.replace(access.redirect);
+        router.replace(access.redirect as Parameters<typeof router.replace>[0]);
         return;
       }
       if (active) {
@@ -86,9 +107,8 @@ export default function SetupScreen() {
     };
   }, []);
 
-  const canGoBack = step >= 2 && step <= 4;
+  const canGoBack = step >= 2 && step <= 3;
   const goBack = () => {
-    setGenderOpen(false);
     setStep((currentStep) => Math.max(currentStep - 1, 1));
   };
 
@@ -97,7 +117,6 @@ export default function SetupScreen() {
       "hardwareBackPress",
       () => {
         if (canGoBack) {
-          setGenderOpen(false);
           setStep((currentStep) => Math.max(currentStep - 1, 1));
         }
         return true;
@@ -118,11 +137,9 @@ export default function SetupScreen() {
     setSaving(true);
     setSaveError("");
     const result = await submitProfile(userId, {
-      userType,
       firstName,
       lastName,
       birthdate,
-      gender,
       contact,
     });
     setSaving(false);
@@ -132,243 +149,164 @@ export default function SetupScreen() {
       if (!result.fieldErrors) setSaveError(result.error);
       return;
     }
-    setStep(5);
+    setStep(4);
   };
 
-  if (checking) {
-    return (
-      <View style={styles.loadingScreen}>
-        <ActivityIndicator color="#ffffff" />
-      </View>
-    );
-  }
+  const errorField = firstFieldError(errors, profileFieldOrder);
+  const alertTitle = errorField ? profileFieldTitles[errorField] : "Profile";
+  const alertMessage = errorField ? errors[errorField] : saveError;
+
+  const statusBarTop = useStatusBarTop();
+  if (checking) return <LoadingScreen messages={setupLoadingMessages} />;
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      <KeyboardAwareScrollView
+        bottomOffset={24}
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
       >
-        <ScrollView
-          contentContainerStyle={styles.container}
-          keyboardShouldPersistTaps="handled"
+        {canGoBack && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Go to previous step"
+            hitSlop={12}
+            onPress={goBack}
+            style={styles.backButton}
+          >
+            <ChevronLeft color="#ffffff" size={28} strokeWidth={2.5} />
+          </Pressable>
+        )}
+
+        <BrandHeader variant="hero" />
+
+        <Reanimated.View
+          key={step}
+          entering={FadeIn.duration(stepFadeMs)}
+          style={styles.stepArea}
         >
-          {canGoBack && (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Go to previous step"
-              hitSlop={12}
-              onPress={goBack}
-              style={styles.backButton}
-            >
-              <ChevronLeft color="#ffffff" size={28} strokeWidth={2.5} />
-            </Pressable>
+          {step === 1 && (
+            <>
+              <Text style={styles.message}>
+                It seems that this is your first time accessing the app!
+              </Text>
+              <PrimaryButton label="YES" onPress={() => setStep(2)} />
+            </>
           )}
 
-          <BrandHeader variant="hero" />
+          {step === 2 && (
+            <>
+              <Text style={styles.message}>
+                Perfect, now is the time to set up your profile!
+              </Text>
+              <PrimaryButton label="CONTINUE" onPress={() => setStep(3)} />
+            </>
+          )}
 
-          <View style={styles.stepArea}>
-            {step === 1 && (
-              <>
-                <Text style={styles.message}>
-                  It seems that this is your first time accessing the app!
-                </Text>
-                <PrimaryButton label="YES" onPress={() => setStep(2)} />
-              </>
-            )}
+          {step === 3 && (
+            <View style={styles.form}>
+              <Text style={styles.formHeading}>Set up your profile</Text>
 
-            {step === 2 && (
-              <>
-                <Text style={styles.heading}>What best describes you?</Text>
-                <View style={styles.userTypeRow}>
-                  <UserTypeCard
-                    label="Commuter"
-                    selected={userType === "commuter"}
-                    icon={
-                      <PersonStanding
-                        color="#ffffff"
-                        size={96}
-                        strokeWidth={2.4}
-                      />
-                    }
-                    onPress={() => {
-                      setUserType("commuter");
-                      setStep(3);
+              <View style={styles.row}>
+                <FormField label="FIRST NAME" error={errors.firstName}>
+                  <TextInput
+                    value={firstName}
+                    onChangeText={(value) => {
+                      const problem = getNameProblem(value);
+                      if (problem) return showToast(problem);
+                      setFirstName(value);
+                      clearError("firstName");
                     }}
+                    placeholder="Juan"
+                    placeholderTextColor="#9a9a9a"
+                    autoComplete="given-name"
+                    style={styles.input}
                   />
-                  <UserTypeCard
-                    label={"Transit\nPersonnel"}
-                    selected={userType === "transit_personnel"}
-                    icon={<SteeringWheel size={68} />}
-                    onPress={() => {
-                      setUserType("transit_personnel");
-                      setStep(3);
-                    }}
-                  />
-                </View>
-              </>
-            )}
-
-            {step === 3 && (
-              <>
-                <Text style={styles.message}>
-                  Perfect, now is the time to set up your profile!
-                </Text>
-                <PrimaryButton label="CONTINUE" onPress={() => setStep(4)} />
-              </>
-            )}
-
-            {step === 4 && (
-              <View style={styles.form}>
-                <Text style={styles.formHeading}>Set up your profile</Text>
-
-                <View style={styles.row}>
-                  <FormField label="FIRST NAME" error={errors.firstName}>
-                    <TextInput
-                      value={firstName}
-                      onChangeText={(value) => {
-                        const problem = getNameProblem(value);
-                        if (problem) return showToast(problem);
-                        setFirstName(value);
-                        clearError("firstName");
-                      }}
-                      placeholder="Juan"
-                      placeholderTextColor="#9a9a9a"
-                      autoComplete="given-name"
-                      style={styles.input}
-                    />
-                  </FormField>
-                  <FormField label="LAST NAME" error={errors.lastName}>
-                    <TextInput
-                      value={lastName}
-                      onChangeText={(value) => {
-                        const problem = getNameProblem(value);
-                        if (problem) return showToast(problem);
-                        setLastName(value);
-                        clearError("lastName");
-                      }}
-                      placeholder="dela Cruz"
-                      placeholderTextColor="#9a9a9a"
-                      autoComplete="family-name"
-                      style={styles.input}
-                    />
-                  </FormField>
-                </View>
-
-                <View style={[styles.row, styles.rowAboveDropdown]}>
-                  <FormField label="BIRTHDATE" error={errors.birthdate}>
-                    <BirthdateField
-                      value={birthdate}
-                      onChange={(date) => {
-                        setBirthdate(date);
-                        clearError("birthdate");
-                      }}
-                    />
-                  </FormField>
-                  <FormField label="GENDER" error={errors.gender}>
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel="Select gender"
-                      onPress={() => setGenderOpen((open) => !open)}
-                      style={styles.inputWithIcon}
-                    >
-                      <Text
-                        style={[
-                          styles.selectText,
-                          !gender && styles.placeholderText,
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {genderOptions.find((option) => option.value === gender)
-                          ?.label ?? "Select"}
-                      </Text>
-                      <ChevronDown color="#111111" size={15} />
-                    </Pressable>
-                    {genderOpen && (
-                      <View style={styles.dropdown}>
-                        {genderOptions.map((option) => (
-                          <Pressable
-                            key={option.value}
-                            onPress={() => {
-                              setGender(option.value);
-                              setGenderOpen(false);
-                              clearError("gender");
-                            }}
-                            style={[
-                              styles.dropdownOption,
-                              option.value === gender &&
-                                styles.dropdownOptionSelected,
-                            ]}
-                          >
-                            <Text style={styles.selectText}>
-                              {option.label}
-                            </Text>
-                          </Pressable>
-                        ))}
-                      </View>
-                    )}
-                  </FormField>
-                </View>
-
-                <FormField label="CONTACT NUMBER" error={errors.contact}>
-                  <View style={styles.inputWithIcon}>
-                    <Text style={styles.contactPrefix}>+63</Text>
-                    <TextInput
-                      value={contact}
-                      onChangeText={(value) => {
-                        const problem = getContactProblem(value);
-                        if (problem) return showToast(problem);
-                        setContact(value);
-                        clearError("contact");
-                      }}
-                      onKeyPress={({ nativeEvent }) => {
-                        if (
-                          contact.length === contactLength &&
-                          /^\d$/.test(nativeEvent.key)
-                        ) {
-                          showToast(contactLengthMessage);
-                        }
-                      }}
-                      placeholder="9123456789"
-                      placeholderTextColor="#9a9a9a"
-                      keyboardType="number-pad"
-                      autoComplete="tel"
-                      maxLength={contactLength}
-                      style={styles.flexInput}
-                    />
-                  </View>
                 </FormField>
-
-                {!!saveError && (
-                  <Text style={styles.saveError}>{saveError}</Text>
-                )}
-
-                <PrimaryButton
-                  label={saving ? "SAVING..." : "CONTINUE"}
-                  disabled={saving}
-                  onPress={saveProfile}
-                />
+                <FormField label="LAST NAME" error={errors.lastName}>
+                  <TextInput
+                    value={lastName}
+                    onChangeText={(value) => {
+                      const problem = getNameProblem(value);
+                      if (problem) return showToast(problem);
+                      setLastName(value);
+                      clearError("lastName");
+                    }}
+                    placeholder="dela Cruz"
+                    placeholderTextColor="#9a9a9a"
+                    autoComplete="family-name"
+                    style={styles.input}
+                  />
+                </FormField>
               </View>
-            )}
 
-            {step === 5 && (
-              <>
-                <Text style={styles.message}>
-                  Alright!{"\n"}Everything is now set up.{"\n"}Let’s get
-                  started!
-                </Text>
-                <PrimaryButton
-                  label="LET'S GO!"
-                  onPress={() =>
-                    router.replace(getHomeRoute(userType ?? "commuter"))
-                  }
-                />
-              </>
-            )}
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-      <MiniToast message={toast} top={12} />
+              <View style={styles.row}>
+                <FormField label="BIRTHDATE" error={errors.birthdate}>
+                  <BirthdateField
+                    value={birthdate}
+                    onChange={(date) => {
+                      setBirthdate(date);
+                      clearError("birthdate");
+                    }}
+                  />
+                </FormField>
+              </View>
+
+              <FormField label="CONTACT NUMBER" error={errors.contact}>
+                <View style={styles.inputWithIcon}>
+                  <Text style={styles.contactPrefix}>+63</Text>
+                  <TextInput
+                    value={contact}
+                    onChangeText={(value) => {
+                      const problem = getContactProblem(value);
+                      if (problem) return showToast(problem);
+                      setContact(value);
+                      clearError("contact");
+                    }}
+                    onKeyPress={({ nativeEvent }) => {
+                      if (
+                        contact.length === contactLength &&
+                        /^\d$/.test(nativeEvent.key)
+                      ) {
+                        showToast(contactLengthMessage);
+                      }
+                    }}
+                    placeholder="9123456789"
+                    placeholderTextColor="#9a9a9a"
+                    keyboardType="number-pad"
+                    autoComplete="tel"
+                    maxLength={contactLength}
+                    style={styles.flexInput}
+                  />
+                </View>
+              </FormField>
+
+              {!!alertMessage && (
+                <ErrorAlert title={alertTitle} message={alertMessage} />
+              )}
+
+              <PrimaryButton
+                label="CONTINUE"
+                busy={saving}
+                onPress={saveProfile}
+              />
+            </View>
+          )}
+
+          {step === 4 && (
+            <>
+              <Text style={styles.message}>
+                Alright!{"\n"}Everything is now set up.{"\n"}Let’s get started!
+              </Text>
+              <PrimaryButton
+                label="LET'S GO!"
+                onPress={() => router.replace(Routes.commuterHome)}
+              />
+            </>
+          )}
+        </Reanimated.View>
+      </KeyboardAwareScrollView>
+      <MiniToast message={toast} top={statusBarTop + 12} />
     </SafeAreaView>
   );
 }
@@ -492,49 +430,26 @@ function BirthdateField({
 function PrimaryButton({
   label,
   onPress,
-  disabled,
+  busy = false,
 }: {
   label: string;
   onPress: () => void;
-  disabled?: boolean;
+  busy?: boolean;
 }) {
   return (
     <Pressable
       accessibilityRole="button"
-      disabled={disabled}
+      accessibilityLabel={label}
+      accessibilityState={{ busy }}
+      disabled={busy}
       onPress={onPress}
-      style={[styles.primaryButton, disabled && styles.buttonDisabled]}
+      style={[styles.primaryButton, busy && styles.buttonDisabled]}
     >
-      <Text style={styles.primaryButtonText}>{label}</Text>
-    </Pressable>
-  );
-}
-
-function UserTypeCard({
-  label,
-  icon,
-  selected,
-  onPress,
-}: {
-  label: string;
-  icon: React.ReactNode;
-  selected: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label.replace("\n", " ")}
-      accessibilityState={{ selected }}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.userTypeCard,
-        selected && styles.userTypeCardSelected,
-        pressed && styles.pressed,
-      ]}
-    >
-      <View style={styles.userTypeIcon}>{icon}</View>
-      <Text style={styles.userTypeLabel}>{label}</Text>
+      {busy ? (
+        <LoadingLogo size={20} color="#ffffff" label="Saving" />
+      ) : (
+        <Text style={styles.primaryButtonText}>{label}</Text>
+      )}
     </Pressable>
   );
 }
@@ -550,36 +465,17 @@ function FormField({
 }) {
   return (
     <View style={styles.field}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      {children}
-      {!!error && <Text style={styles.fieldError}>{error}</Text>}
+      <View style={styles.fieldLabelRow}>
+        <Text style={styles.fieldLabel}>{label}</Text>
+        {!!error && <ErrorMark color={errorRed} />}
+      </View>
+      <View style={!!error && styles.fieldErrorOutline}>{children}</View>
     </View>
-  );
-}
-
-function SteeringWheel({ size }: { size: number }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Circle cx={12} cy={12} r={10} stroke="#ffffff" strokeWidth={2.6} />
-      <Path
-        d="M2.5 11.5c3-1.6 6.1-2.4 9.5-2.4s6.5.8 9.5 2.4"
-        stroke="#ffffff"
-        strokeWidth={2.6}
-      />
-      <Path d="M12 14.5v7" stroke="#ffffff" strokeWidth={2.6} />
-      <Circle cx={12} cy={13} r={2.6} fill="#ffffff" />
-    </Svg>
   );
 }
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  loadingScreen: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: backgroundBlue,
-  },
   safeArea: { flex: 1, backgroundColor: backgroundBlue },
   container: {
     flexGrow: 1,
@@ -592,12 +488,6 @@ const styles = StyleSheet.create({
     width: contentWidth,
     alignItems: "center",
     marginTop: 64,
-  },
-  heading: {
-    color: "#ffffff",
-    fontFamily: "SoraBold",
-    fontSize: 18,
-    textAlign: "center",
   },
   message: {
     color: "#ffffff",
@@ -619,38 +509,10 @@ const styles = StyleSheet.create({
   primaryButtonText: {
     color: "#ffffff",
     fontFamily: "SoraBold",
-    fontSize: 9,
+    fontSize: 10,
   },
   buttonDisabled: { opacity: 0.6 },
-  userTypeRow: {
-    flexDirection: "row",
-    gap: 24,
-    marginTop: 68,
-  },
-  userTypeCard: {
-    width: 141,
-    height: 158,
-    alignItems: "center",
-    justifyContent: "flex-end",
-    backgroundColor: accentBlue,
-    borderRadius: 10,
-    paddingBottom: 12,
-  },
-  userTypeCardSelected: { borderWidth: 3, borderColor: "#ffffff" },
-  pressed: { opacity: 0.8 },
   backButton: { position: "absolute", top: 8, left: 16, zIndex: 1 },
-  userTypeIcon: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  userTypeLabel: {
-    color: "#ffffff",
-    fontFamily: "SoraBold",
-    fontSize: 18,
-    lineHeight: 24,
-    textAlign: "center",
-  },
   form: { width: contentWidth, gap: 12 },
   formHeading: {
     color: "#ffffff",
@@ -660,17 +522,17 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   row: { flexDirection: "row", gap: 50 },
-  rowAboveDropdown: { zIndex: 10 },
   field: { flex: 1, gap: 5 },
   fieldLabel: {
     color: "#ffffff",
     fontFamily: "Sora",
-    fontSize: 9,
+    fontSize: 10,
   },
-  fieldError: {
-    color: errorRed,
-    fontFamily: "Sora",
-    fontSize: 8,
+  fieldLabelRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+  fieldErrorOutline: {
+    borderWidth: 1.5,
+    borderColor: errorRed,
+    borderRadius: 9,
   },
   input: {
     height: 35,
@@ -709,22 +571,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   placeholderText: { color: "#9a9a9a" },
-  dropdown: {
-    position: "absolute",
-    top: 60,
-    left: 0,
-    right: 0,
-    backgroundColor: "#ffffff",
-    borderRadius: 8,
-    paddingVertical: 4,
-    elevation: 6,
-    shadowColor: "#000000",
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-  },
-  dropdownOption: { paddingHorizontal: 10, paddingVertical: 9 },
-  dropdownOptionSelected: { backgroundColor: "#e3f3fb" },
   webDateInput: {
     flex: 1,
     height: "100%",
@@ -753,10 +599,4 @@ const styles = StyleSheet.create({
   sheetTitle: { color: "#111111", fontFamily: "SoraBold", fontSize: 14 },
   sheetCancel: { color: "#6b6b6b", fontFamily: "Sora", fontSize: 14 },
   sheetDone: { color: backgroundBlue, fontFamily: "SoraBold", fontSize: 14 },
-  saveError: {
-    color: errorRed,
-    fontFamily: "Sora",
-    fontSize: 9,
-    textAlign: "center",
-  },
 });

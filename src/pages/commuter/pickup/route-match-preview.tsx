@@ -1,0 +1,335 @@
+import Footprints from "lucide-react-native/icons/footprints";
+import TriangleAlert from "lucide-react-native/icons/triangle-alert";
+import { useEffect, useMemo, useState } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+
+import { pickupOnRouteMeters } from "@/api/v1/pickups/controllers";
+import {
+  loadAlternativeGeometry,
+  loadRouteGeometry,
+  loadWalkingRoute,
+  type LatLng,
+  type PickupRouteMatch,
+} from "@/api/v1/transit-routes/controllers";
+import { moduleColors } from "@/components/module-ui";
+import { Notice } from "@/components/notice";
+import { TransitMap, type TransitMapState } from "@/components/transit-map";
+import {
+  choosePathFor,
+  dropoffOnRouteMeters,
+  sliceAlong,
+  nearestPointOnPath,
+  type Coordinates,
+} from "@/utils/geo";
+
+const { brandBlue, mutedText, text } = moduleColors;
+
+export const dropoffOutsideRouteNote =
+  "Your drop-off point is outside the route where jeepneys usually load/unload passengers.";
+
+function formatWalk(meters: number) {
+  return meters < 1000
+    ? `${Math.max(5, Math.round(meters / 5) * 5)} m`
+    : `${(meters / 1000).toFixed(1)} km`;
+}
+
+const pair = (point: Coordinates): LatLng => [point.lat, point.lng];
+
+function useWalkingLine(from: Coordinates | null, to: Coordinates | null) {
+  const key = from && to ? `${from.lat},${from.lng}>${to.lat},${to.lng}` : null;
+  const [routed, setRouted] = useState<{ key: string; path: LatLng[] } | null>(
+    null,
+  );
+  useEffect(() => {
+    if (!key || !from || !to) return;
+    let active = true;
+    void loadWalkingRoute(pair(from), pair(to)).then((result) => {
+      if (active && result.ok) setRouted({ key, path: result.data.path });
+    });
+    return () => {
+      active = false;
+    };
+  }, [key]);
+  const routedPath = routed?.key === key ? routed.path : null;
+  return useMemo(() => {
+    if (!from || !to) return null;
+    return routedPath
+      ? [pair(from), ...routedPath, pair(to)]
+      : [pair(from), pair(to)];
+  }, [key, routedPath]);
+}
+
+export function RouteMatchPreview({
+  original,
+  originalDropoff,
+  matches,
+  selected,
+  onSelect,
+}: {
+  original: Coordinates;
+  originalDropoff: Coordinates;
+  matches: PickupRouteMatch[];
+  selected: PickupRouteMatch | null;
+  onSelect: (routeId: string) => void;
+}) {
+  const shown = selected;
+  const pickupMoved = !!shown && shown.walkMeters > pickupOnRouteMeters;
+  const dropoffMoved =
+    !!shown && shown.dropoff.distanceMeters > dropoffOnRouteMeters;
+  const dropoffOffEveryRoute =
+    !shown &&
+    matches.every((match) => match.dropoff.distanceMeters > dropoffOnRouteMeters);
+
+  const [roads, setRoads] = useState<{
+    routeId: string;
+    paths: LatLng[][];
+  } | null>(null);
+  const shownRoute = shown?.route ?? null;
+  useEffect(() => {
+    if (!shownRoute) return;
+    let active = true;
+    Promise.all([
+      loadRouteGeometry(shownRoute),
+      loadAlternativeGeometry(shownRoute),
+    ])
+      .then(([main, alternatives]) => {
+        if (active) {
+          setRoads({
+            routeId: shownRoute.id,
+            paths: [main, ...alternatives].filter((path) => path.length > 1),
+          });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [shownRoute]);
+
+  const routeLine = useMemo(() => {
+    if (!shown) return null;
+    const roadPaths =
+      roads?.routeId === shown.routeId ? roads.paths : [];
+    const path = roadPaths.length
+      ? choosePathFor(roadPaths, shown.pickup.point, shown.dropoff.point)
+      : null;
+    if (!path) return shown.path;
+    return sliceAlong(
+      path,
+      nearestPointOnPath(shown.pickup.point, path).alongMeters,
+      nearestPointOnPath(shown.dropoff.point, path).alongMeters,
+    );
+  }, [shown, roads]);
+
+  const pickupWalk = useWalkingLine(
+    pickupMoved ? original : null,
+    pickupMoved && shown ? shown.pickup.point : null,
+  );
+  const dropoffWalk = useWalkingLine(
+    dropoffMoved && shown ? shown.dropoff.point : null,
+    dropoffMoved ? originalDropoff : null,
+  );
+
+  const state = useMemo<TransitMapState | null>(() => {
+    if (!shown) return null;
+    const a = shown.pickup.point;
+    const b = shown.dropoff.point;
+    return {
+      routeId: shown.routeId,
+      route: routeLine,
+      vehicles: [],
+      focus: null,
+      padTop: 36,
+      padBottom: 36,
+      pickups: [
+        ...(pickupMoved
+          ? [
+              {
+                id: "pickup-pin",
+                lat: original.lat,
+                lng: original.lng,
+                label: "Your pin",
+                muted: true,
+              },
+            ]
+          : []),
+        ...(dropoffMoved
+          ? [
+              {
+                id: "dropoff-pin",
+                lat: originalDropoff.lat,
+                lng: originalDropoff.lng,
+                label: "Your drop-off pin",
+                muted: true,
+              },
+            ]
+          : []),
+        {
+          id: "pickup-a",
+          lat: a.lat,
+          lng: a.lng,
+          badge: "A",
+          label: "Pickup",
+          color: "#16a34a",
+        },
+        {
+          id: "dropoff-b",
+          lat: b.lat,
+          lng: b.lng,
+          badge: "B",
+          label: "Drop-off",
+          color: "#dc2626",
+        },
+      ],
+      extraLines: [pickupWalk, dropoffWalk].filter(
+        (line): line is LatLng[] => !!line,
+      ),
+      fit: {
+        key: `${shown.routeId}:${a.lat}:${a.lng}:${b.lat}:${b.lng}`,
+        points: [
+          [a.lat, a.lng],
+          [b.lat, b.lng],
+          ...(pickupMoved ? [pair(original)] : []),
+          ...(dropoffMoved ? [pair(originalDropoff)] : []),
+        ],
+      },
+    };
+  }, [
+    shown,
+    pickupMoved,
+    dropoffMoved,
+    original,
+    originalDropoff,
+    pickupWalk,
+    dropoffWalk,
+    routeLine,
+  ]);
+
+  if (!matches.length) return null;
+
+  return (
+    <View style={styles.wrap}>
+      {matches.length > 0 && (
+        <View style={styles.list}>
+          <Text style={styles.listTitle}>
+            {matches.length > 1
+              ? "CHOOSE THE ROUTE YOU’LL RIDE"
+              : "THE ROUTE YOU’LL RIDE"}
+          </Text>
+          {matches.map((match) => {
+            const checked = selected?.routeId === match.routeId;
+            const dropoffAway =
+              match.dropoff.distanceMeters > dropoffOnRouteMeters;
+            return (
+              <Pressable
+                key={match.routeId}
+                accessibilityRole="radio"
+                accessibilityState={{ checked }}
+                onPress={() => onSelect(match.routeId)}
+                style={({ pressed }) => [
+                  styles.option,
+                  checked && styles.optionSelected,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <View style={styles.radio}>
+                  {checked && <View style={styles.radioDot} />}
+                </View>
+                <View style={styles.flex}>
+                  <Text style={styles.optionLabel}>{match.route.name}</Text>
+                  <Text style={styles.optionMeta}>
+                    Walk {formatWalk(match.walkMeters)} to pickup
+                    {dropoffAway
+                      ? ` · Drop-off ${formatWalk(match.dropoff.distanceMeters)} from your pin`
+                      : " · Drop-off on your pin"}
+                  </Text>
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
+
+      {shown && state && (
+        <View style={styles.map}>
+          <TransitMap state={state} controls />
+        </View>
+      )}
+
+      {pickupMoved && shown && (
+        <Notice
+          tone="info"
+          icon={<Footprints color={brandBlue} size={16} strokeWidth={2.2} />}
+          title="Pickup point moved to the route"
+          body={`Walk about ${formatWalk(shown.walkMeters)} from your pin to point A, where jeepneys can pick you up.`}
+        />
+      )}
+      {(dropoffMoved || dropoffOffEveryRoute) && (
+        <Notice
+          tone="warning"
+          icon={<TriangleAlert color="#b45309" size={16} strokeWidth={2.2} />}
+          title="Drop-off point moved to the route"
+          body={`${dropoffOutsideRouteNote} ${
+            shown
+              ? `You’ll get off at point B, about ${formatWalk(shown.dropoff.distanceMeters)} from your pin.`
+              : "You’ll get off at the nearest point on the route you choose."
+          }`}
+        />
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  wrap: { marginTop: 10, gap: 10 },
+  flex: { flex: 1 },
+  pressed: { opacity: 0.8 },
+  map: {
+    height: 220,
+    overflow: "hidden",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  list: {
+    gap: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 12,
+  },
+  listTitle: { color: mutedText, fontFamily: "SoraBold", fontSize: 10 },
+  option: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    minHeight: 48,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 9,
+  },
+  optionSelected: { borderColor: brandBlue, backgroundColor: "#eff6ff" },
+  optionLabel: { color: text, fontFamily: "SoraBold", fontSize: 11 },
+  optionMeta: {
+    marginTop: 2,
+    color: mutedText,
+    fontFamily: "Sora",
+    fontSize: 10,
+  },
+  radio: {
+    width: 18,
+    height: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: brandBlue,
+  },
+  radioDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: brandBlue,
+  },
+});

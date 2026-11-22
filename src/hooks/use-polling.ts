@@ -1,0 +1,60 @@
+import { useFocusEffect } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AppState } from "react-native";
+
+import { useOnline } from "@/hooks/use-online";
+
+export function usePolling(
+  task: () => unknown,
+  intervalMs: number,
+  enabled = true,
+) {
+  const taskRef = useRef(task);
+  const online = useOnline();
+  const [focused, setFocused] = useState(true);
+  useFocusEffect(
+    useCallback(() => {
+      setFocused(true);
+      return () => setFocused(false);
+    }, []),
+  );
+  const active = enabled && online && focused;
+
+  useEffect(() => {
+    taskRef.current = task;
+  }, [task]);
+
+  useEffect(() => {
+    if (!active) return;
+    let timer: ReturnType<typeof setInterval> | null = null;
+    let running = false;
+    const run = () => {
+      if (running) return;
+      running = true;
+      void Promise.resolve()
+        .then(() => taskRef.current())
+        .catch(() => {})
+        .finally(() => {
+          running = false;
+        });
+    };
+    const start = () => {
+      if (timer) return;
+      run();
+      timer = setInterval(run, intervalMs);
+    };
+    const stop = () => {
+      if (timer) clearInterval(timer);
+      timer = null;
+    };
+    if (AppState.currentState === "active") start();
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") start();
+      else stop();
+    });
+    return () => {
+      stop();
+      subscription.remove();
+    };
+  }, [active, intervalMs]);
+}
