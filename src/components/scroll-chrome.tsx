@@ -60,14 +60,17 @@ type ScrollChrome = {
   setLocked: (locked: boolean) => void;
 };
 
-export function useScrollChrome(): ScrollChrome {
+export function useScrollChrome(
+  sharedNavHidden?: SharedValue<number>,
+): ScrollChrome {
   const insets = useSafeAreaInsets();
   const heights = headerHeights(insets.top);
   const [collapsed, setCollapsed] = useState(false);
   const progress = useSharedValue(0);
   const collapsedValue = useSharedValue(false);
   const lockedValue = useSharedValue(false);
-  const navHidden = useSharedValue(0);
+  const ownNavHidden = useSharedValue(0);
+  const navHidden = sharedNavHidden ?? ownNavHidden;
   const lastY = useSharedValue(0);
 
   const scrollHandler = useAnimatedScrollHandler((event) => {
@@ -86,11 +89,11 @@ export function useScrollChrome(): ScrollChrome {
     }
 
     if (y <= 0) {
-      navHidden.value = withTiming(0, chromeTiming);
-    } else if (dy > directionThreshold && navHidden.value < 1) {
-      navHidden.value = withTiming(1, chromeTiming);
-    } else if (dy < -directionThreshold && navHidden.value > 0) {
-      navHidden.value = withTiming(0, chromeTiming);
+      navHidden.set(withTiming(0, chromeTiming));
+    } else if (dy > directionThreshold && navHidden.get() < 1) {
+      navHidden.set(withTiming(1, chromeTiming));
+    } else if (dy < -directionThreshold && navHidden.get() > 0) {
+      navHidden.set(withTiming(0, chromeTiming));
     }
   });
 
@@ -132,6 +135,18 @@ export function StickyHeader({
   );
 }
 
+export function HeaderProgressProvider({
+  progress,
+  children,
+}: {
+  progress: SharedValue<number>;
+  children: ReactNode;
+}) {
+  return (
+    <HeaderProgress.Provider value={progress}>{children}</HeaderProgress.Provider>
+  );
+}
+
 export function CollapsibleHeader({
   title,
   subtitle,
@@ -140,7 +155,9 @@ export function CollapsibleHeader({
   titleStyle,
   children,
   footerHeight = 0,
+  bare = false,
 }: {
+  bare?: boolean;
   title: string;
   subtitle: string;
   icon: ReactNode;
@@ -202,7 +219,7 @@ export function CollapsibleHeader({
   }));
 
   return (
-    <Animated.View style={[styles.header, container]}>
+    <Animated.View style={[styles.header, bare && styles.bare, container]}>
       <Animated.View style={[styles.row, row]}>
         {onBack && (
           <Animated.View style={backMotion}>
@@ -242,6 +259,7 @@ export function CollapsibleHeader({
 
 const styles = StyleSheet.create({
   sticky: { position: "absolute", top: 0, left: 0, right: 0, zIndex: 10 },
+  bare: { backgroundColor: "transparent" },
   header: {
     overflow: "hidden",
     paddingHorizontal: 16,

@@ -1,10 +1,9 @@
-import { BlurTargetView } from "expo-blur";
 import { router, useFocusEffect } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import Clock from "lucide-react-native/icons/clock";
 import BriefcaseBusiness from "lucide-react-native/icons/briefcase-business";
 import Route from "lucide-react-native/icons/route";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshControl, StyleSheet, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -18,16 +17,20 @@ import {
   type Rental,
 } from "@/api/v1/rentals/controllers";
 import { useNow } from "@/hooks/use-now";
-import { BottomNav, bottomNavHeight } from "@/components/bottom-nav";
+import { bottomNavHeight } from "@/components/bottom-nav";
+import { BrandLogo } from "@/components/brand-logo";
+import {
+  useHomeTabHeader,
+  useHomeTabNavHidden,
+} from "@/components/home-tabs-context";
 import {
   ActionCard,
   ActionRow,
-  HomeHeader,
   homeColors,
   SectionDivider,
   SectionHeader,
 } from "@/components/home-ui";
-import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
+import { useScrollChrome } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
 import { ActiveWork, nextRentalJob } from "@/pages/transit/home/active-work";
 import { RatingsSummary } from "@/pages/transit/home/ratings-summary";
@@ -37,11 +40,23 @@ const { brandBlue } = homeColors;
 
 export default function TransitHomeScreen() {
   const insets = useSafeAreaInsets();
-  const chrome = useScrollChrome();
-  const blurTarget = useRef<View | null>(null);
+  const chrome = useScrollChrome(useHomeTabNavHidden("home"));
   const [firstName, setFirstName] = useState(() =>
     peekHomeName("transit_personnel"),
   );
+  const header = useMemo(
+    () =>
+      firstName === null
+        ? null
+        : {
+            title: `Hello, ${firstName}!`,
+            subtitle: "Ready to hit the road? Start a trip anytime!",
+            icon: <BrandLogo />,
+            progress: chrome.progress,
+          },
+    [firstName, chrome.progress],
+  );
+  useHomeTabHeader("home", header);
   const [openJobs, setOpenJobs] = useState(0);
   const [myJobs, setMyJobs] = useState<Rental[]>([]);
   const [runningTrip, setRunningTrip] = useState<TripRecord | null>(null);
@@ -118,7 +133,6 @@ export default function TransitHomeScreen() {
   return (
     <View style={styles.screen}>
       <StatusBar style="light" />
-      <BlurTargetView ref={blurTarget} style={styles.blurTarget}>
         <Animated.ScrollView
           onScroll={chrome.scrollHandler}
           scrollEventThrottle={16}
@@ -178,22 +192,6 @@ export default function TransitHomeScreen() {
           </View>
         </Animated.ScrollView>
 
-        <StickyHeader chrome={chrome}>
-          <HomeHeader
-            firstName={firstName}
-            subtitle="Ready to hit the road? Start a trip anytime!"
-            collapsed={chrome.collapsed}
-            topInset={insets.top}
-          />
-        </StickyHeader>
-      </BlurTargetView>
-
-      <BottomNav
-        active="home"
-        homeRoute={Routes.transitHome}
-        blurTarget={blurTarget}
-        hidden={chrome.navHidden}
-      />
     </View>
   );
 }
@@ -206,6 +204,5 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
   },
   screen: { flex: 1, backgroundColor: "#ffffff" },
-  blurTarget: { flex: 1 },
   body: { paddingHorizontal: 12 },
 });

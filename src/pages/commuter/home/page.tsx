@@ -1,25 +1,28 @@
-import { BlurTargetView } from "expo-blur";
 import { router, useFocusEffect } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import Bus from "lucide-react-native/icons/bus";
 import MapPinSearch from "lucide-react-native/icons/map-pin-search";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RefreshControl, StyleSheet, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { loadHome, peekHomeName } from "@/api/v1/profile/controllers";
 import { loadWaitingAreas } from "@/api/v1/waiting-areas/controllers";
-import { BottomNav, bottomNavHeight } from "@/components/bottom-nav";
+import { bottomNavHeight } from "@/components/bottom-nav";
+import { BrandLogo } from "@/components/brand-logo";
+import {
+  useHomeTabHeader,
+  useHomeTabNavHidden,
+} from "@/components/home-tabs-context";
 import {
   ActionCard,
   ActionRow,
   homeColors,
-  HomeHeader,
   SectionDivider,
 } from "@/components/home-ui";
 import { PickupIcon } from "@/components/module-icons";
-import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
+import { useScrollChrome } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
 import { usePickupStatus } from "@/hooks/use-pickup-status";
 import { ActivePickupBanner } from "@/pages/commuter/home/active-pickup-banner";
@@ -30,9 +33,21 @@ const { brandBlue } = homeColors;
 
 export default function CommuterHomeScreen() {
   const insets = useSafeAreaInsets();
-  const chrome = useScrollChrome();
-  const blurTarget = useRef<View | null>(null);
+  const chrome = useScrollChrome(useHomeTabNavHidden("home"));
   const [firstName, setFirstName] = useState(() => peekHomeName("commuter"));
+  const header = useMemo(
+    () =>
+      firstName === null
+        ? null
+        : {
+            title: `Hello, ${firstName}!`,
+            subtitle: "Connect with Available Drivers Nearby!",
+            icon: <BrandLogo />,
+            progress: chrome.progress,
+          },
+    [firstName, chrome.progress],
+  );
+  useHomeTabHeader("home", header);
   const { status: pickupStatus, refresh: refreshPickupStatus } =
     usePickupStatus();
   const [refreshKey, setRefreshKey] = useState(0);
@@ -86,7 +101,6 @@ export default function CommuterHomeScreen() {
   return (
     <View style={styles.screen}>
       <StatusBar style="light" />
-      <BlurTargetView ref={blurTarget} style={styles.blurTarget}>
         <Animated.ScrollView
           onScroll={chrome.scrollHandler}
           scrollEventThrottle={16}
@@ -142,28 +156,11 @@ export default function CommuterHomeScreen() {
           </View>
         </Animated.ScrollView>
 
-        <StickyHeader chrome={chrome}>
-          <HomeHeader
-            firstName={firstName}
-            subtitle="Connect with Available Drivers Nearby!"
-            collapsed={chrome.collapsed}
-            topInset={insets.top}
-          />
-        </StickyHeader>
-      </BlurTargetView>
-
-      <BottomNav
-        active="home"
-        homeRoute={Routes.commuterHome}
-        blurTarget={blurTarget}
-        hidden={chrome.navHidden}
-      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#ffffff" },
-  blurTarget: { flex: 1 },
   body: { paddingHorizontal: 12 },
 });

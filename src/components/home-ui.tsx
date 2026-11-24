@@ -2,8 +2,6 @@ import ArrowRight from "lucide-react-native/icons/arrow-right";
 import type { ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { BrandLogo } from "@/components/brand-logo";
-import { CollapsibleHeader } from "@/components/scroll-chrome";
 import { palette } from "@/constants/colors";
 
 export const homeColors = {
@@ -14,24 +12,6 @@ export const homeColors = {
 };
 
 const { brandBlue, mutedText, cardBorder, cardEdgeBlue } = homeColors;
-
-export function HomeHeader({
-  firstName,
-  subtitle,
-}: {
-  firstName: string;
-  subtitle: string;
-  collapsed?: boolean;
-  topInset?: number;
-}) {
-  return (
-    <CollapsibleHeader
-      title={`Hello, ${firstName}!`}
-      subtitle={subtitle}
-      icon={<BrandLogo />}
-    />
-  );
-}
 
 export function ActionRow({ children }: { children: ReactNode }) {
   return <View style={styles.actionRow}>{children}</View>;

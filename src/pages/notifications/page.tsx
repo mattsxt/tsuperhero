@@ -1,4 +1,3 @@
-import { BlurTargetView } from "expo-blur";
 import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import Bell from "lucide-react-native/icons/bell";
@@ -14,7 +13,7 @@ import OctagonPause from "lucide-react-native/icons/octagon-pause";
 import Flag from "lucide-react-native/icons/flag";
 import MapPin from "lucide-react-native/icons/map-pin";
 import RotateCcw from "lucide-react-native/icons/rotate-ccw";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Pressable,
   RefreshControl,
@@ -36,15 +35,13 @@ import { dismissFromDevice } from "@/api/v1/notifications/device";
 import {
   loadHomeRoute,
   loadProfileSummary,
-  peekSignedInHomeRoute,
 } from "@/api/v1/profile/controllers";
-import { BottomNav, bottomNavHeight } from "@/components/bottom-nav";
+import { bottomNavHeight } from "@/components/bottom-nav";
 import {
-  StickyHeader,
-  useScrollChrome,
-  CollapsibleHeader,
-} from "@/components/scroll-chrome";
-import type { AppRoute } from "@/constants/routes";
+  useHomeTabHeader,
+  useHomeTabNavHidden,
+} from "@/components/home-tabs-context";
+import { useScrollChrome } from "@/components/scroll-chrome";
 import { useNotifications } from "@/hooks/use-notifications";
 import { palette } from "@/constants/colors";
 
@@ -101,11 +98,17 @@ function formatWhen(date: Date) {
 
 export default function NotificationsScreen() {
   const insets = useSafeAreaInsets();
-  const chrome = useScrollChrome();
-  const blurTarget = useRef<View | null>(null);
-  const [homeRoute, setHomeRoute] = useState<AppRoute | null>(
-    peekSignedInHomeRoute,
+  const chrome = useScrollChrome(useHomeTabNavHidden("notifications"));
+  const header = useMemo(
+    () => ({
+      title: "Notifications",
+      subtitle: "Updates on your trips, rentals and pickups",
+      icon: <Bell color="#ffffff" size={40} strokeWidth={1.8} />,
+      progress: chrome.progress,
+    }),
+    [chrome.progress],
   );
+  useHomeTabHeader("notifications", header);
   const [refreshing, setRefreshing] = useState(false);
   const { notifications, unreadCount } = useNotifications();
 
@@ -115,11 +118,7 @@ export default function NotificationsScreen() {
 
     const load = async () => {
       const result = await loadHomeRoute();
-      if ("redirect" in result) {
-        router.replace(result.redirect);
-        return;
-      }
-      if (active) setHomeRoute(result.homeRoute);
+      if (active && "redirect" in result) router.replace(result.redirect);
     };
 
     load();
@@ -151,7 +150,6 @@ export default function NotificationsScreen() {
   return (
     <View style={styles.screen}>
       <StatusBar style="light" />
-      <BlurTargetView ref={blurTarget} style={styles.blurTarget}>
         <Animated.ScrollView
           onScroll={chrome.scrollHandler}
           scrollEventThrottle={16}
@@ -224,23 +222,6 @@ export default function NotificationsScreen() {
           </View>
         </Animated.ScrollView>
 
-        <StickyHeader chrome={chrome}>
-          <CollapsibleHeader
-            title="Notifications"
-            subtitle="Updates on your trips, rentals and pickups"
-            icon={<Bell color="#ffffff" size={40} strokeWidth={1.8} />}
-          />
-        </StickyHeader>
-      </BlurTargetView>
-
-      {homeRoute && (
-        <BottomNav
-          active="notifications"
-          homeRoute={homeRoute}
-          blurTarget={blurTarget}
-          hidden={chrome.navHidden}
-        />
-      )}
     </View>
   );
 }
@@ -288,7 +269,6 @@ function NotificationRow({
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#ffffff" },
-  blurTarget: { flex: 1 },
   pressed: { opacity: 0.7 },
   header: {
     paddingHorizontal: 24,

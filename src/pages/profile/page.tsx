@@ -1,4 +1,3 @@
-import { BlurTargetView } from "expo-blur";
 import { Image } from "expo-image";
 import { router, useFocusEffect } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -8,7 +7,7 @@ import FileText from "lucide-react-native/icons/file-text";
 import LogOut from "lucide-react-native/icons/log-out";
 import CircleHelp from "lucide-react-native/icons/circle-question-mark";
 import ShieldCog from "lucide-react-native/icons/shield-cog";
-import { useCallback, useRef, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -19,15 +18,15 @@ import { ConfirmModal } from "@/components/confirm-modal";
 import {
   loadProfileSummary,
   peekProfileSummary,
-  peekSignedInHomeRoute,
   type ProfileSummary,
 } from "@/api/v1/profile/controllers";
-import { BottomNav, bottomNavHeight } from "@/components/bottom-nav";
+import { bottomNavHeight } from "@/components/bottom-nav";
 import {
-  StickyHeader,
-  useScrollChrome,
-  CollapsibleHeader,
-} from "@/components/scroll-chrome";
+  useHomeTabHeader,
+  useHomeTabNavHidden,
+  useHomeTabsLock,
+} from "@/components/home-tabs-context";
+import { useScrollChrome } from "@/components/scroll-chrome";
 import { LoadingScreen, signOutMessages } from "@/components/LoadingScreen";
 import { Routes } from "@/constants/routes";
 import { useOnline } from "@/hooks/use-online";
@@ -43,8 +42,17 @@ const signOutMinMs = 1200;
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
-  const chrome = useScrollChrome();
-  const blurTarget = useRef<View | null>(null);
+  const chrome = useScrollChrome(useHomeTabNavHidden("profile"));
+  const header = useMemo(
+    () => ({
+      title: "User Profile and Actions",
+      subtitle: "Manage your own profile and settings",
+      icon: <CircleUserRound color="#ffffff" size={40} strokeWidth={1.8} />,
+      progress: chrome.progress,
+    }),
+    [chrome.progress],
+  );
+  useHomeTabHeader("profile", header);
   const [summary, setSummary] = useState<ProfileSummary | null>(
     peekProfileSummary,
   );
@@ -53,6 +61,7 @@ export default function ProfileScreen() {
   const [signOutWarning, setSignOutWarning] = useState<string | null>(null);
   const [checkingSignOut, setCheckingSignOut] = useState(false);
   const online = useOnline();
+  useHomeTabsLock(signingOut);
 
   useFocusEffect(
     useCallback(() => {
@@ -103,12 +112,9 @@ export default function ProfileScreen() {
 
   if (signingOut) return <LoadingScreen messages={signOutMessages} />;
 
-  const homeRoute = summary?.homeRoute ?? peekSignedInHomeRoute();
-
   return (
     <View style={styles.screen}>
       <StatusBar style="light" />
-      <BlurTargetView ref={blurTarget} style={styles.blurTarget}>
         <Animated.ScrollView
           onScroll={chrome.scrollHandler}
           scrollEventThrottle={16}
@@ -212,25 +218,7 @@ export default function ProfileScreen() {
           </View>
         </Animated.ScrollView>
 
-        <StickyHeader chrome={chrome}>
-          <CollapsibleHeader
-            title="User Profile and Actions"
-            subtitle="Manage your own profile and settings"
-            icon={
-              <CircleUserRound color="#ffffff" size={40} strokeWidth={1.8} />
-            }
-          />
-        </StickyHeader>
-      </BlurTargetView>
 
-      {homeRoute && (
-        <BottomNav
-          active="profile"
-          homeRoute={homeRoute}
-          blurTarget={blurTarget}
-          hidden={chrome.navHidden}
-        />
-      )}
       <ConfirmModal
         visible={!!signOutWarning}
         title="Sign out now?"
@@ -294,7 +282,6 @@ function ActionRow({
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#ffffff" },
-  blurTarget: { flex: 1 },
   header: {
     paddingHorizontal: 24,
     paddingBottom: 28,

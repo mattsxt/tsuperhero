@@ -27,6 +27,7 @@ import Play from "lucide-react-native/icons/play";
 import Settings from "lucide-react-native/icons/settings";
 import { router, usePathname } from "expo-router";
 
+import { useVisibleHomePath } from "@/components/home-tabs-context";
 import { Routes } from "@/constants/routes";
 import { generateRideAsCompanion, generateRideAsHost } from "@/simulation/demo-rides";
 import { initialsOf } from "@/utils/initials";
@@ -64,6 +65,13 @@ import {
   generatedVehicleCount,
 } from "@/simulation/generated-vehicles";
 
+const homeShellPaths = new Set<string>([
+  Routes.commuterHome,
+  Routes.transitHome,
+  Routes.notifications,
+  Routes.profile,
+]);
+
 const size = 56;
 const toggleHeight = 20;
 const toggleGap = 6;
@@ -95,7 +103,10 @@ const isDriver = () => {
 };
 
 export function DemoPanel() {
-  const pathname = usePathname();
+  const routePath = usePathname();
+  const visibleHomePath = useVisibleHomePath();
+  const pathname =
+    visibleHomePath && homeShellPaths.has(routePath) ? visibleHomePath : routePath;
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const x = useSharedValue(width - size - 4);
