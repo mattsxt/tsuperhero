@@ -9,6 +9,8 @@ export const buildSeed = (now: Date): Tables => {
   return {
     ...people,
     ...history,
+    rental_cancellation: [],
+    rental_suspension: [],
     route: routes.map((r) => ({ ...r })),
     waiting_area: waitingAreas.map((w) => ({ ...w })),
   };

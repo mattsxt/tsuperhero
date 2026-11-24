@@ -122,17 +122,6 @@ export function findRoute(id: string | null | undefined) {
   return transitRoutes.find((route) => route.id === id) ?? null;
 }
 
-export function searchDestinations(query: string) {
-  const needle = query.trim().toLowerCase();
-  return selectableRoutes.filter(
-    (route) =>
-      route.name.toLowerCase().includes(needle) ||
-      route.vicinity.some((place) => place.toLowerCase().includes(needle)),
-  );
-}
-
-export const nearDestinationMeters = 100;
-
 export type RouteNearPlace = { route: TransitRoute; distanceMeters: number };
 
 export function findNearestRoute(
@@ -179,17 +168,6 @@ export function findNearestPointServing<T extends Coordinates>(
   dropoff: Coordinates,
 ): T | null {
   return nearestServedPoint(origin, candidates, dropoff, pickupRouteCandidates());
-}
-
-export function findRoutesNear(point: {
-  lat: number;
-  lng: number;
-}): RouteNearPlace[] {
-  return selectableRoutes
-    .map((route) => findNearestRoute(point, [route]))
-    .filter((item): item is RouteNearPlace => item !== null)
-    .filter(({ distanceMeters }) => distanceMeters <= nearDestinationMeters)
-    .sort((a, b) => a.distanceMeters - b.distanceMeters);
 }
 
 export const occupancyLevels = [

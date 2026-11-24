@@ -3,7 +3,7 @@ import ArrowLeft from "lucide-react-native/icons/arrow-left";
 import CircleCheck from "lucide-react-native/icons/circle-check";
 import MapPin from "lucide-react-native/icons/map-pin";
 import Users from "lucide-react-native/icons/users";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -16,8 +16,6 @@ import { ErrorAlert } from "@/components/error-alert";
 import { ModuleButton, moduleColors } from "@/components/module-ui";
 import { palette } from "@/constants/colors";
 import { useSimulatedWalk } from "@/simulation/use-simulated-walk";
-import { isSimulation } from "@/simulation/flag";
-import * as simulationEngine from "@/simulation/engine";
 import { getDistanceMeters, type Coordinates } from "@/utils/geo";
 
 import { partyPins } from "./ride-party";
@@ -52,11 +50,6 @@ export function GoToPickup({
   const [locationError, setLocationError] = useState<string | null>(null);
   const [cardHeight, setCardHeight] = useState(260);
   useSimulatedWalk(target);
-  useEffect(() => {
-    if (!isSimulation()) return;
-    simulationEngine.setPickupWalkScreenActive(true);
-    return () => simulationEngine.setPickupWalkScreenActive(false);
-  }, []);
 
   const area = useMemo<WaitingArea>(
     () => ({

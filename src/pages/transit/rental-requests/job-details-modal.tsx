@@ -19,9 +19,14 @@ import {
   View,
 } from "react-native";
 
-import { formatRentalTime, type Rental } from "@/api/v1/rentals/controllers";
+import { dropWarning } from "@/api/v1/rentals/drop-policy";
+import {
+  formatRentalTime,
+  type Rental,
+  type RentalStanding,
+} from "@/api/v1/rentals/controllers";
 import { VehicleTypeBadge } from "@/components/card-badges";
-import { ConfirmModal } from "@/components/confirm-modal";
+import { ReasonModal } from "@/components/reason-modal";
 import { palette } from "@/constants/colors";
 import { useNow } from "@/hooks/use-now";
 import { initialsOf } from "@/utils/initials";
@@ -42,33 +47,25 @@ function statusOf(job: Rental) {
 
 export function JobDetailsModal({
   job,
+  standing,
   onClose,
   onDrop,
 }: {
   job: Rental | null;
+  standing: RentalStanding | null;
   onClose: () => void;
-  onDrop: (job: Rental) => Promise<string | null>;
+  onDrop: (
+    job: Rental,
+    reason: string,
+    details: string,
+  ) => Promise<string | null>;
 }) {
   const [confirmingDrop, setConfirmingDrop] = useState(false);
-  const [dropping, setDropping] = useState(false);
-  const [dropError, setDropError] = useState("");
   const now = useNow(30_000);
   if (!job) return null;
   const close = () => {
     setConfirmingDrop(false);
-    setDropError("");
     onClose();
-  };
-  const drop = async () => {
-    setDropping(true);
-    const error = await onDrop(job);
-    setDropping(false);
-    if (error) {
-      setDropError(error);
-      return;
-    }
-    setConfirmingDrop(false);
-    setDropError("");
   };
   const status = statusOf(job);
   const mine = job.units.find((unit) => unit.isMine);
@@ -213,22 +210,16 @@ export function JobDetailsModal({
 
             {droppable && (
               <View style={styles.dropBox}>
-                {!!dropError && (
-                  <Text style={styles.dropError}>{dropError}</Text>
-                )}
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityState={{ busy: dropping }}
-                  disabled={dropping}
+                  accessibilityHint="Asks for a reason before the job is dropped"
                   onPress={() => setConfirmingDrop(true)}
                   style={({ pressed }) => [
                     styles.drop,
-                    (pressed || dropping) && styles.pressed,
+                    pressed && styles.pressed,
                   ]}
                 >
-                  <Text style={styles.dropText}>
-                    {dropping ? "DROPPING..." : "DROP THIS JOB"}
-                  </Text>
+                  <Text style={styles.dropText}>DROP THIS JOB</Text>
                 </Pressable>
               </View>
             )}
@@ -246,18 +237,24 @@ export function JobDetailsModal({
         </View>
       </View>
 
-      <ConfirmModal
+      <ReasonModal
         visible={confirmingDrop}
-        destructive
+        actor="driver"
         title="Drop this job?"
-        message={`Your ${mine?.vehicleType.toLowerCase() ?? "vehicle"} goes back on the job board and the commuter is notified.`}
+        subtitle={`${job.destination} · ${formatRentalTime(job.pickupTime)}`}
+        message={`Your ${mine?.vehicleType.toLowerCase() ?? "vehicle"} goes back on the job board for other drivers.`}
+        notice={
+          standing ? dropWarning(standing.nextPenalty, standing.drops) : null
+        }
+        privacyNote="The commuter sees the reason you pick. Your details are only shared with your cooperative."
         confirmLabel="Drop job"
         cancelLabel="Keep job"
         icon={<TriangleAlert color="#ffffff" size={22} strokeWidth={2.2} />}
         onCancel={() => setConfirmingDrop(false)}
-        onConfirm={() => {
-          setConfirmingDrop(false);
-          void drop();
+        onConfirm={async (reason, details) => {
+          const error = await onDrop(job, reason, details);
+          if (!error) setConfirmingDrop(false);
+          return error;
         }}
       />
     </Modal>
@@ -287,7 +284,6 @@ function Detail({
 
 const styles = StyleSheet.create({
   dropBox: { gap: 8, marginTop: 12 },
-  dropError: { color: palette.danger, fontFamily: "SoraBold", fontSize: 11 },
   drop: {
     height: 46,
     alignItems: "center",

@@ -4,7 +4,7 @@ import { beforeEach, test } from "node:test";
 import { signInAs } from "@/simulation/auth";
 import { db } from "@/simulation/db";
 import { handlers } from "@/simulation/rpc";
-import { driverId, userId } from "@/simulation/seed/people";
+import { COOPERATIVE_HEAD_USER_ID, driverId, userId } from "@/simulation/seed/people";
 
 const call = (name: string, args: unknown = {}) => handlers[name](args) as any;
 const as = (key: string) => signInAs(userId(key), `${key}@demo.tsuperhero`);
@@ -90,12 +90,160 @@ test("drop and remove reopen the unit", () => {
   const unit = call("get_rental_job_board").find((j: any) => j.request_id === id).unit_id;
   call("accept_rental_job", { p_unit_id: unit });
   throws(() => call("accept_rental_job", { p_unit_id: unit }), "Another driver already took this vehicle.");
-  call("drop_rental_job", { p_request_id: id });
+  call("drop_rental_job", { p_request_id: id, p_reason: "vehicle_problem" });
   assert.equal(call("get_rental_job_board").some((j: any) => j.request_id === id), true);
   call("accept_rental_job", { p_unit_id: unit });
   as("ana");
-  call("remove_rental_driver", { p_unit_id: unit });
+  call("remove_rental_driver", { p_unit_id: unit, p_reason: "plans_changed" });
   assert.equal(call("get_my_rental", { p_request_id: id }).status, "pending");
+});
+
+const takeJob = (id: string) => {
+  const unit = db.tables.charter_rental_unit.find((u) => u.request_id === id)!.unit_id;
+  call("accept_rental_job", { p_unit_id: unit });
+  return unit as string;
+};
+const endCooldowns = () => {
+  for (const row of db.tables.rental_cancellation) row.blocked_until = null;
+};
+const notices = (user: string, type: string) =>
+  db.tables.notification.filter((n) => n.user_id === user && n.notification_type === type);
+
+test("dropping needs a reason the driver side allows", () => {
+  const id = post();
+  as("mario");
+  takeJob(id);
+  throws(() => call("drop_rental_job", { p_request_id: id }), "Choose a reason for dropping this job.");
+  throws(
+    () => call("drop_rental_job", { p_request_id: id, p_reason: "safety_concern" }),
+    "Choose one of the listed reasons.",
+  );
+  throws(
+    () => call("drop_rental_job", { p_request_id: id, p_reason: "other", p_details: "  " }),
+    "Add a few words about why you're dropping this job.",
+  );
+  throws(
+    () => call("drop_rental_job", { p_request_id: id, p_reason: "other", p_details: "x".repeat(301) }),
+    "Keep the details under 300 characters.",
+  );
+  assert.equal(db.tables.rental_cancellation.length, 0);
+});
+
+test("repeated drops escalate to a cooldown and then a suspension", () => {
+  const id = post();
+  as("mario");
+  assert.equal(call("get_my_rental_standing").next_penalty, "warning");
+
+  takeJob(id);
+  const first = call("drop_rental_job", { p_request_id: id, p_reason: "vehicle_problem" });
+  assert.deepEqual(
+    { strike: first.strike, penalty: first.penalty, minutes: first.minutes },
+    { strike: 1, penalty: "warning", minutes: null },
+  );
+  takeJob(id);
+  const second = call("drop_rental_job", { p_request_id: id, p_reason: "schedule_conflict" });
+  assert.equal(second.penalty, "cooldown");
+  assert.equal(second.minutes, 15);
+  throws(() => takeJob(id), "You can accept another job in 15 minutes.");
+  assert.ok(call("get_my_rental_standing").blocked_until);
+
+  endCooldowns();
+  takeJob(id);
+  const third = call("drop_rental_job", { p_request_id: id, p_reason: "personal_emergency" });
+  assert.equal(third.minutes, 30);
+  throws(() => takeJob(id), "You can accept another job in 30 minutes.");
+  assert.equal(call("get_my_rental_standing").next_penalty, "suspended");
+
+  endCooldowns();
+  takeJob(id);
+  const fourth = call("drop_rental_job", {
+    p_request_id: id,
+    p_reason: "other",
+    p_details: "Family matter",
+  });
+  assert.equal(fourth.penalty, "suspended");
+  throws(
+    () => takeJob(id),
+    "Rental jobs are paused on your account. Your cooperative head is reviewing your recent drops.",
+  );
+  const standing = call("get_my_rental_standing");
+  assert.equal(standing.suspended, true);
+  assert.equal(standing.drops, 4);
+
+  const suspension = db.tables.rental_suspension[0];
+  assert.equal(suspension.driver_id, driverId("mario"));
+  assert.equal(suspension.drop_count, 4);
+  assert.equal(notices(COOPERATIVE_HEAD_USER_ID, "rental_driver_suspended").length, 1);
+  assert.equal(notices(userId("mario"), "rental_jobs_paused").length, 1);
+  const log = db.tables.rental_cancellation.map((c) => c.reason);
+  assert.deepEqual(log, ["vehicle_problem", "schedule_conflict", "personal_emergency", "other"]);
+});
+
+test("the commuter hears the reason, except for other", () => {
+  const id = post();
+  as("mario");
+  takeJob(id);
+  call("drop_rental_job", { p_request_id: id, p_reason: "vehicle_problem" });
+  takeJob(id);
+  endCooldowns();
+  call("drop_rental_job", { p_request_id: id, p_reason: "other", p_details: "Private note" });
+  const [named, other] = notices(userId("ana"), "rental_driver_left").map((n) => String(n.body));
+  assert.match(named, /Reason: Vehicle problem./);
+  assert.doesNotMatch(other, /Reason|Private note/);
+});
+
+test("the cooperative head lifts a suspension and the count starts fresh", () => {
+  const id = post();
+  as("mario");
+  for (const reason of ["vehicle_problem", "schedule_conflict", "personal_emergency", "commuter_unreachable"]) {
+    endCooldowns();
+    takeJob(id);
+    call("drop_rental_job", { p_request_id: id, p_reason: reason });
+  }
+  const suspensionId = db.tables.rental_suspension[0].suspension_id;
+  throws(
+    () => call("lift_rental_suspension", { p_suspension_id: suspensionId }),
+    "Only an admin of this driver's cooperative can lift it.",
+  );
+  signInAs(COOPERATIVE_HEAD_USER_ID, "coophead@demo.tsuperhero");
+  call("lift_rental_suspension", { p_suspension_id: suspensionId, p_note: "Talked it through" });
+  throws(
+    () => call("lift_rental_suspension", { p_suspension_id: suspensionId }),
+    "This suspension was already lifted.",
+  );
+  as("mario");
+  assert.equal(notices(userId("mario"), "rental_jobs_restored").length, 1);
+  const standing = call("get_my_rental_standing");
+  assert.equal(standing.suspended, false);
+  assert.equal(standing.drops, 0);
+  takeJob(id);
+});
+
+test("removing a driver needs a reason and doesn't count as their drop", () => {
+  const id = post();
+  as("mario");
+  const unit = takeJob(id);
+  as("ana");
+  throws(
+    () => call("remove_rental_driver", { p_unit_id: unit }),
+    "Choose a reason for removing this driver.",
+  );
+  throws(
+    () => call("remove_rental_driver", { p_unit_id: unit, p_reason: "vehicle_problem" }),
+    "Choose one of the listed reasons.",
+  );
+  call("remove_rental_driver", {
+    p_unit_id: unit,
+    p_reason: "driver_unresponsive",
+    p_details: "No reply for two days",
+  });
+  const row = db.tables.rental_cancellation[0];
+  assert.equal(row.cancelled_by, "commuter");
+  assert.equal(row.details, "No reply for two days");
+  const [notice] = notices(userId("mario"), "rental_driver_removed");
+  assert.match(String(notice.body), /Reason: Driver isn't responding. This doesn't count as a drop./);
+  as("mario");
+  assert.equal(call("get_my_rental_standing").drops, 0);
 });
 
 test("dismiss hides a job; seeded board has two", () => {

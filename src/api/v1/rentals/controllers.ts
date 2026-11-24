@@ -2,9 +2,16 @@ import { getCommuterId } from "@/api/v1/pickups/controllers";
 import type { Place } from "@/api/v1/places/controllers";
 import {
   rentalRoutes,
+  type DropOutcomeRow,
   type RentalRow,
+  type RentalStandingRow,
   type RentalVehicleType,
 } from "@/api/v1/rentals/routes";
+import {
+  dropWindowDays,
+  reasonProblem,
+  type DropPenalty,
+} from "@/api/v1/rentals/drop-policy";
 import { unwrapCached } from "@/api/v1/cache";
 import { attempt, failure, unwrap, type Result } from "@/api/v1/result";
 import { checkOnline } from "@/hooks/use-online";
@@ -215,8 +222,86 @@ export async function acceptRentalJob(job: Rental): Promise<Result<unknown>> {
   return attempt(() => unwrap(rentalRoutes.acceptJob(unitId)));
 }
 
-export function dropRentalJob(id: string): Promise<Result<unknown>> {
-  return attempt(() => unwrap(rentalRoutes.dropJob(id)));
+export type RentalStanding = {
+  drops: number;
+  windowDays: number;
+  blockedUntil: Date | null;
+  suspended: boolean;
+  suspendedAt: Date | null;
+  nextPenalty: DropPenalty;
+};
+
+const toPenalty = (
+  kind: DropOutcomeRow["penalty"],
+  minutes: number | null,
+): DropPenalty =>
+  kind === "cooldown" ? { kind, minutes: minutes ?? 15 } : { kind };
+
+export const cleanStanding: RentalStanding = {
+  drops: 0,
+  windowDays: dropWindowDays,
+  blockedUntil: null,
+  suspended: false,
+  suspendedAt: null,
+  nextPenalty: { kind: "warning" },
+};
+
+export function loadRentalStanding(): Promise<Result<RentalStanding>> {
+  return attempt(async () => {
+    const row: RentalStandingRow | null = await unwrapCached(
+      "rental-standing",
+      rentalRoutes.standing(),
+    );
+    if (!row) return cleanStanding;
+    return {
+      drops: row.drops,
+      windowDays: row.window_days,
+      blockedUntil: row.blocked_until ? new Date(row.blocked_until) : null,
+      suspended: row.suspended,
+      suspendedAt: row.suspended_at ? new Date(row.suspended_at) : null,
+      nextPenalty: toPenalty(row.next_penalty, row.next_minutes),
+    };
+  });
+}
+
+export type AcceptBlock =
+  | { kind: "cooldown"; until: Date }
+  | { kind: "suspended" }
+  | null;
+
+export function acceptBlock(
+  standing: RentalStanding | null,
+  now: number,
+): AcceptBlock {
+  if (!standing) return null;
+  if (standing.suspended) return { kind: "suspended" };
+  if (standing.blockedUntil && standing.blockedUntil.getTime() > now) {
+    return { kind: "cooldown", until: standing.blockedUntil };
+  }
+  return null;
+}
+
+export type DropOutcome = { strike: number; penalty: DropPenalty };
+
+export async function dropRentalJob(
+  id: string,
+  reason: string | null,
+  details: string,
+): Promise<Result<DropOutcome>> {
+  const problem = reasonProblem("driver", reason, details);
+  if (problem) return failure(problem);
+  if (!(await checkOnline())) {
+    return failure("Reconnect to the internet to drop this job.");
+  }
+  return attempt(async () => {
+    const row: DropOutcomeRow | null = await unwrap(
+      rentalRoutes.dropJob(id, reason!, details.trim() || null),
+    );
+    return {
+      strike: row?.strike ?? 1,
+      penalty: toPenalty(row?.penalty ?? "warning", row?.minutes ?? null),
+    };
+  });
 }
 
 export function dismissRentalJob(id: string): Promise<Result<unknown>> {
@@ -244,11 +329,17 @@ export function loadMyRental(id: string): Promise<Result<Rental | null>> {
 
 export async function removeRentalDriver(
   unitId: string,
+  reason: string | null,
+  details: string,
 ): Promise<Result<unknown>> {
+  const problem = reasonProblem("commuter", reason, details);
+  if (problem) return failure(problem);
   if (!(await checkOnline())) {
     return failure("Reconnect to the internet to change your drivers.");
   }
-  return attempt(() => unwrap(rentalRoutes.removeDriver(unitId)));
+  return attempt(() =>
+    unwrap(rentalRoutes.removeDriver(unitId, reason!, details.trim() || null)),
+  );
 }
 
 export async function rateRentalDriver(

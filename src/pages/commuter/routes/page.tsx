@@ -55,7 +55,6 @@ import { useTransitRoutes } from "@/hooks/use-transit-routes";
 import { isNearPath } from "@/utils/geo";
 import { goBackOr } from "@/utils/navigation";
 import { isSimulation } from "@/simulation/flag";
-import { setViewedRoute } from "@/simulation/generated-vehicles";
 import { LoadingLogo } from "@/components/LoadingLogo";
 
 const { brandBlue, headerBlue, mutedText, softBlue, text } = moduleColors;
@@ -178,6 +177,9 @@ export default function RoutesScreen() {
 
   useEffect(() => {
     if (!isSimulation()) return;
+    const { setViewedRoute } =
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      require("@/simulation/generated-vehicles") as typeof import("@/simulation/generated-vehicles");
     setViewedRoute(routeId);
     return () => setViewedRoute(null);
   }, [routeId]);

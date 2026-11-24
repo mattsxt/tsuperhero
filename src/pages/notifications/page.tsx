@@ -10,6 +10,7 @@ import UsersRound from "lucide-react-native/icons/users-round";
 import CheckCheck from "lucide-react-native/icons/check-check";
 import CircleCheck from "lucide-react-native/icons/circle-check";
 import CircleX from "lucide-react-native/icons/circle-x";
+import OctagonPause from "lucide-react-native/icons/octagon-pause";
 import Flag from "lucide-react-native/icons/flag";
 import MapPin from "lucide-react-native/icons/map-pin";
 import RotateCcw from "lucide-react-native/icons/rotate-ccw";
@@ -79,6 +80,8 @@ const typeIcons: Record<string, typeof Bell> = {
   rental_job_completed: CircleCheck,
   rental_driver_removed: CircleX,
   rental_cancelled: CircleX,
+  rental_jobs_paused: OctagonPause,
+  rental_jobs_restored: CircleCheck,
 };
 
 function formatWhen(date: Date) {

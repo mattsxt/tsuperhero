@@ -21,7 +21,7 @@ test("every rpc used by the api has a simulation handler", () => {
       names.add(m[1]);
     }
   }
-  assert.equal(names.size, 51);
+  assert.equal(names.size, 52);
   const missing = [...names].filter((n) => !(n in handlers)).sort();
   assert.deepEqual(missing, [], `missing ${missing.length}: ${missing.join(", ")}`);
 });

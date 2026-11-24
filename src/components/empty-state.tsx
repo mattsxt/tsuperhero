@@ -1,6 +1,7 @@
 import CloudOff from "lucide-react-native/icons/cloud-off";
 import type { ReactNode } from "react";
 import {
+  Pressable,
   StyleSheet,
   Text,
   View,
@@ -15,11 +16,13 @@ export function EmptyState({
   icon,
   title = "Nothing to see here yet",
   message,
+  action,
   style,
 }: {
   icon: ReactNode;
   title?: string;
   message: string;
+  action?: { label: string; onPress: () => void };
   style?: StyleProp<ViewStyle>;
 }) {
   const online = useOnline();
@@ -40,6 +43,16 @@ export function EmptyState({
           ? message
           : "You're offline and this hasn't been loaded on this phone. Connect once and it will stay available offline."}
       </Text>
+      {online && action && (
+        <Pressable
+          accessibilityRole="button"
+          onPress={action.onPress}
+          hitSlop={6}
+          style={({ pressed }) => [styles.action, pressed && styles.pressed]}
+        >
+          <Text style={styles.actionText}>{action.label}</Text>
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -75,4 +88,15 @@ const styles = StyleSheet.create({
     marginTop: 6,
     textAlign: "center",
   },
+  action: {
+    height: 36,
+    justifyContent: "center",
+    marginTop: 14,
+    paddingHorizontal: 16,
+    borderWidth: 1.5,
+    borderColor: palette.brand,
+    borderRadius: 18,
+  },
+  actionText: { color: palette.brand, fontFamily: "SoraBold", fontSize: 11 },
+  pressed: { opacity: 0.7 },
 });

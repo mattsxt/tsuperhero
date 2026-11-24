@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Modal,
   Pressable,
@@ -59,6 +59,12 @@ export function Popover({
   );
   const [showing, setShowing] = useState(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (closeTimer.current) clearTimeout(closeTimer.current);
+    },
+    [],
+  );
   const { offset, arrowSize, closeMs } = variants[variant];
   const tooltip = variant === "tooltip";
 

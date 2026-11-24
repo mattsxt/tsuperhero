@@ -22,7 +22,10 @@ export type TableName =
   | "charter_rental_unit"
   | "rating"
   | "notification"
-  | "ride_emergency";
+  | "ride_emergency"
+  | "admin"
+  | "rental_cancellation"
+  | "rental_suspension";
 
 export type Tables = Record<TableName, Row[]>;
 

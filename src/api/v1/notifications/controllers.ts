@@ -46,6 +46,8 @@ const targets: Record<string, AppRoute> = {
   rental_job_booked: Routes.transitRentalRequests,
   rental_job_completed: Routes.transitRentalRequests,
   rental_driver_removed: Routes.transitRentalRequests,
+  rental_jobs_paused: Routes.transitRentalRequests,
+  rental_jobs_restored: Routes.transitRentalRequests,
   rental_driver_left: Routes.commuterRental,
   rental_cancelled: Routes.transitRentalRequests,
   rental_completed: Routes.commuterBookings,

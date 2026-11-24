@@ -108,7 +108,6 @@ type Job = {
 let timer: ReturnType<typeof setInterval> | null = null;
 const DEFAULT_SPEED: Speed = 1;
 let speed: Speed = DEFAULT_SPEED;
-let pickupWalkScreenActive = false;
 let paused = false;
 let clock = 0;
 let lastSpawn = -Infinity;
@@ -682,7 +681,7 @@ const routeCompanionWalk = (
     });
 };
 
-const runCompanions = (user: string | null, seconds: number) => {
+const runCompanions = (user: string | null) => {
   const mine = user ? commuterIdOf(user) : undefined;
   for (const companion of db.tables.pickup_companion) {
     const request = requestOf(companion.request_id);
@@ -1265,7 +1264,7 @@ const publishPartyLocations = (user: string | null) => {
 const update = (seconds: number) => {
   const user = currentUserId();
   discoverRequests(user);
-  runCompanions(user, seconds);
+  runCompanions(user);
   clock += seconds;
   checkJobs();
   moveWalks(seconds);
@@ -1707,14 +1706,6 @@ export function getSpeed(): Speed {
   return speed;
 }
 
-export function setPickupWalkScreenActive(active: boolean): void {
-  pickupWalkScreenActive = active;
-}
-
-export function isPickupWalkScreenActive(): boolean {
-  return pickupWalkScreenActive;
-}
-
 export function forgetVehicles(ids: Iterable<string>): void {
   for (const id of ids) {
     drives.delete(id);
@@ -1729,7 +1720,6 @@ export function reset(): void {
   if (timer) clearInterval(timer);
   timer = null;
   speed = DEFAULT_SPEED;
-  pickupWalkScreenActive = false;
   paused = false;
   clock = 0;
   lastSpawn = -Infinity;

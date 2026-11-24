@@ -44,6 +44,7 @@ import {
 import { generateNotification } from "@/simulation/notifications-sim";
 import {
   acceptMyRentalNow,
+  clearMyRentalPenaltiesNow,
   completeAcceptedRentalNow,
   hasCompletedRentalJobs,
   rateCompletedRentalNow,
@@ -242,6 +243,17 @@ export function DemoPanel() {
     if (action === "completeAcceptedRental") {
       const completed = completeAcceptedRentalNow();
       show(completed ? "Rental completed" : "No rental to complete");
+      return;
+    }
+    if (action === "clearRentalPenalties") {
+      const cleared = clearMyRentalPenaltiesNow();
+      show(
+        cleared === "lifted"
+          ? "Suspension lifted"
+          : cleared === "cooldown"
+            ? "Cooldown ended"
+            : "No penalties to clear",
+      );
       return;
     }
     if (action === "generateRatings") {
@@ -566,6 +578,7 @@ const actionLabels: Record<PanelAction, string> = {
   acceptMyRental: "DRIVER ACCEPTS MY RENTAL",
   postRentalRequest: "POST A RENTAL REQUEST",
   completeAcceptedRental: "COMPLETE ACCEPTED RENTAL",
+  clearRentalPenalties: "CLEAR MY RENTAL PENALTIES",
   generateNotification: "GENERATE A NOTIFICATION",
   generateRideAsHost: "GENERATE A RIDE · HOST",
   generateRideAsCompanion: "GENERATE A RIDE · COMPANION",

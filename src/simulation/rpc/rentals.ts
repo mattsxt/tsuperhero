@@ -1,3 +1,11 @@
+import {
+  dropWindowDays,
+  penaltyForDrop,
+  reasonLabel,
+  reasonProblem,
+  type CancelActor,
+  type DropPenalty,
+} from "@/api/v1/rentals/drop-policy";
 import { currentUserId } from "@/simulation/auth";
 import { db, type Row } from "@/simulation/db";
 import { notify } from "@/simulation/rpc/notify";
@@ -71,6 +79,113 @@ const removeRow = (table: "request" | "charter_rental" | "charter_rental_unit", 
 };
 
 const pickupTime = (rental: Row) => timeOf(rental.pickup_time ?? rental.rental_date);
+
+const checkReason = (actor: CancelActor, a: any) => {
+  const reason = String(a.p_reason ?? "").trim() || null;
+  const details = String(a.p_details ?? "").trim();
+  const problem = reasonProblem(actor, reason, details);
+  if (problem) fail(problem);
+  return { reason: reason!, details: details || null };
+};
+
+const reasonSentence = (reason: string) =>
+  reason === "other" ? "" : ` Reason: ${reasonLabel(reason)}.`;
+
+const cooperativeOf = (driverId: unknown, vehicleId: unknown) => {
+  const driver = db.tables.driver.find((d) => d.driver_id === driverId);
+  const personnel = db.tables.transit_personnel.find(
+    (p) => p.personnel_id === driver?.personnel_id,
+  );
+  return (vehicleOf(vehicleId)?.cooperative_id ?? personnel?.cooperative_id ?? null) as
+    | string
+    | null;
+};
+
+export const dropStanding = (driverIds: string[]) => {
+  const now = db.now().getTime();
+  const mine = (row: Row) => driverIds.includes(String(row.driver_id));
+  const lifted = Math.max(
+    -Infinity,
+    ...db.tables.rental_suspension
+      .filter((s) => mine(s) && s.lifted_at)
+      .map((s) => timeOf(s.lifted_at)),
+  );
+  const since = Math.max(now - dropWindowDays * 24 * HOUR, lifted);
+  const drops = db.tables.rental_cancellation.filter(
+    (c) => mine(c) && c.cancelled_by === "driver" && timeOf(c.created_at) > since,
+  );
+  const blocked = Math.max(
+    -Infinity,
+    ...drops.filter((c) => c.blocked_until).map((c) => timeOf(c.blocked_until)),
+  );
+  const open = db.tables.rental_suspension.find((s) => mine(s) && !s.lifted_at);
+  const next: DropPenalty = open ? { kind: "suspended" } : penaltyForDrop(drops.length + 1);
+  return {
+    drops: drops.length,
+    window_days: dropWindowDays,
+    blocked_until: blocked > now ? new Date(blocked).toISOString() : null,
+    suspended: !!open,
+    suspended_at: (open?.created_at as string | undefined) ?? null,
+    next_penalty: next.kind,
+    next_minutes: next.kind === "cooldown" ? next.minutes : null,
+  };
+};
+
+const getMyRentalStanding = () => dropStanding(myDriverIds());
+
+const logCancellation = (values: Row): Row => {
+  const row: Row = {
+    cancellation_id: db.id(),
+    strike: null,
+    penalty: null,
+    blocked_until: null,
+    created_by: uid() || null,
+    created_at: iso(),
+    ...values,
+  };
+  db.tables.rental_cancellation.push(row);
+  db.emit({ table: "rental_cancellation", type: "INSERT", row });
+  return row;
+};
+
+export const liftRentalSuspensionEffect = (
+  suspensionId: unknown,
+  liftedBy: string | null,
+  note: string | null,
+): void => {
+  const suspension = db.tables.rental_suspension.find((s) => s.suspension_id === suspensionId);
+  if (!suspension) return fail("This suspension was not found.");
+  if (suspension.lifted_at) return fail("This suspension was already lifted.");
+  Object.assign(suspension, { lifted_at: iso(), lifted_by: liftedBy, lift_note: note });
+  db.emit({ table: "rental_suspension", type: "UPDATE", row: suspension });
+  notify(
+    driverUserId(suspension.driver_id),
+    "rental_jobs_restored",
+    "Rental jobs restored",
+    "Your cooperative head reviewed your recent drops. You can take rental jobs again.",
+    { suspension_id: suspension.suspension_id },
+  );
+};
+
+const isCooperativeAdminOf = (cooperativeId: unknown) =>
+  db.tables.admin.some(
+    (admin) =>
+      admin.user_id === uid() &&
+      (admin.is_main_admin === true || admin.cooperative_id === cooperativeId),
+  );
+
+const liftRentalSuspension = (a: any) => {
+  const suspension = db.tables.rental_suspension.find(
+    (s) => s.suspension_id === a.p_suspension_id,
+  );
+  if (!suspension) return fail("This suspension was not found.");
+  if (!isCooperativeAdminOf(suspension.cooperative_id))
+    return fail("Only an admin of this driver's cooperative can lift it.", "42501");
+  const note = String(a.p_note ?? "").trim() || null;
+  if ((note ?? "").length > 300) fail("Keep the note under 300 characters.");
+  liftRentalSuspensionEffect(a.p_suspension_id, uid() || null, note);
+  return null;
+};
 
 const vehicleBusy = (
   vehicleId: unknown,
@@ -411,6 +526,19 @@ const acceptRentalJob = (a: any) => {
   const vehicle = vehicleOf(myAssignedVehicleId());
   if (!driver || !vehicle)
     return fail("Only drivers with an assigned vehicle can take rental jobs.", "42501");
+  const standing = dropStanding(myDriverIds());
+  if (standing.suspended)
+    fail(
+      "Rental jobs are paused on your account. Your cooperative head is reviewing your recent drops.",
+      "42501",
+    );
+  if (standing.blocked_until) {
+    const wait = Math.max(
+      1,
+      Math.ceil((timeOf(standing.blocked_until) - db.now().getTime()) / 60_000),
+    );
+    fail(`You can accept another job in ${wait} ${wait === 1 ? "minute" : "minutes"}.`);
+  }
   const unit = db.tables.charter_rental_unit.find((u) => u.unit_id === a.p_unit_id);
   if (!unit) return fail("This job is no longer available.");
   if (unit.status !== "open") fail("Another driver already took this vehicle.");
@@ -518,6 +646,7 @@ const reopenUnit = (unit: Row, requestId: unknown, rental: Row) => {
 };
 
 const dropRentalJob = (a: any) => {
+  const { reason, details } = checkReason("driver", a);
   const mine = myDriverIds();
   const unit = db.tables.charter_rental_unit.find(
     (u) =>
@@ -532,17 +661,97 @@ const dropRentalJob = (a: any) => {
   const rental = rentalOf(a.p_request_id)!;
   if (timeOf(rental.pickup_time) <= db.now().getTime())
     fail("The pickup time has passed, so this job can't be dropped.");
-  const plate = vehicleOf(unit.vehicle_id)?.plate_number;
-  const name = String(profileOf(uid())?.first_name || "") || "Your driver";
+  const standing = dropStanding(mine);
+  const strike = standing.drops + 1;
+  const penalty = standing.next_penalty;
+  const minutes = standing.next_minutes;
+  const blockedUntil =
+    minutes !== null ? new Date(db.now().getTime() + minutes * 60_000).toISOString() : null;
+  const driverId = String(unit.driver_id);
+  const vehicleId = unit.vehicle_id;
+  const unitId = unit.unit_id;
+  const cooperative = cooperativeOf(driverId, vehicleId);
+  const plate = vehicleOf(vehicleId)?.plate_number;
+  const profile = profileOf(uid());
+  const name = String(profile?.first_name || "") || "Your driver";
+  const fullName = [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || null;
   reopenUnit(unit, a.p_request_id, rental);
+  logCancellation({
+    request_id: a.p_request_id,
+    unit_id: unitId,
+    driver_id: driverId,
+    vehicle_id: vehicleId,
+    cooperative_id: cooperative,
+    cancelled_by: "driver",
+    reason,
+    details,
+    strike,
+    penalty,
+    blocked_until: blockedUntil,
+    rental_destination: rental.rental_destination,
+    pickup_time: rental.pickup_time,
+  });
   notify(
     commuterRow(request.commuter_id)?.user_id,
     "rental_driver_left",
     "A driver dropped your rental",
-    `${name}${plate ? ` (${plate})` : ""} can no longer drive your rental to ${rental.rental_destination} on ${whenText(rental.pickup_time)}. The ${lower(unit.vehicle_type)} is back on the job board for other drivers.`,
-    { request_id: a.p_request_id },
+    `${name}${plate ? ` (${plate})` : ""} can no longer drive your rental to ${rental.rental_destination} on ${whenText(rental.pickup_time)}.${reasonSentence(reason)} The ${lower(unit.vehicle_type)} is back on the job board for other drivers.`,
+    { request_id: a.p_request_id, reason },
   );
-  return null;
+
+  if (penalty === "suspended") {
+    const open = db.tables.rental_suspension.find(
+      (s) => mine.includes(String(s.driver_id)) && !s.lifted_at,
+    );
+    if (open) {
+      open.drop_count = num(open.drop_count) + 1;
+      db.emit({ table: "rental_suspension", type: "UPDATE", row: open });
+    } else {
+      const suspension: Row = {
+        suspension_id: db.id(),
+        driver_id: driverId,
+        cooperative_id: cooperative,
+        drop_count: strike,
+        window_days: dropWindowDays,
+        created_at: iso(),
+        lifted_at: null,
+        lifted_by: null,
+        lift_note: null,
+      };
+      db.tables.rental_suspension.push(suspension);
+      db.emit({ table: "rental_suspension", type: "INSERT", row: suspension });
+      const who = `${fullName ?? "A driver"}${plate ? ` (${plate})` : ""} dropped ${strike} accepted rental jobs in ${dropWindowDays} days.`;
+      const data = {
+        suspension_id: suspension.suspension_id,
+        driver_id: driverId,
+        cooperative_id: cooperative,
+      };
+      const heads = db.tables.admin.filter(
+        (admin) => cooperative !== null && admin.cooperative_id === cooperative,
+      );
+      const recipients = heads.length
+        ? heads
+        : db.tables.admin.filter((admin) => admin.is_main_admin === true);
+      for (const admin of recipients)
+        notify(
+          admin.user_id,
+          "rental_driver_suspended",
+          "Driver paused from rental jobs",
+          heads.length
+            ? `${who} Their rental jobs stay paused until you review and lift it.`
+            : `${who} Their cooperative has no admin, so this needs a main admin's review.`,
+          data,
+        );
+      notify(
+        uid(),
+        "rental_jobs_paused",
+        "Rental jobs paused",
+        `You dropped ${strike} accepted jobs in ${dropWindowDays} days, so you can't take new rental jobs for now. Your cooperative head has been asked to review it. Jobs you're already booked on stay yours.`,
+        { suspension_id: suspension.suspension_id },
+      );
+    }
+  }
+  return { strike, penalty, minutes, blocked_until: blockedUntil };
 };
 
 const dismissRentalJob = (a: any) => {
@@ -638,6 +847,7 @@ const cancelMyRental = (a: any) => {
 };
 
 const removeRentalDriver = (a: any) => {
+  const { reason, details } = checkReason("commuter", a);
   const unit = db.tables.charter_rental_unit.find((u) => u.unit_id === a.p_unit_id);
   if (!unit) return fail("This vehicle is no longer on your rental.");
   const request = requestOf(unit.request_id);
@@ -647,17 +857,30 @@ const removeRentalDriver = (a: any) => {
   if (!["pending", "accepted"].includes(String(request.request_status)) || unit.status !== "booked")
     fail("This driver can no longer be removed.");
   const rental = rentalOf(unit.request_id)!;
+  logCancellation({
+    request_id: unit.request_id,
+    unit_id: unit.unit_id,
+    driver_id: unit.driver_id,
+    vehicle_id: unit.vehicle_id,
+    cooperative_id: cooperativeOf(unit.driver_id, unit.vehicle_id),
+    cancelled_by: "commuter",
+    reason,
+    details,
+    rental_destination: rental.rental_destination,
+    pickup_time: rental.pickup_time,
+  });
   const droppedDriver = reopenUnit(unit, unit.request_id, rental);
   const when = whenText(rental.pickup_time);
   notify(
     driverUserId(droppedDriver),
     "rental_driver_removed",
     "Removed from a rental",
-    `The commuter removed you from the rental to ${rental.rental_destination} on ${when}. You can take it again from the job board while a vehicle is still open.`,
+    `The commuter removed you from the rental to ${rental.rental_destination} on ${when}.${reasonSentence(reason)} This doesn't count as a drop. You can take it again from the job board while a vehicle is still open.`,
     {
       request_id: unit.request_id,
       destination: rental.rental_destination,
       pickup_time: rental.pickup_time,
+      reason,
     },
   );
   if (timeOf(rental.pickup_time) > db.now().getTime()) {
@@ -750,6 +973,8 @@ export const rentalHandlers: Record<string, (args: any) => unknown> = {
   get_rental_job_board: getRentalJobBoard,
   accept_rental_job: acceptRentalJob,
   drop_rental_job: dropRentalJob,
+  get_my_rental_standing: getMyRentalStanding,
+  lift_rental_suspension: liftRentalSuspension,
   dismiss_rental_job: dismissRentalJob,
   complete_rental: completeRental,
   cancel_my_rental: cancelMyRental,

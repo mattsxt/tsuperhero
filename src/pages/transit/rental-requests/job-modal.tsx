@@ -1,6 +1,8 @@
 import BriefcaseBusiness from "lucide-react-native/icons/briefcase-business";
 import CalendarDays from "lucide-react-native/icons/calendar-days";
 import Car from "lucide-react-native/icons/car";
+import OctagonPause from "lucide-react-native/icons/octagon-pause";
+import Timer from "lucide-react-native/icons/timer";
 import CircleCheck from "lucide-react-native/icons/circle-check";
 import MapPin from "lucide-react-native/icons/map-pin";
 import NotebookPen from "lucide-react-native/icons/notebook-pen";
@@ -14,7 +16,12 @@ import type { ReactNode } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, { FadeIn } from "react-native-reanimated";
 
-import { formatRentalTime, type Rental } from "@/api/v1/rentals/controllers";
+import {
+  formatRentalTime,
+  type AcceptBlock,
+  type Rental,
+} from "@/api/v1/rentals/controllers";
+import { formatWait } from "@/api/v1/rentals/drop-policy";
 import { FleetBadges, VehicleTypeBadge } from "@/components/card-badges";
 import { ErrorAlert } from "@/components/error-alert";
 import { LoadingLogo } from "@/components/LoadingLogo";
@@ -25,6 +32,8 @@ export function JobModal({
   busy,
   problem,
   booked,
+  block,
+  now,
   onAccept,
   onDismiss,
   onClose,
@@ -34,6 +43,8 @@ export function JobModal({
   busy: "accept" | "dismiss" | null;
   problem: string;
   booked: boolean;
+  block: AcceptBlock;
+  now: number;
   onAccept: () => void;
   onDismiss: () => void;
   onClose: () => void;
@@ -216,6 +227,39 @@ export function JobModal({
                     </Text>
                   </View>
                 )}
+                {block && (
+                  <View
+                    accessibilityRole="text"
+                    style={[
+                      styles.conflict,
+                      block.kind === "cooldown" && styles.cooldown,
+                    ]}
+                  >
+                    {block.kind === "cooldown" ? (
+                      <Timer
+                        color={palette.warning}
+                        size={16}
+                        strokeWidth={2.2}
+                      />
+                    ) : (
+                      <OctagonPause
+                        color={palette.danger}
+                        size={16}
+                        strokeWidth={2.2}
+                      />
+                    )}
+                    <Text
+                      style={[
+                        styles.conflictText,
+                        block.kind === "cooldown" && styles.cooldownText,
+                      ]}
+                    >
+                      {block.kind === "cooldown"
+                        ? `You can accept another job in ${formatWait(block.until.getTime() - now)}.`
+                        : "Rental jobs are paused while your cooperative head reviews your recent drops."}
+                    </Text>
+                  </View>
+                )}
                 {!!problem && (
                   <ErrorAlert title="Rental job" message={problem} />
                 )}
@@ -223,15 +267,16 @@ export function JobModal({
                 <Pressable
                   accessibilityRole="button"
                   accessibilityState={{
-                    disabled: !!busy || job.scheduleConflict,
+                    disabled: !!busy || job.scheduleConflict || !!block,
                     busy: busy === "accept",
                   }}
-                  disabled={!!busy || job.scheduleConflict}
+                  disabled={!!busy || job.scheduleConflict || !!block}
                   onPress={onAccept}
                   style={({ pressed }) => [
                     styles.button,
                     styles.primary,
-                    (pressed || job.scheduleConflict) && styles.pressed,
+                    (pressed || job.scheduleConflict || !!block) &&
+                      styles.pressed,
                   ]}
                 >
                   {busy === "accept" ? (
@@ -359,6 +404,8 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 16,
   },
+  cooldown: { backgroundColor: palette.warningSoft },
+  cooldownText: { color: palette.warning },
   bookedText: {
     color: "#111111",
     fontFamily: "Sora",

@@ -21,6 +21,7 @@ import {
 import { FleetBadges } from "@/components/card-badges";
 import { ConfirmModal } from "@/components/confirm-modal";
 import { ErrorAlert } from "@/components/error-alert";
+import { ReasonModal } from "@/components/reason-modal";
 import { LoadingLogo } from "@/components/LoadingLogo";
 import { palette } from "@/constants/colors";
 import { initialsOf } from "@/utils/initials";
@@ -38,7 +39,11 @@ export function ActiveRental({
   onRemoveDriver,
 }: {
   removingId: string | null;
-  onRemoveDriver: (unitId: string) => void;
+  onRemoveDriver: (
+    unitId: string,
+    reason: string,
+    details: string,
+  ) => Promise<string | null>;
   rental: Rental;
   busy: boolean;
   completing: boolean;
@@ -267,18 +272,28 @@ export function ActiveRental({
         </Text>
       </Pressable>
 
-      <ConfirmModal
+      <ReasonModal
         visible={!!removeTarget}
+        actor="commuter"
         title={`Remove ${removeTarget?.driverName ?? "this driver"} from this rental?`}
+        subtitle={
+          removeTarget
+            ? [removeTarget.vehicleType, removeTarget.plateNumber]
+                .filter(Boolean)
+                .join(" · ")
+            : undefined
+        }
         message={`Their ${removeTarget?.vehicleType.toLowerCase() ?? "vehicle"} goes back on the job board for other drivers, and ${removeTarget?.driverName ?? "the driver"} will be notified.`}
+        privacyNote="The driver sees the reason you pick. Your details are only shared with their cooperative."
         confirmLabel="Remove driver"
         cancelLabel="Keep driver"
-        destructive
         icon={<UserMinus color="#ffffff" size={22} strokeWidth={2.2} />}
         onCancel={() => setRemoveTarget(null)}
-        onConfirm={() => {
-          if (removeTarget) onRemoveDriver(removeTarget.id);
-          setRemoveTarget(null);
+        onConfirm={async (reason, details) => {
+          if (!removeTarget) return null;
+          const error = await onRemoveDriver(removeTarget.id, reason, details);
+          if (!error) setRemoveTarget(null);
+          return error;
         }}
       />
 

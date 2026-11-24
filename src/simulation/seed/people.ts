@@ -14,6 +14,7 @@ const V = 5;
 const OP = 6;
 
 export const COOPERATIVE_ID = sid(7, 1);
+export const COOPERATIVE_HEAD_USER_ID = sid(U, 900);
 const OPERATOR_ID = sid(OP, 1);
 
 export const routeByCode = (code: string): string =>
@@ -276,7 +277,40 @@ export const buildPeople = (now: Date) => {
     heading: 0,
     recorded_at: now.toISOString(),
   }));
-  return { user, profile, commuter, transit_personnel, operator, vehicle, driver, location_records };
+  user.push({
+    user_id: COOPERATIVE_HEAD_USER_ID,
+    user_email: "coophead@demo.tsuperhero",
+    user_type: "admin",
+  });
+  profile.push({
+    profile_id: sid(8, 900),
+    user_id: COOPERATIVE_HEAD_USER_ID,
+    user_type: "admin",
+    first_name: "Rosa",
+    last_name: "Villanueva",
+    contact_number: "+630000000900",
+    birth_date: "1980-05-02",
+    profile_picture: null,
+  });
+  const admin: Row[] = [
+    {
+      admin_id: sid(9, 1),
+      user_id: COOPERATIVE_HEAD_USER_ID,
+      is_main_admin: false,
+      cooperative_id: COOPERATIVE_ID,
+    },
+  ];
+  return {
+    user,
+    profile,
+    commuter,
+    transit_personnel,
+    operator,
+    vehicle,
+    driver,
+    location_records,
+    admin,
+  };
 };
 
 export const homePoints: Record<string, [number, number]> = {

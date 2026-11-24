@@ -7,8 +7,10 @@ import {
   freeRentalDriver,
   hasActivePickup,
   hasActiveRental,
+  liftRentalSuspensionEffect,
   postRentalEffect,
 } from "@/simulation/rpc/rentals";
+import { COOPERATIVE_HEAD_USER_ID } from "@/simulation/seed/people";
 
 const BOOK_FIRST_S = 5;
 const BOOK_GAP_S = 5;
@@ -123,6 +125,27 @@ export function postRentalRequestNow(): string | null {
   });
   mockPosts.add(id);
   return id;
+}
+
+export function clearMyRentalPenaltiesNow(): "lifted" | "cooldown" | null {
+  const mine = new Set(myDrivers().map((d) => String(d.driver_id)));
+  if (!mine.size) return null;
+  const open = db.tables.rental_suspension.find(
+    (s) => mine.has(String(s.driver_id)) && !s.lifted_at,
+  );
+  if (open) {
+    liftRentalSuspensionEffect(open.suspension_id, COOPERATIVE_HEAD_USER_ID, "Cleared from the demo panel");
+    return "lifted";
+  }
+  const now = db.now().getTime();
+  const cooling = db.tables.rental_cancellation.filter(
+    (c) =>
+      mine.has(String(c.driver_id)) &&
+      !!c.blocked_until &&
+      new Date(String(c.blocked_until)).getTime() > now,
+  );
+  for (const row of cooling) row.blocked_until = db.now().toISOString();
+  return cooling.length ? "cooldown" : null;
 }
 
 export function completeAcceptedRentalNow(): boolean {

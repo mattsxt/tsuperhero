@@ -11,7 +11,9 @@ import UsersRound from "lucide-react-native/icons/users-round";
 import { useLocalSearchParams } from "expo-router";
 import {
   useCallback,
+  useDeferredValue,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -31,7 +33,11 @@ import {
   type Booking,
   type BookingKind,
 } from "@/api/v1/pickups/controllers";
-import { EmptyState } from "@/components/empty-state";
+import {
+  HistoryEmpty,
+  HistoryFilter,
+  ShowMoreButton,
+} from "@/components/history-filter";
 import { PickupIcon } from "@/components/module-icons";
 import { Chip, ModuleHeader, moduleColors } from "@/components/module-ui";
 import {
@@ -52,6 +58,13 @@ import { goBackOr } from "@/utils/navigation";
 import { ErrorAlert } from "@/components/error-alert";
 import { SkeletonCards } from "@/components/skeleton";
 import { palette } from "@/constants/colors";
+import { historyPageSize, useIncremental } from "@/hooks/use-incremental";
+import { useNow } from "@/hooks/use-now";
+import {
+  defaultHistoryPeriod,
+  filterHistory,
+  type HistoryPeriod,
+} from "@/utils/history-filter";
 
 const { brandBlue, softBlue, text } = moduleColors;
 const cardEdgeBlue = "#1a2f8f";
@@ -66,6 +79,11 @@ const tabs: { value: BookingTab; label: string }[] = [
 const emptyMessages: Record<BookingKind, string> = {
   rental: "Rentals you complete will be recorded here.",
   pickup: "Pickups you complete will be recorded here.",
+};
+
+const nouns: Record<BookingKind, { one: string; many: string }> = {
+  rental: { one: "rental", many: "rentals" },
+  pickup: { one: "pickup", many: "pickups" },
 };
 
 export function formatBookingDate(date: Date) {
@@ -96,6 +114,10 @@ export default function BookingsScreen() {
   const [rating, setRating] = useState<Booking | null>(null);
   const [details, setDetails] = useState<Booking | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [period, setPeriod] = useState<HistoryPeriod>(defaultHistoryPeriod);
+  const [query, setQuery] = useState("");
+  const search = useDeferredValue(query);
+  const now = useNow(60_000);
 
   const applyBookings = useCallback(
     (result: Awaited<ReturnType<typeof loadBookings>>) => {
@@ -135,7 +157,32 @@ export default function BookingsScreen() {
   };
 
   const goBack = () => goBackOr(Routes.commuterHome);
-  const visible = (bookings ?? []).filter((booking) => booking.kind === tab);
+  const view = useMemo(
+    () =>
+      filterHistory(
+        (bookings ?? []).filter((booking) => booking.kind === tab),
+        {
+          period,
+          query: search,
+          now: new Date(now),
+          dateOf: (booking) => booking.requestedAt,
+          searchFields: (booking) => [
+            booking.destination,
+            booking.dropoffName,
+            booking.plateNumber,
+            booking.vehicleType,
+            booking.driverName,
+            booking.purpose,
+            booking.sharedBy,
+            ...booking.drivers.map((driver) => driver.name),
+            formatBookingDate(booking.requestedAt),
+          ],
+        },
+      ),
+    [bookings, tab, period, search, now],
+  );
+  const visible = view.visible;
+  const page = useIncremental(visible, `${tab}|${period}|${search}`);
   const unrated = (bookings ?? []).filter(
     (booking) => booking.kind === "rental" && booking.driversToRate > 0,
   );
@@ -209,6 +256,19 @@ export default function BookingsScreen() {
             })}
           </View>
 
+          <HistoryFilter
+            period={period}
+            onPeriodChange={setPeriod}
+            query={query}
+            onQueryChange={setQuery}
+            placeholder={
+              tab === "rental"
+                ? "Search destination, driver or date"
+                : "Search drop-off, plate or date"
+            }
+            style={styles.filter}
+          />
+
           {bookings === null ? (
             <SkeletonCards style={styles.loading} />
           ) : visible.length === 0 ? (
@@ -220,7 +280,7 @@ export default function BookingsScreen() {
                   style={styles.problem}
                 />
               )}
-              <EmptyState
+              <HistoryEmpty
                 icon={
                   tab === "rental" ? (
                     <Bus color={brandBlue} size={32} strokeWidth={1.8} />
@@ -228,12 +288,18 @@ export default function BookingsScreen() {
                     <PickupIcon color={brandBlue} size={32} />
                   )
                 }
-                message={emptyMessages[tab]}
+                noun={nouns[tab]}
+                emptyMessage={emptyMessages[tab]}
+                period={period}
+                query={search}
+                view={view}
+                onShowAll={() => setPeriod("all")}
+                onClearSearch={() => setQuery("")}
               />
             </>
           ) : (
             <View style={styles.list}>
-              {visible.map((booking) => (
+              {page.shown.map((booking) => (
                 <BookingCard
                   key={booking.id}
                   booking={booking}
@@ -241,6 +307,12 @@ export default function BookingsScreen() {
                   onOpen={() => setDetails(booking)}
                 />
               ))}
+              <ShowMoreButton
+                remaining={page.remaining}
+                step={historyPageSize}
+                noun={nouns[tab]}
+                onPress={page.showMore}
+              />
             </View>
           )}
         </View>
@@ -412,7 +484,7 @@ function Detail({
       <View style={styles.detailIcon}>{icon}</View>
       {!!children && (
         <Text
-          style={[styles.detailText, !!trailing && styles.detailTextFit]}
+          style={[styles.detailText, !trailing && styles.detailTextGrow]}
           numberOfLines={1}
         >
           {children}
@@ -447,6 +519,7 @@ const styles = StyleSheet.create({
   countText: { color: "#ffffff", fontFamily: "SoraBold", fontSize: 10 },
   loading: { marginTop: 48 },
   problem: { marginTop: 16 },
+  filter: { marginTop: 14 },
   list: { gap: 10, marginTop: 16 },
   card: {
     gap: 12,
@@ -510,6 +583,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     letterSpacing: 0.5,
   },
-  detailText: { flex: 1, color: text, fontFamily: "Sora", fontSize: 10 },
-  detailTextFit: { flex: 0, flexShrink: 1 },
+  detailText: { color: text, fontFamily: "Sora", fontSize: 10 },
+  detailTextGrow: { flex: 1 },
 });

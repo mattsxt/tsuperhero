@@ -279,15 +279,20 @@ export default function RentalScreen() {
     refreshRentals();
   };
 
-  const removeDriver = async (unitId: string) => {
-    if (removingId) return;
+  const removeDriver = async (
+    unitId: string,
+    reason: string,
+    details: string,
+  ): Promise<string | null> => {
+    if (removingId) return "Another driver is being removed. Try again in a moment.";
     setRemovingId(unitId);
     setCancelError("");
-    const result = await removeRentalDriver(unitId);
+    const result = await removeRentalDriver(unitId, reason, details);
     setRemovingId(null);
-    if (!result.ok) return setCancelError(result.error);
+    if (!result.ok) return result.error;
     showToast("Driver removed. The vehicle is back on the job board.");
     refreshRentals();
+    return null;
   };
 
   const cancelActive = async () => {

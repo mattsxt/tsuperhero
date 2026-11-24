@@ -8,7 +8,11 @@ test("actionsFor maps actions to the current screen and role", () => {
   assert.deepEqual(actionsFor("/commuter/rental", "commuter", false), ["acceptMyRental"]);
   assert.deepEqual(actionsFor("/transit/start-trip", "driver", false), ["sendPickupRequest"]);
   assert.deepEqual(actionsFor("/transit/start-trip", "driver", true), ["sendPickupRequest", "arriveNow"]);
-  assert.deepEqual(actionsFor("/transit/rental-requests", "driver", false), ["postRentalRequest", "completeAcceptedRental"]);
+  assert.deepEqual(actionsFor("/transit/rental-requests", "driver", false), [
+    "postRentalRequest",
+    "completeAcceptedRental",
+    "clearRentalPenalties",
+  ]);
   assert.deepEqual(actionsFor("/notifications", "commuter", false), ["generateNotification"]);
   assert.deepEqual(actionsFor("/notifications", "driver", true), ["generateNotification"]);
 });

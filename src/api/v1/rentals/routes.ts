@@ -44,6 +44,23 @@ export type RentalRow = {
   unit_vehicle_type?: string;
 };
 
+export type RentalStandingRow = {
+  drops: number;
+  window_days: number;
+  blocked_until: string | null;
+  suspended: boolean;
+  suspended_at: string | null;
+  next_penalty: "warning" | "cooldown" | "suspended";
+  next_minutes: number | null;
+};
+
+export type DropOutcomeRow = {
+  strike: number;
+  penalty: "warning" | "cooldown" | "suspended";
+  minutes: number | null;
+  blocked_until: string | null;
+};
+
 export type RentalPostParams = {
   p_vehicles: RentalVehicleType[];
   p_pickup_location: string;
@@ -80,8 +97,12 @@ export const rentalRoutes = {
   getMine: (requestId: string) =>
     rpc().rpc("get_my_rental", { p_request_id: requestId }),
 
-  removeDriver: (unitId: string) =>
-    rpc().rpc("remove_rental_driver", { p_unit_id: unitId }),
+  removeDriver: (unitId: string, reason: string, details: string | null) =>
+    rpc().rpc("remove_rental_driver", {
+      p_unit_id: unitId,
+      p_reason: reason,
+      p_details: details,
+    }),
 
   rateDriver: (
     requestId: string,
@@ -98,8 +119,14 @@ export const rentalRoutes = {
       p_tags: tags,
     }),
 
-  dropJob: (requestId: string) =>
-    rpc().rpc("drop_rental_job", { p_request_id: requestId }),
+  dropJob: (requestId: string, reason: string, details: string | null) =>
+    rpc().rpc("drop_rental_job", {
+      p_request_id: requestId,
+      p_reason: reason,
+      p_details: details,
+    }),
+
+  standing: () => rpc().rpc("get_my_rental_standing"),
 
   dismissJob: (requestId: string) =>
     rpc().rpc("dismiss_rental_job", { p_request_id: requestId }),

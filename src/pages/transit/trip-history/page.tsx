@@ -1,12 +1,18 @@
 import { StatusBar } from "expo-status-bar";
-import BusFront from "lucide-react-native/icons/bus-front";
 import CalendarDays from "lucide-react-native/icons/calendar-days";
 import Clock from "lucide-react-native/icons/clock";
 import Gauge from "lucide-react-native/icons/gauge";
+import IdCard from "lucide-react-native/icons/id-card";
 import Route from "lucide-react-native/icons/route";
 import Timer from "lucide-react-native/icons/timer";
 import Users from "lucide-react-native/icons/users";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { RefreshControl, StyleSheet, Text, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -16,43 +22,32 @@ import {
   loadMyTrips,
   type TripRecord,
 } from "@/api/v1/operator/controllers";
-import { StatusPill } from "@/components/card-badges";
-import { EmptyState } from "@/components/empty-state";
-import { Chip, ModuleHeader, moduleColors } from "@/components/module-ui";
+import {
+  StatusPill,
+  vehicleTypeCode,
+  VehicleTypeBadge,
+} from "@/components/card-badges";
+import {
+  HistoryEmpty,
+  HistoryFilter,
+  ShowMoreButton,
+} from "@/components/history-filter";
+import { ModuleHeader, moduleColors } from "@/components/module-ui";
 import { StickyHeader, useScrollChrome } from "@/components/scroll-chrome";
 import { Routes } from "@/constants/routes";
 import { goBackOr } from "@/utils/navigation";
+import {
+  defaultHistoryPeriod,
+  filterHistory,
+  type HistoryPeriod,
+} from "@/utils/history-filter";
 import { ErrorAlert } from "@/components/error-alert";
 import { SkeletonCards } from "@/components/skeleton";
+import { historyPageSize, useIncremental } from "@/hooks/use-incremental";
+import { useNow } from "@/hooks/use-now";
 
 const { brandBlue, mutedText, softBlue, text } = moduleColors;
 const cardEdgeBlue = "#1a2f8f";
-
-type Period = "all" | "week" | "month";
-
-const periods: { value: Period; label: string }[] = [
-  { value: "all", label: "All" },
-  { value: "week", label: "This Week" },
-  { value: "month", label: "This Month" },
-];
-
-const emptyMessages: Record<Period, string> = {
-  all: "Trips you complete will show up here.",
-  week: "You haven't made any trips this week.",
-  month: "You haven't made any trips this month.",
-};
-
-function periodStart(period: Period) {
-  const now = new Date();
-  if (period === "week") {
-    const start = new Date(now);
-    start.setHours(0, 0, 0, 0);
-    start.setDate(start.getDate() - start.getDay());
-    return start;
-  }
-  if (period === "month") return new Date(now.getFullYear(), now.getMonth(), 1);
-  return null;
-}
 
 const formatDay = (date: Date) =>
   date.toLocaleDateString("en-US", {
@@ -67,10 +62,19 @@ const formatTime = (date: Date) =>
 
 const formatKm = (km: number) => `${km.toFixed(km < 10 ? 1 : 0)} km`;
 
+const formatHours = (minutes: number) => {
+  if (minutes < 60) return `${minutes}m`;
+  const rest = minutes % 60;
+  return `${Math.floor(minutes / 60)}h${rest ? ` ${rest}m` : ""}`;
+};
+
 export default function TripHistoryScreen() {
   const insets = useSafeAreaInsets();
   const chrome = useScrollChrome();
-  const [period, setPeriod] = useState<Period>("all");
+  const [period, setPeriod] = useState<HistoryPeriod>(defaultHistoryPeriod);
+  const [query, setQuery] = useState("");
+  const search = useDeferredValue(query);
+  const now = useNow(60_000);
   const [trips, setTrips] = useState<TripRecord[] | null>(null);
   const [problem, setProblem] = useState("");
 
@@ -106,12 +110,25 @@ export default function TripHistoryScreen() {
     setRefreshing(false);
   };
 
-  const visible = useMemo(() => {
-    const start = periodStart(period);
-    return (trips ?? []).filter(
-      (trip) => !start || (trip.departedAt && trip.departedAt >= start),
-    );
-  }, [trips, period]);
+  const view = useMemo(
+    () =>
+      filterHistory(trips ?? [], {
+        period,
+        query: search,
+        now: new Date(now),
+        dateOf: (trip) => trip.departedAt,
+        searchFields: (trip) => [
+          trip.routeName,
+          trip.plateNumber,
+          trip.vehicleType,
+          trip.code,
+          trip.departedAt ? formatDay(trip.departedAt) : null,
+        ],
+      }),
+    [trips, period, search, now],
+  );
+  const visible = view.visible;
+  const page = useIncremental(visible, `${period}|${search}`);
 
   const totals = useMemo(
     () =>
@@ -151,17 +168,13 @@ export default function TripHistoryScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.body}>
-          <View style={styles.tabRow}>
-            {periods.map((option) => (
-              <Chip
-                key={option.value}
-                label={option.label}
-                selected={period === option.value}
-                onPress={() => setPeriod(option.value)}
-                grow
-              />
-            ))}
-          </View>
+          <HistoryFilter
+            period={period}
+            onPeriodChange={setPeriod}
+            query={query}
+            onQueryChange={setQuery}
+            placeholder="Search route, plate or date"
+          />
 
           {trips === null ? (
             <SkeletonCards style={styles.loading} />
@@ -174,41 +187,51 @@ export default function TripHistoryScreen() {
                   style={styles.problem}
                 />
               )}
-              <EmptyState
+              <HistoryEmpty
                 icon={<Route color={brandBlue} size={32} strokeWidth={1.8} />}
-                message={emptyMessages[period]}
+                noun={{ one: "trip", many: "trips" }}
+                emptyMessage="Trips you complete will show up here."
+                period={period}
+                query={search}
+                view={view}
+                onShowAll={() => setPeriod("all")}
+                onClearSearch={() => setQuery("")}
               />
             </View>
           ) : (
             <>
-              <View style={styles.summary}>
-                <SummaryTile
-                  icon={<Route color={brandBlue} size={16} strokeWidth={2} />}
+              {!!problem && (
+                <ErrorAlert
+                  title="Trip history"
+                  message={problem}
+                  style={styles.problemInline}
+                />
+              )}
+              <View
+                accessible
+                accessibilityLabel={`${visible.length} ${visible.length === 1 ? "trip" : "trips"}, ${totals.pickups} pickups, ${formatDuration(totals.minutes)} on the road, ${formatKm(totals.km)}`}
+                style={styles.summary}
+              >
+                <Stat
                   value={String(visible.length)}
                   label={visible.length === 1 ? "Trip" : "Trips"}
                 />
-                <SummaryTile
-                  icon={<Users color={brandBlue} size={16} strokeWidth={2} />}
-                  value={String(totals.pickups)}
-                  label="Pickups"
-                />
-                <SummaryTile
-                  icon={<Timer color={brandBlue} size={16} strokeWidth={2} />}
-                  value={formatDuration(totals.minutes)}
-                  label="On the road"
-                />
-                <SummaryTile
-                  icon={<Gauge color={brandBlue} size={16} strokeWidth={2} />}
-                  value={formatKm(totals.km)}
-                  label="Distance"
-                />
+                <Stat value={String(totals.pickups)} label="Pickups" />
+                <Stat value={formatHours(totals.minutes)} label="On road" />
+                <Stat value={formatKm(totals.km)} label="Distance" />
               </View>
 
               <View style={styles.list}>
-                {visible.map((trip) => (
+                {page.shown.map((trip) => (
                   <TripCard key={trip.id} trip={trip} />
                 ))}
               </View>
+              <ShowMoreButton
+                remaining={page.remaining}
+                step={historyPageSize}
+                noun={{ one: "trip", many: "trips" }}
+                onPress={page.showMore}
+              />
             </>
           )}
         </View>
@@ -227,22 +250,13 @@ export default function TripHistoryScreen() {
   );
 }
 
-function SummaryTile({
-  icon,
-  value,
-  label,
-}: {
-  icon: ReactNode;
-  value: string;
-  label: string;
-}) {
+function Stat({ value, label }: { value: string; label: string }) {
   return (
-    <View style={styles.tile}>
-      <View style={styles.tileIcon}>{icon}</View>
-      <Text style={styles.tileValue} numberOfLines={1} adjustsFontSizeToFit>
+    <View style={styles.stat}>
+      <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>
         {value}
       </Text>
-      <Text style={styles.tileLabel} numberOfLines={1}>
+      <Text style={styles.statLabel} numberOfLines={1}>
         {label}
       </Text>
     </View>
@@ -255,9 +269,7 @@ function TripCard({ trip }: { trip: TripRecord }) {
         trip.arrivedAt ? formatTime(trip.arrivedAt) : "now"
       }`
     : "Time unavailable";
-  const vehicle = [trip.plateNumber, trip.vehicleType]
-    .filter(Boolean)
-    .join(" · ");
+  const hasVehicle = !!trip.plateNumber || !!vehicleTypeCode(trip.vehicleType);
   return (
     <View style={styles.card}>
       <View style={styles.cardTop}>
@@ -290,11 +302,12 @@ function TripCard({ trip }: { trip: TripRecord }) {
         <Detail icon={<Users color={brandBlue} size={13} strokeWidth={2} />}>
           {trip.pickups} {trip.pickups === 1 ? "pickup" : "pickups"}
         </Detail>
-        {!!vehicle && (
+        {hasVehicle && (
           <Detail
-            icon={<BusFront color={brandBlue} size={13} strokeWidth={2} />}
+            icon={<IdCard color={brandBlue} size={13} strokeWidth={2} />}
+            trailing={<VehicleTypeBadge type={trip.vehicleType} />}
           >
-            {vehicle}
+            {trip.plateNumber}
           </Detail>
         )}
       </View>
@@ -302,13 +315,27 @@ function TripCard({ trip }: { trip: TripRecord }) {
   );
 }
 
-function Detail({ icon, children }: { icon: ReactNode; children: ReactNode }) {
+function Detail({
+  icon,
+  trailing,
+  children,
+}: {
+  icon: ReactNode;
+  trailing?: ReactNode;
+  children: ReactNode;
+}) {
   return (
     <View style={styles.detail}>
       <View style={styles.detailIcon}>{icon}</View>
-      <Text style={styles.detailText} numberOfLines={1}>
-        {children}
-      </Text>
+      {!!children && (
+        <Text
+          style={[styles.detailText, !trailing && styles.detailTextGrow]}
+          numberOfLines={1}
+        >
+          {children}
+        </Text>
+      )}
+      {trailing}
     </View>
   );
 }
@@ -317,30 +344,21 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#ffffff" },
   flex: { flex: 1 },
   body: { flex: 1, paddingHorizontal: 12, paddingTop: 18 },
-  tabRow: { flexDirection: "row", gap: 6 },
   loading: { marginTop: 48 },
   centered: { flex: 1, justifyContent: "center" },
   problem: { alignSelf: "stretch", marginBottom: 12 },
-  summary: { flexDirection: "row", gap: 8, marginTop: 16 },
-  tile: {
-    flex: 1,
-    alignItems: "center",
-    gap: 4,
-    paddingVertical: 10,
-    paddingHorizontal: 4,
-    borderRadius: 12,
-    backgroundColor: softBlue,
+  problemInline: { marginTop: 16 },
+  summary: {
+    flexDirection: "row",
+    marginTop: 18,
+    paddingVertical: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: "#d5dceb",
   },
-  tileIcon: {
-    width: 28,
-    height: 28,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 14,
-    backgroundColor: "#ffffff",
-  },
-  tileValue: { color: brandBlue, fontFamily: "SoraBold", fontSize: 13 },
-  tileLabel: { color: mutedText, fontFamily: "Sora", fontSize: 10 },
+  stat: { flex: 1, gap: 2, paddingHorizontal: 4 },
+  statValue: { color: text, fontFamily: "SoraBold", fontSize: 15 },
+  statLabel: { color: mutedText, fontFamily: "Sora", fontSize: 10 },
   list: { gap: 10, marginTop: 16 },
   card: {
     gap: 12,
@@ -376,5 +394,6 @@ const styles = StyleSheet.create({
     borderRadius: 11,
     backgroundColor: softBlue,
   },
-  detailText: { flex: 1, color: text, fontFamily: "Sora", fontSize: 10 },
+  detailText: { color: text, fontFamily: "Sora", fontSize: 10 },
+  detailTextGrow: { flex: 1 },
 });
